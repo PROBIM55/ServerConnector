@@ -163,132 +163,200 @@
                 </Grid>
             </Border>
 
-                <Grid Grid.Row="1">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="0.9*" />
-                    </Grid.ColumnDefinitions>
-
-                <Border Grid.Column="0" Style="{StaticResource CardStyle}">
-                    <Grid>
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
-                        </Grid.RowDefinitions>
-
-                        <TextBlock Text="Быстрое подключение" FontSize="19" FontWeight="SemiBold" />
-                        <TextBlock Grid.Row="1" Text="Укажите только токен устройства, остальные параметры зашиты в приложение."
-                                   Margin="0,6,0,12" Foreground="#A9BBD3" TextWrapping="Wrap" />
-
-                        <Grid Grid.Row="2" Margin="0,0,0,8" Visibility="Collapsed">
+            <Grid Grid.Row="1">
+                <TabControl Background="#0E1827" BorderBrush="#2A3E5C" BorderThickness="1">
+                    <TabItem Header="Connector">
+                        <Grid Margin="12,10,12,12">
                             <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="170" />
                                 <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="0.9*" />
                             </Grid.ColumnDefinitions>
-                            <Label Grid.Column="0" Content="URL сервера" VerticalAlignment="Center" />
-                            <TextBox x:Name="ServerUrlTextBox" Grid.Column="1" />
-                        </Grid>
 
-                        <Grid Grid.Row="3">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="170" />
-                                <ColumnDefinition Width="*" />
-                            </Grid.ColumnDefinitions>
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="Auto" />
-                            </Grid.RowDefinitions>
+                            <Border Grid.Column="0" Style="{StaticResource CardStyle}">
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
 
-                             <Label Grid.Row="0" Grid.Column="0" Content="Токен устройства" VerticalAlignment="Center" />
-                             <PasswordBox x:Name="TokenPasswordBox" Grid.Row="0" Grid.Column="1" Margin="0,0,0,10" />
+                                    <TextBlock Text="Быстрое подключение" FontSize="19" FontWeight="SemiBold" />
+                                    <TextBlock Grid.Row="1" Text="Укажите только токен устройства, остальные параметры зашиты в приложение."
+                                               Margin="0,6,0,12" Foreground="#A9BBD3" TextWrapping="Wrap" />
 
-                            <Button x:Name="ConnectByTokenButton"
-                                    Grid.Row="1"
-                                     Grid.Column="1"
-                                     Style="{StaticResource PrimaryButton}"
-                                     Content="Подключиться по токену"
-                                     Click="ConnectByToken_Click"
-                                     Margin="0,0,0,12"
-                                     Height="42" />
+                                    <Grid Grid.Row="2" Margin="0,0,0,8" Visibility="Collapsed">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="170" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <Label Grid.Column="0" Content="URL сервера" VerticalAlignment="Center" />
+                                        <TextBox x:Name="ServerUrlTextBox" Grid.Column="1" />
+                                    </Grid>
 
-                             <Separator Grid.Row="2" Grid.ColumnSpan="2" Margin="0,0,0,12" Background="#2A3E5C" Visibility="Collapsed" />
+                                    <Grid Grid.Row="3">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="170" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                        </Grid.RowDefinitions>
 
-                             <TextBlock Grid.Row="3" Grid.ColumnSpan="2" Text="Параметры устройства" FontSize="17" FontWeight="SemiBold" Margin="0,0,0,10" Visibility="Collapsed" />
+                                        <Label Grid.Row="0" Grid.Column="0" Content="Токен устройства" VerticalAlignment="Center" />
+                                        <PasswordBox x:Name="TokenPasswordBox" Grid.Row="0" Grid.Column="1" Margin="0,0,0,10" />
 
-                             <Label Grid.Row="4" Grid.Column="0" Content="ID устройства" VerticalAlignment="Center" Visibility="Collapsed" />
-                             <TextBox x:Name="DeviceIdTextBox" Grid.Row="4" Grid.Column="1" Margin="0,0,0,10" Visibility="Collapsed" />
+                                        <Button x:Name="ConnectByTokenButton"
+                                                Grid.Row="1"
+                                                Grid.Column="1"
+                                                Style="{StaticResource PrimaryButton}"
+                                                Content="Подключиться по токену"
+                                                Click="ConnectByToken_Click"
+                                                Margin="0,0,0,12"
+                                                Height="42" />
 
-                             <StackPanel Grid.Row="5" Grid.Column="1" Orientation="Horizontal" Visibility="Collapsed">
-                                 <StackPanel Width="180" Margin="0,0,12,0">
-                                     <Label Content="Интервал heartbeat (сек)" />
-                                     <TextBox x:Name="IntervalTextBox" />
-                                </StackPanel>
+                                        <Separator Grid.Row="2" Grid.ColumnSpan="2" Margin="0,0,0,12" Background="#2A3E5C" Visibility="Collapsed" />
+
+                                        <TextBlock Grid.Row="3" Grid.ColumnSpan="2" Text="Параметры устройства" FontSize="17" FontWeight="SemiBold" Margin="0,0,0,10" Visibility="Collapsed" />
+
+                                        <Label Grid.Row="4" Grid.Column="0" Content="ID устройства" VerticalAlignment="Center" Visibility="Collapsed" />
+                                        <TextBox x:Name="DeviceIdTextBox" Grid.Row="4" Grid.Column="1" Margin="0,0,0,10" Visibility="Collapsed" />
+
+                                        <StackPanel Grid.Row="5" Grid.Column="1" Orientation="Horizontal" Visibility="Collapsed">
+                                            <StackPanel Width="180" Margin="0,0,12,0">
+                                                <Label Content="Интервал heartbeat (сек)" />
+                                                <TextBox x:Name="IntervalTextBox" />
+                                            </StackPanel>
+                                            <StackPanel>
+                                                <Label Content="Состояние heartbeat" />
+                                                <TextBlock x:Name="RunStateTextBlock" Text="Автоотправка heartbeat: выключена" Foreground="#F9C56D" Margin="0,9,0,0" />
+                                            </StackPanel>
+                                        </StackPanel>
+
+                                        <CheckBox x:Name="AutoStartCheckBox"
+                                                  Grid.Row="6"
+                                                  Grid.ColumnSpan="2"
+                                                  Margin="0,10,0,8"
+                                                  Foreground="#D7E6FA"
+                                                  FontFamily="Bahnschrift"
+                                                  Content="Запускать Structura Connector при входе в Windows"
+                                                  Visibility="Collapsed" />
+
+                                        <WrapPanel Grid.Row="7" Grid.ColumnSpan="2" Margin="0,4,0,0" Visibility="Collapsed">
+                                            <Button x:Name="SaveButton" Style="{StaticResource SecondaryButton}" Content="Сохранить настройки" Click="Save_Click" />
+                                            <Button x:Name="TestConnectionButton" Style="{StaticResource SecondaryButton}" Content="Проверить сервер" Click="TestConnection_Click" />
+                                            <Button x:Name="SendNowButton" Style="{StaticResource SecondaryButton}" Content="Отправить heartbeat" Click="SendNow_Click" />
+                                            <Button x:Name="StartButton" Style="{StaticResource PrimaryButton}" Content="Включить автоотправку" Click="Start_Click" />
+                                            <Button x:Name="StopButton" Style="{StaticResource DangerButton}" Content="Выключить" Click="Stop_Click" />
+                                        </WrapPanel>
+                                    </Grid>
+                                </Grid>
+                            </Border>
+
+                            <Border Grid.Column="1" Style="{StaticResource CardStyle}" Margin="0,0,0,12">
                                 <StackPanel>
-                                    <Label Content="Состояние heartbeat" />
-                                    <TextBlock x:Name="RunStateTextBlock" Text="Автоотправка heartbeat: выключена" Foreground="#F9C56D" Margin="0,9,0,0" />
+                                    <TextBlock Text="Обновления приложения" FontSize="19" FontWeight="SemiBold" />
+                                    <TextBlock Text="Проверка и установка новой версии Structura Connector."
+                                               Margin="0,6,0,12" Foreground="#A9BBD3" TextWrapping="Wrap" />
+
+                                    <Label Content="Логин SMB" Visibility="Collapsed" />
+                                    <TextBox x:Name="SmbLoginTextBox" Margin="0,0,0,10" Visibility="Collapsed" />
+
+                                    <Label Content="Пароль SMB" Visibility="Collapsed" />
+                                    <PasswordBox x:Name="SmbPasswordBox" Margin="0,0,0,10" Visibility="Collapsed" />
+
+                                    <Label Content="Путь папки" Visibility="Collapsed" />
+                                    <TextBox x:Name="SmbSharePathTextBox" Margin="0,0,0,12" Visibility="Collapsed" />
+
+                                    <WrapPanel Visibility="Collapsed">
+                                        <Button x:Name="ConnectSmbButton" Style="{StaticResource PrimaryButton}" Content="Войти в SMB-папку" Click="ConnectSmb_Click" />
+                                        <Button x:Name="OpenSmbFolderButton" Style="{StaticResource SecondaryButton}" Content="Открыть BIM_Models" Click="OpenSmbFolder_Click" />
+                                    </WrapPanel>
+
+                                    <Separator Margin="0,8,0,10" Background="#2A3E5C" />
+
+                                    <TextBlock Text="Обновления" FontSize="17" FontWeight="SemiBold" />
+                                    <Label Content="URL manifest" Visibility="Collapsed" />
+                                    <TextBox x:Name="UpdateManifestUrlTextBox" Margin="0,0,0,8" Visibility="Collapsed" />
+                                    <TextBlock x:Name="UpdateStateTextBlock" Text="Обновление: не проверялось" Foreground="#A9BBD3" Margin="0,0,0,12" TextWrapping="Wrap" />
+
+                                    <WrapPanel>
+                                        <Button x:Name="UpdateActionButton" Style="{StaticResource SecondaryButton}" Content="Проверить обновление" Click="UpdateAction_Click" />
+                                    </WrapPanel>
                                 </StackPanel>
-                            </StackPanel>
-
-                             <CheckBox x:Name="AutoStartCheckBox"
-                                       Grid.Row="6"
-                                       Grid.ColumnSpan="2"
-                                       Margin="0,10,0,8"
-                                       Foreground="#D7E6FA"
-                                       FontFamily="Bahnschrift"
-                                       Content="Запускать Structura Connector при входе в Windows"
-                                       Visibility="Collapsed" />
-
-                             <WrapPanel Grid.Row="7" Grid.ColumnSpan="2" Margin="0,4,0,0" Visibility="Collapsed">
-                                 <Button x:Name="SaveButton" Style="{StaticResource SecondaryButton}" Content="Сохранить настройки" Click="Save_Click" />
-                                 <Button x:Name="TestConnectionButton" Style="{StaticResource SecondaryButton}" Content="Проверить сервер" Click="TestConnection_Click" />
-                                 <Button x:Name="SendNowButton" Style="{StaticResource SecondaryButton}" Content="Отправить heartbeat" Click="SendNow_Click" />
-                                <Button x:Name="StartButton" Style="{StaticResource PrimaryButton}" Content="Включить автоотправку" Click="Start_Click" />
-                                <Button x:Name="StopButton" Style="{StaticResource DangerButton}" Content="Выключить" Click="Stop_Click" />
-                            </WrapPanel>
+                            </Border>
                         </Grid>
-                    </Grid>
-                </Border>
+                    </TabItem>
 
-                <Border Grid.Column="1" Style="{StaticResource CardStyle}" Margin="0,0,0,12">
-                    <StackPanel>
-                        <TextBlock Text="Обновления приложения" FontSize="19" FontWeight="SemiBold" />
-                        <TextBlock Text="Проверка и установка новой версии Structura Connector."
-                                   Margin="0,6,0,12" Foreground="#A9BBD3" TextWrapping="Wrap" />
+                    <TabItem Header="Стандарт Tekla">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                            <Border Style="{StaticResource CardStyle}" Margin="12,10,12,12">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="230" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
 
-                        <Label Content="Логин SMB" Visibility="Collapsed" />
-                        <TextBox x:Name="SmbLoginTextBox" Margin="0,0,0,10" Visibility="Collapsed" />
+                                    <TextBlock Grid.Row="0" Grid.ColumnSpan="2" Text="Менеджер Стандарт Tekla" FontSize="19" FontWeight="SemiBold" />
+                                    <TextBlock Grid.Row="1" Grid.ColumnSpan="2" Text="Легкая проверка manifest и отложенное применение после закрытия Tekla Structures."
+                                               Margin="0,6,0,14" Foreground="#A9BBD3" TextWrapping="Wrap" />
 
-                        <Label Content="Пароль SMB" Visibility="Collapsed" />
-                        <PasswordBox x:Name="SmbPasswordBox" Margin="0,0,0,10" Visibility="Collapsed" />
+                                    <Label Grid.Row="2" Grid.Column="0" Content="Актуальность версии" VerticalAlignment="Center" />
+                                    <TextBlock x:Name="TeklaUpToDateTextBlock" Grid.Row="2" Grid.Column="1" Margin="0,8,0,10" Text="нет" />
 
-                        <Label Content="Путь папки" Visibility="Collapsed" />
-                        <TextBox x:Name="SmbSharePathTextBox" Margin="0,0,0,12" Visibility="Collapsed" />
+                                    <Label Grid.Row="3" Grid.Column="0" Content="Актуальная версия" VerticalAlignment="Center" />
+                                    <TextBlock x:Name="TeklaCurrentVersionTextBlock" Grid.Row="3" Grid.Column="1" Margin="0,8,0,10" Text="-" />
 
-                        <WrapPanel Visibility="Collapsed">
-                            <Button x:Name="ConnectSmbButton" Style="{StaticResource PrimaryButton}" Content="Войти в SMB-папку" Click="ConnectSmb_Click" />
-                            <Button x:Name="OpenSmbFolderButton" Style="{StaticResource SecondaryButton}" Content="Открыть BIM_Models" Click="OpenSmbFolder_Click" />
-                        </WrapPanel>
+                                    <Label Grid.Row="4" Grid.Column="0" Content="Статус" VerticalAlignment="Top" />
+                                    <StackPanel Grid.Row="4" Grid.Column="1" Margin="0,2,0,10">
+                                        <TextBlock x:Name="TeklaStatusTextBlock" Text="Стандарт Tekla: не проверялось" Foreground="#A9BBD3" TextWrapping="Wrap" />
+                                        <TextBlock x:Name="TeklaPendingTextBlock" Text="Отложенное применение: нет" Foreground="#A9BBD3" Margin="0,4,0,0" TextWrapping="Wrap" />
+                                        <TextBlock x:Name="TeklaProcessStateTextBlock" Text="Tekla не запущена" Foreground="#A9BBD3" Margin="0,4,0,0" TextWrapping="Wrap" />
+                                        <TextBlock x:Name="TeklaRoleTextBlock" Text="Роль администратора: нет" Foreground="#A9BBD3" Margin="0,4,0,0" TextWrapping="Wrap" />
+                                    </StackPanel>
 
-                        <Separator Margin="0,8,0,10" Background="#2A3E5C" />
+                                    <WrapPanel Grid.Row="5" Grid.ColumnSpan="2" Margin="0,8,0,0">
+                                        <Button x:Name="TeklaCheckButton" Style="{StaticResource SecondaryButton}" Content="Проверить обновление" Click="TeklaCheck_Click" />
+                                        <Button x:Name="TeklaApplyButton" Style="{StaticResource PrimaryButton}" Content="Обновить сейчас" Click="TeklaApply_Click" />
+                                    </WrapPanel>
 
-                        <TextBlock Text="Обновления" FontSize="17" FontWeight="SemiBold" />
-                        <Label Content="URL manifest" Visibility="Collapsed" />
-                        <TextBox x:Name="UpdateManifestUrlTextBox" Margin="0,0,0,8" Visibility="Collapsed" />
-                        <TextBlock x:Name="UpdateStateTextBlock" Text="Обновление: не проверялось" Foreground="#A9BBD3" Margin="0,0,0,12" TextWrapping="Wrap" />
+                                    <Border Grid.Row="6" Grid.ColumnSpan="2" Margin="0,14,0,0" Padding="10" BorderBrush="#2A3E5C" BorderThickness="1" CornerRadius="10" x:Name="TeklaPublishPanel" Visibility="Collapsed">
+                                        <StackPanel>
+                                            <TextBlock Text="Публикация XS_FIRM (роль admin_firm)" FontWeight="SemiBold" />
+                                            <TextBlock Text="Укажите путь к эталонной папке и комментарий. Остальные шаги выполняются автоматически." Foreground="#A9BBD3" Margin="0,4,0,10" TextWrapping="Wrap" />
 
-                        <WrapPanel>
-                            <Button x:Name="UpdateActionButton" Style="{StaticResource SecondaryButton}" Content="Проверить обновление" Click="UpdateAction_Click" />
-                        </WrapPanel>
-                    </StackPanel>
-                </Border>
+                                            <Label Content="Путь к эталонной папке" />
+                                            <TextBox x:Name="TeklaPublishSourcePathTextBox" Margin="0,0,0,8" />
+
+                                            <Label Content="Комментарий" />
+                                            <TextBox x:Name="TeklaPublishNotesTextBox" Margin="0,0,0,8" MinHeight="72" AcceptsReturn="True" TextWrapping="Wrap" VerticalContentAlignment="Top" />
+
+                                            <WrapPanel>
+                                                <Button x:Name="TeklaPublishButton" Style="{StaticResource SecondaryButton}" Content="Опубликовать" Click="TeklaPublish_Click" />
+                                            </WrapPanel>
+                                        </StackPanel>
+                                    </Border>
+                                </Grid>
+                            </Border>
+                        </ScrollViewer>
+                    </TabItem>
+                </TabControl>
             </Grid>
 
             <Border Grid.Row="2"

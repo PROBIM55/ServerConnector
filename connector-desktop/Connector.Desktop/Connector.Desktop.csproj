@@ -19,4 +19,11 @@
     <Content Include="Assets\structura_connector.ico" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Content Include="tools\git\**\*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
+  </ItemGroup>
+
 </Project>

@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Diagnostics;
+using System.IO;
 using System.Net.Http;
 using System.Windows;
 using System.Windows.Threading;
@@ -15,11 +16,15 @@ public partial class MainWindow : Window
     private const string FixedUpdateManifestUrl = "https://server.structura-most.ru/updates/latest.json";
     private const int FixedHeartbeatSeconds = 60;
     private const string DefaultSmbSharePath = @"\\62.113.36.107\BIM_Models";
+    private const string FixedTeklaStandardManifestUrl = "https://server.structura-most.ru/updates/tekla/firm/latest.json";
+    private const string DefaultTeklaStandardLocalPath = @"C:\Company\TeklaFirm";
+    private const string DefaultTeklaPublishSourcePath = @"\\62.113.36.107\BIM_Models\Tekla\XS_FIRM";
 
     private readonly SettingsService _settingsService = new();
     private readonly AutoStartService _autoStartService = new();
     private readonly HeartbeatClient _heartbeatClient = new(new HttpClient { Timeout = TimeSpan.FromSeconds(110) });
     private readonly UpdateService _updateService = new(new HttpClient { Timeout = TimeSpan.FromSeconds(40) });
+    private readonly TeklaStandardService _teklaStandardService = new(new HttpClient { Timeout = TimeSpan.FromSeconds(25) });
     private readonly DispatcherTimer _timer = new();
     private readonly DispatcherTimer _updateTimer = new();
     private readonly Forms.NotifyIcon _trayIcon;
@@ -33,6 +38,8 @@ public partial class MainWindow : Window
     private string? _downloadedInstallerPath;
     private bool _updateOfferShown;
     private bool _updateCheckInProgress;
+    private bool _teklaCheckInProgress;
+    private bool _teklaBalloonShown;
     private static readonly TimeSpan UpdateCheckInterval = TimeSpan.FromMinutes(30);
 
     public MainWindow()
@@ -48,6 +55,7 @@ public partial class MainWindow : Window
         LoadSettingsToUi();
         UpdateRunStateUi();
         UpdateActionButtonUi();
+        UpdateTeklaUi();
     }
 
     private void Window_Loaded(object sender, RoutedEventArgs e)
@@ -57,8 +65,17 @@ public partial class MainWindow : Window
         Focus();
         Topmost = false;
         AppendLog("При закрытии окно сворачивается в трей. Для полного выхода: иконка в трее -> Закрыть.");
+        if (_teklaStandardService.CheckGitAvailability(out var gitPath, out var gitDetails))
+        {
+            AppendLog("Стандарт Tekla: git доступен (" + gitPath + ") " + gitDetails);
+        }
+        else
+        {
+            AppendLog("Стандарт Tekla: git недоступен (" + gitPath + ") " + gitDetails);
+        }
         _ = TryAutoConnectAsync();
         _ = CheckUpdatesAsync(showDialogs: false);
+        _ = CheckTeklaStandardAsync(showDialogs: false, autoApplyIfPossible: true);
         _updateTimer.Interval = UpdateCheckInterval;
         _updateTimer.Start();
     }
@@ -211,6 +228,7 @@ public partial class MainWindow : Window
     private async void UpdateTimer_Tick(object? sender, EventArgs e)
     {
         await CheckUpdatesAsync(showDialogs: false);
+        await CheckTeklaStandardAsync(showDialogs: false, autoApplyIfPossible: true);
     }
 
     private void UpdateActionButtonUi()
@@ -224,6 +242,52 @@ public partial class MainWindow : Window
 
         UpdateActionButton.Content = "Скачать и установить";
         UpdateActionButton.Style = (Style)FindResource("PrimaryButton");
+    }
+
+    private void UpdateTeklaUi()
+    {
+        var targetRevision = string.IsNullOrWhiteSpace(_settings.TeklaStandardTargetRevision)
+            ? "-"
+            : _settings.TeklaStandardTargetRevision.Trim();
+        var hasTargetRevision = !string.IsNullOrWhiteSpace(_settings.TeklaStandardTargetRevision);
+        TeklaCurrentVersionTextBlock.Text = targetRevision;
+        TeklaUpToDateTextBlock.Text = hasTargetRevision && !_teklaStandardService.IsUpdateAvailable(_settings) ? "да" : "нет";
+        TeklaPendingTextBlock.Text = _settings.TeklaStandardPendingAfterClose
+            ? "Отложенное применение: да"
+            : "Отложенное применение: нет";
+
+        var teklaRunning = _teklaStandardService.IsTeklaRunning();
+        TeklaProcessStateTextBlock.Text = teklaRunning ? "Tekla запущена" : "Tekla не запущена";
+        TeklaRoleTextBlock.Text = _settings.IsFirmAdmin ? "Роль администратора: да" : "Роль администратора: нет";
+        TeklaApplyButton.IsEnabled = !string.IsNullOrWhiteSpace(_settings.TeklaStandardTargetRevision);
+
+        TeklaPublishPanel.Visibility = _settings.IsFirmAdmin ? Visibility.Visible : Visibility.Collapsed;
+        TeklaPublishButton.IsEnabled = _settings.IsFirmAdmin;
+        if (string.IsNullOrWhiteSpace(TeklaPublishSourcePathTextBox.Text))
+        {
+            TeklaPublishSourcePathTextBox.Text = string.IsNullOrWhiteSpace(_settings.TeklaPublishSourcePath)
+                ? DefaultTeklaPublishSourcePath
+                : _settings.TeklaPublishSourcePath;
+        }
+        if (string.IsNullOrWhiteSpace(TeklaPublishNotesTextBox.Text))
+        {
+            TeklaPublishNotesTextBox.Text = "Публикация из Structura Connector";
+        }
+    }
+
+    private void ShowTeklaPendingBalloon(string revision)
+    {
+        if (_teklaBalloonShown)
+        {
+            return;
+        }
+
+        _teklaBalloonShown = true;
+        _trayIcon.ShowBalloonTip(
+            3000,
+            "Стандарт Tekla",
+            "Найдена ревизия " + revision + ". Закройте Tekla и нажмите 'Обновить сейчас' или дождитесь автоустановки при следующей проверке.",
+            Forms.ToolTipIcon.Info);
     }
 
     private void HideToTray()
@@ -258,18 +322,18 @@ public partial class MainWindow : Window
     private void LoadSettingsToUi()
     {
         _settings = _settingsService.Load();
-        var sanitizedSecrets = false;
+        var shouldPersist = false;
 
         if (!string.IsNullOrWhiteSpace(_settings.SmbLogin))
         {
             _settings.SmbLogin = string.Empty;
-            sanitizedSecrets = true;
+            shouldPersist = true;
         }
 
         if (!string.IsNullOrWhiteSpace(_settings.SmbPasswordCipherBase64))
         {
             _settings.SmbPasswordCipherBase64 = string.Empty;
-            sanitizedSecrets = true;
+            shouldPersist = true;
         }
 
         _settings.ServerUrl = FixedServerUrl;
@@ -282,6 +346,25 @@ public partial class MainWindow : Window
         if (string.IsNullOrWhiteSpace(_settings.SmbSharePath))
         {
             _settings.SmbSharePath = DefaultSmbSharePath;
+            shouldPersist = true;
+        }
+
+        if (string.IsNullOrWhiteSpace(_settings.TeklaStandardManifestUrl))
+        {
+            _settings.TeklaStandardManifestUrl = FixedTeklaStandardManifestUrl;
+            shouldPersist = true;
+        }
+
+        if (string.IsNullOrWhiteSpace(_settings.TeklaStandardLocalPath))
+        {
+            _settings.TeklaStandardLocalPath = DefaultTeklaStandardLocalPath;
+            shouldPersist = true;
+        }
+
+        if (string.IsNullOrWhiteSpace(_settings.TeklaPublishSourcePath))
+        {
+            _settings.TeklaPublishSourcePath = DefaultTeklaPublishSourcePath;
+            shouldPersist = true;
         }
 
         ServerUrlTextBox.Text = _settings.ServerUrl;
@@ -291,6 +374,7 @@ public partial class MainWindow : Window
         SmbSharePathTextBox.Text = _settings.SmbSharePath;
         IntervalTextBox.Text = _settings.HeartbeatSeconds.ToString();
         AutoStartCheckBox.IsChecked = true;
+        TeklaPublishSourcePathTextBox.Text = _settings.TeklaPublishSourcePath;
 
         var token = SettingsService.DecryptToken(_settings.TokenCipherBase64);
         TokenPasswordBox.Password = token;
@@ -299,7 +383,7 @@ public partial class MainWindow : Window
 
         _timer.Interval = TimeSpan.FromSeconds(_settings.HeartbeatSeconds);
 
-        if (sanitizedSecrets)
+        if (shouldPersist)
         {
             _settingsService.Save(_settings);
         }
@@ -323,6 +407,17 @@ public partial class MainWindow : Window
         var smbSharePath = string.IsNullOrWhiteSpace(_settings.SmbSharePath) ? DefaultSmbSharePath : _settings.SmbSharePath;
         var smbLogin = _settings.SmbLogin;
         var smbPassword = SettingsService.DecryptToken(_settings.SmbPasswordCipherBase64);
+        var teklaManifestUrl = string.IsNullOrWhiteSpace(_settings.TeklaStandardManifestUrl)
+            ? FixedTeklaStandardManifestUrl
+            : _settings.TeklaStandardManifestUrl;
+        var teklaLocalPath = string.IsNullOrWhiteSpace(_settings.TeklaStandardLocalPath)
+            ? DefaultTeklaStandardLocalPath
+            : _settings.TeklaStandardLocalPath;
+        var teklaPublishSourcePath = string.IsNullOrWhiteSpace(TeklaPublishSourcePathTextBox.Text)
+            ? (string.IsNullOrWhiteSpace(_settings.TeklaPublishSourcePath)
+                ? DefaultTeklaPublishSourcePath
+                : _settings.TeklaPublishSourcePath)
+            : TeklaPublishSourcePathTextBox.Text.Trim();
 
         return new AppSettings
         {
@@ -338,7 +433,19 @@ public partial class MainWindow : Window
                 : SettingsService.EncryptToken(smbPassword),
             SmbSharePath = smbSharePath,
             HeartbeatSeconds = sec,
-            AutoStart = true
+            AutoStart = true,
+            TeklaStandardManifestUrl = teklaManifestUrl,
+            TeklaStandardLocalPath = teklaLocalPath,
+            TeklaStandardInstalledRevision = _settings.TeklaStandardInstalledRevision,
+            TeklaStandardTargetRevision = _settings.TeklaStandardTargetRevision,
+            TeklaStandardLastCheckUtc = _settings.TeklaStandardLastCheckUtc,
+            TeklaStandardLastSuccessUtc = _settings.TeklaStandardLastSuccessUtc,
+            TeklaStandardPendingAfterClose = _settings.TeklaStandardPendingAfterClose,
+            TeklaStandardLastError = _settings.TeklaStandardLastError,
+            TeklaStandardRepoUrl = _settings.TeklaStandardRepoUrl,
+            TeklaStandardRepoRef = _settings.TeklaStandardRepoRef,
+            TeklaPublishSourcePath = teklaPublishSourcePath,
+            IsFirmAdmin = _settings.IsFirmAdmin
         };
     }
 
@@ -348,6 +455,7 @@ public partial class MainWindow : Window
         _settingsService.Save(_settings);
         _autoStartService.SetEnabled(_settings.AutoStart);
         _timer.Interval = TimeSpan.FromSeconds(_settings.HeartbeatSeconds);
+        UpdateTeklaUi();
         AppendLog("Настройки сохранены.");
     }
 
@@ -373,7 +481,24 @@ public partial class MainWindow : Window
         try
         {
             var token = SettingsService.DecryptToken(_settings.TokenCipherBase64);
-            await _heartbeatClient.SendHeartbeatAsync(_settings.ServerUrl, _settings.DeviceId, token, _activeSessionId, CancellationToken.None);
+            var teklaState = new TeklaHeartbeatState
+            {
+                InstalledRevision = _settings.TeklaStandardInstalledRevision,
+                TargetRevision = _settings.TeklaStandardTargetRevision,
+                PendingAfterClose = _settings.TeklaStandardPendingAfterClose,
+                TeklaRunning = _teklaStandardService.IsTeklaRunning(),
+                LastCheckUtc = _settings.TeklaStandardLastCheckUtc?.UtcDateTime.ToString("o") ?? string.Empty,
+                LastSuccessUtc = _settings.TeklaStandardLastSuccessUtc?.UtcDateTime.ToString("o") ?? string.Empty,
+                LastError = _settings.TeklaStandardLastError
+            };
+
+            await _heartbeatClient.SendHeartbeatAsync(
+                _settings.ServerUrl,
+                _settings.DeviceId,
+                token,
+                _activeSessionId,
+                teklaState,
+                CancellationToken.None);
             AppendLog("Heartbeat отправлен успешно.");
         }
         catch (Exception ex)
@@ -556,6 +681,24 @@ public partial class MainWindow : Window
             SmbSharePath = sharePath,
             HeartbeatSeconds = bootstrap.HeartbeatSeconds >= 10 ? bootstrap.HeartbeatSeconds : FixedHeartbeatSeconds,
             AutoStart = true,
+            TeklaStandardManifestUrl = string.IsNullOrWhiteSpace(_settings.TeklaStandardManifestUrl)
+                ? FixedTeklaStandardManifestUrl
+                : _settings.TeklaStandardManifestUrl,
+            TeklaStandardLocalPath = string.IsNullOrWhiteSpace(_settings.TeklaStandardLocalPath)
+                ? DefaultTeklaStandardLocalPath
+                : _settings.TeklaStandardLocalPath,
+            TeklaStandardInstalledRevision = _settings.TeklaStandardInstalledRevision,
+            TeklaStandardTargetRevision = _settings.TeklaStandardTargetRevision,
+            TeklaStandardLastCheckUtc = _settings.TeklaStandardLastCheckUtc,
+            TeklaStandardLastSuccessUtc = _settings.TeklaStandardLastSuccessUtc,
+            TeklaStandardPendingAfterClose = _settings.TeklaStandardPendingAfterClose,
+            TeklaStandardLastError = _settings.TeklaStandardLastError,
+            TeklaStandardRepoUrl = _settings.TeklaStandardRepoUrl,
+            TeklaStandardRepoRef = _settings.TeklaStandardRepoRef,
+            TeklaPublishSourcePath = string.IsNullOrWhiteSpace(_settings.TeklaPublishSourcePath)
+                ? DefaultTeklaPublishSourcePath
+                : _settings.TeklaPublishSourcePath,
+            IsFirmAdmin = bootstrap.IsFirmAdmin
         };
         _settingsService.Save(_settings);
         _autoStartService.SetEnabled(true);
@@ -568,6 +711,7 @@ public partial class MainWindow : Window
         SmbLoginTextBox.Text = bootstrap.SmbAccess.Login;
         SmbPasswordBox.Password = string.Empty;
         SmbSharePathTextBox.Text = _settings.SmbSharePath;
+        UpdateTeklaUi();
         AppendLog("Настройки сохранены.");
 
         await ConnectSmbInternalAsync(bootstrap.SmbAccess.Login, bootstrap.SmbAccess.Password, sharePath, openExplorer: true);
@@ -723,6 +867,313 @@ public partial class MainWindow : Window
             UpdateStateTextBlock.Text = "Обновление: ошибка установки";
             AppendLog("Ошибка установки обновления: " + ex.Message);
             System.Windows.MessageBox.Show(ex.Message, "Ошибка обновления", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private async Task CheckTeklaStandardAsync(bool showDialogs, bool autoApplyIfPossible)
+    {
+        if (_teklaCheckInProgress)
+        {
+            return;
+        }
+
+        _teklaCheckInProgress = true;
+        TeklaCheckButton.IsEnabled = false;
+        TeklaApplyButton.IsEnabled = false;
+
+        try
+        {
+            _settings.TeklaStandardManifestUrl = string.IsNullOrWhiteSpace(_settings.TeklaStandardManifestUrl)
+                ? FixedTeklaStandardManifestUrl
+                : _settings.TeklaStandardManifestUrl;
+            _settings.TeklaStandardLocalPath = string.IsNullOrWhiteSpace(_settings.TeklaStandardLocalPath)
+                ? DefaultTeklaStandardLocalPath
+                : _settings.TeklaStandardLocalPath;
+
+            var manifest = await _teklaStandardService.TryGetManifestAsync(_settings.TeklaStandardManifestUrl, CancellationToken.None);
+            _settings.TeklaStandardLastCheckUtc = DateTimeOffset.UtcNow;
+
+            if (manifest is null)
+            {
+                _settings.TeklaStandardTargetRevision = string.Empty;
+                _settings.TeklaStandardLastError = "manifest_not_received";
+                TeklaStatusTextBlock.Text = "Стандарт Tekla: manifest не получен";
+                _settingsService.Save(_settings);
+                UpdateTeklaUi();
+                if (showDialogs)
+                {
+                    System.Windows.MessageBox.Show("Не удалось получить manifest Стандарт Tekla.", "Стандарт Tekla", MessageBoxButton.OK, MessageBoxImage.Warning);
+                }
+                return;
+            }
+
+            _settings.TeklaStandardTargetRevision = manifest.Revision;
+            _settings.TeklaStandardRepoUrl = manifest.RepoUrl;
+            _settings.TeklaStandardRepoRef = manifest.RepoRef;
+            var updateAvailable = _teklaStandardService.IsUpdateAvailable(_settings);
+
+            if (!updateAvailable)
+            {
+                _settings.TeklaStandardPendingAfterClose = false;
+                _settings.TeklaStandardLastError = string.Empty;
+                _teklaBalloonShown = false;
+                TeklaStatusTextBlock.Text = "Стандарт Tekla: актуально (" + manifest.Revision + ")";
+                _settingsService.Save(_settings);
+                UpdateTeklaUi();
+                if (showDialogs)
+                {
+                    System.Windows.MessageBox.Show("Стандарт Tekla уже актуален.", "Стандарт Tekla", MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+                return;
+            }
+
+            AppendLog("Найдена новая ревизия Стандарт Tekla: " + manifest.Revision);
+            var teklaRunning = _teklaStandardService.IsTeklaRunning();
+            if (teklaRunning)
+            {
+                _settings.TeklaStandardPendingAfterClose = true;
+                _settings.TeklaStandardLastError = string.Empty;
+                TeklaStatusTextBlock.Text = "Стандарт Tekla: доступна ревизия " + manifest.Revision + ". Ожидаем закрытия Tekla.";
+                _settingsService.Save(_settings);
+                UpdateTeklaUi();
+                ShowTeklaPendingBalloon(manifest.Revision);
+                if (showDialogs)
+                {
+                    System.Windows.MessageBox.Show(
+                        "Обновление Стандарт Tekla найдено, но Tekla запущена. Применение отложено.",
+                        "Стандарт Tekla",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Information);
+                }
+                return;
+            }
+
+            TeklaStatusTextBlock.Text = "Стандарт Tekla: доступна ревизия " + manifest.Revision;
+            _settings.TeklaStandardLastError = string.Empty;
+            _settingsService.Save(_settings);
+
+            if (autoApplyIfPossible)
+            {
+                await ApplyTeklaStandardAsync(showDialogs: false, forceRefresh: false);
+                return;
+            }
+
+            UpdateTeklaUi();
+            if (showDialogs)
+            {
+                System.Windows.MessageBox.Show(
+                    "Доступна новая ревизия Стандарт Tekla: " + manifest.Revision,
+                    "Стандарт Tekla",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+            }
+        }
+        catch (Exception ex)
+        {
+            TeklaStatusTextBlock.Text = "Стандарт Tekla: ошибка проверки";
+            _settings.TeklaStandardLastError = ex.Message;
+            _settingsService.Save(_settings);
+            AppendLog("Ошибка проверки Стандарт Tekla: " + ex.Message);
+            if (showDialogs)
+            {
+                System.Windows.MessageBox.Show(ex.Message, "Стандарт Tekla", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+        finally
+        {
+            _teklaCheckInProgress = false;
+            TeklaCheckButton.IsEnabled = true;
+            UpdateTeklaUi();
+        }
+    }
+
+    private async Task ApplyTeklaStandardAsync(bool showDialogs, bool forceRefresh)
+    {
+        try
+        {
+            if (forceRefresh || string.IsNullOrWhiteSpace(_settings.TeklaStandardTargetRevision))
+            {
+                await CheckTeklaStandardAsync(showDialogs: false, autoApplyIfPossible: false);
+                if (string.IsNullOrWhiteSpace(_settings.TeklaStandardTargetRevision))
+                {
+                    return;
+                }
+            }
+
+            TeklaStatusTextBlock.Text = "Стандарт Tekla: обновление выполняется...";
+            UpdateTeklaUi();
+            var result = _teklaStandardService.ApplyPendingGitUpdate(_settings);
+
+            if (result.IsSuccess)
+            {
+                _teklaStandardService.AppendLog(result.Message);
+                AppendLog(result.Message);
+                _teklaBalloonShown = false;
+                _settings.TeklaStandardLastError = string.Empty;
+                TeklaStatusTextBlock.Text = "Стандарт Tekla: применена ревизия " + _settings.TeklaStandardInstalledRevision;
+                _settingsService.Save(_settings);
+                UpdateTeklaUi();
+                if (showDialogs)
+                {
+                    System.Windows.MessageBox.Show(result.Message, "Стандарт Tekla", MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+                return;
+            }
+
+            TeklaStatusTextBlock.Text = "Стандарт Tekla: " + result.Message;
+            _settings.TeklaStandardLastError = result.Message;
+            _settingsService.Save(_settings);
+            UpdateTeklaUi();
+            if (_settings.TeklaStandardPendingAfterClose)
+            {
+                ShowTeklaPendingBalloon(_settings.TeklaStandardTargetRevision);
+            }
+
+            if (showDialogs)
+            {
+                System.Windows.MessageBox.Show(result.Message, "Стандарт Tekla", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }
+        catch (Exception ex)
+        {
+            TeklaStatusTextBlock.Text = "Стандарт Tekla: ошибка применения";
+            _settings.TeklaStandardLastError = ex.Message;
+            _settingsService.Save(_settings);
+            AppendLog("Ошибка применения Стандарт Tekla: " + ex.Message);
+            if (showDialogs)
+            {
+                System.Windows.MessageBox.Show(ex.Message, "Стандарт Tekla", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+    }
+
+    private async void TeklaCheck_Click(object sender, RoutedEventArgs e)
+    {
+        await CheckTeklaStandardAsync(showDialogs: true, autoApplyIfPossible: false);
+    }
+
+    private async void TeklaApply_Click(object sender, RoutedEventArgs e)
+    {
+        await ApplyTeklaStandardAsync(showDialogs: true, forceRefresh: true);
+    }
+
+    private void TeklaOpenFolder_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var folderPath = string.IsNullOrWhiteSpace(_settings.TeklaStandardLocalPath)
+                ? DefaultTeklaStandardLocalPath
+                : _settings.TeklaStandardLocalPath.Trim();
+            Directory.CreateDirectory(folderPath);
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = "explorer.exe",
+                Arguments = folderPath,
+                UseShellExecute = true
+            });
+            AppendLog("Открыта папка Стандарт Tekla: " + folderPath);
+        }
+        catch (Exception ex)
+        {
+            AppendLog("Ошибка открытия папки Стандарт Tekla: " + ex.Message);
+            System.Windows.MessageBox.Show(ex.Message, "Стандарт Tekla", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private void TeklaOpenLog_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            if (!File.Exists(_teklaStandardService.LogFilePath))
+            {
+                File.WriteAllText(_teklaStandardService.LogFilePath, string.Empty);
+            }
+
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = "explorer.exe",
+                Arguments = "/select,\"" + _teklaStandardService.LogFilePath + "\"",
+                UseShellExecute = true
+            });
+            AppendLog("Открыт лог Стандарт Tekla: " + _teklaStandardService.LogFilePath);
+        }
+        catch (Exception ex)
+        {
+            AppendLog("Ошибка открытия лога Стандарт Tekla: " + ex.Message);
+            System.Windows.MessageBox.Show(ex.Message, "Стандарт Tekla", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private async void TeklaPublish_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            if (!_settings.IsFirmAdmin)
+            {
+                throw new InvalidOperationException("Публикация доступна только для роли admin_firm.");
+            }
+
+            var token = SettingsService.DecryptToken(_settings.TokenCipherBase64).Trim();
+            if (string.IsNullOrWhiteSpace(token))
+            {
+                throw new InvalidOperationException("Токен устройства не найден. Выполните подключение по токену.");
+            }
+
+            var payload = new TeklaManifestPublishPayload
+            {
+                SourcePath = (TeklaPublishSourcePathTextBox.Text ?? string.Empty).Trim(),
+                Comment = (TeklaPublishNotesTextBox.Text ?? string.Empty).Trim()
+            };
+
+            if (string.IsNullOrWhiteSpace(payload.SourcePath))
+            {
+                throw new InvalidOperationException("Укажите путь к эталонной папке XS_FIRM.");
+            }
+            if (string.IsNullOrWhiteSpace(payload.Comment))
+            {
+                throw new InvalidOperationException("Комментарий публикации обязателен.");
+            }
+
+            _settings.TeklaPublishSourcePath = payload.SourcePath;
+            _settingsService.Save(_settings);
+
+            TeklaPublishButton.IsEnabled = false;
+            var result = await _heartbeatClient.PublishTeklaManifestAsync(_settings.ServerUrl, token, payload, CancellationToken.None);
+            if (result.NoChanges)
+            {
+                AppendLog("Публикация XS_FIRM: изменений не обнаружено.");
+                if (!string.IsNullOrWhiteSpace(result.Message))
+                {
+                    AppendLog(result.Message);
+                }
+            }
+            else
+            {
+                AppendLog("Tekla manifest опубликован через desktop UI.");
+                AppendLog("Версия: " + result.Version + "; ревизия: " + result.Revision);
+                if (!string.IsNullOrWhiteSpace(result.Message))
+                {
+                    AppendLog(result.Message);
+                }
+            }
+            await CheckTeklaStandardAsync(showDialogs: false, autoApplyIfPossible: false);
+
+            System.Windows.MessageBox.Show(
+                result.NoChanges
+                    ? "Изменений в эталонной папке не найдено. Публикация не требуется."
+                    : "Публикация Tekla manifest выполнена успешно.",
+                "Стандарт Tekla",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+        }
+        catch (Exception ex)
+        {
+            AppendLog("Ошибка публикации Tekla manifest: " + ex.Message);
+            System.Windows.MessageBox.Show(ex.Message, "Стандарт Tekla", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        finally
+        {
+            TeklaPublishButton.IsEnabled = _settings.IsFirmAdmin;
         }
     }
 

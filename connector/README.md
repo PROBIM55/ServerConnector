@@ -111,6 +111,23 @@ Admin credentials source:
 - Manifest file is read from `server/updates/latest.json`
 - Required manifest fields: `version`, `msiUrl` (optional `notes`)
 
+## Tekla firm lightweight manifest
+- Endpoint: `GET /updates/tekla/firm/latest.json`
+- Local source file: `server/updates/tekla_firm_latest.json`
+- Response fields: `version`, `revision`, `published_at`, `target_path`, `minimum_connector_version`, `repo_url`, `repo_ref`, `notes`
+- Validation behavior:
+  - Returns `404` when `server/updates/tekla_firm_latest.json` is missing
+  - Returns `500` when JSON is invalid or required fields are missing
+  - `target_path` can come from manifest file or fallback config key `tekla_firm_target_path`
+- Optional config keys in `server/config.json`:
+  - `tekla_firm_manifest_url` (default `https://server.structura-most.ru/updates/tekla/firm/latest.json`)
+  - `tekla_firm_target_path` (default `C:\Company\TeklaFirm`)
+  - `tekla_firm_repo_worktree` (local git working tree on server)
+  - `tekla_firm_repo_subdir` (subfolder inside repo to mirror from source path)
+  - `tekla_firm_repo_url` / `tekla_firm_repo_ref` (values written to published manifest)
+  - `tekla_firm_minimum_connector_version` (default for published manifest)
+  - `tekla_firm_git_executable` (default `git`)
+
 GitHub release mode (recommended):
 - Configure `github_updates_repo` in `server/config.json` as `owner/repo`
 - Optional: set `github_updates_asset_name` (default `Connector.Desktop.Setup.msi`)
@@ -132,6 +149,7 @@ Release automation:
   - `smb_access` (`login`, `password`, `share_unc`)
   - `heartbeat_seconds`
   - `update_manifest_url`
+  - `is_firm_admin`
 
 Single active device session:
 - Heartbeat must include `X-Device-Session`
@@ -147,8 +165,24 @@ curl -X POST http://127.0.0.1:8080/connect/bootstrap \
   -d '{"hostname":"WORKSTATION-01","agent_version":"desktop-1.0.0"}'
 ```
 
+## Desktop firm-admin publish API
+- Endpoint: `POST /connect/tekla/manifest`
+- Header: `X-Device-Token: <TOKEN>`
+- Access: device must be granted `admin_firm` role
+- Purpose: server-side auto publish for firm admins (`sync source -> git add/commit/push -> manifest update`)
+- Request body:
+
+```json
+{
+  "source_path": "\\\\62.113.36.107\\BIM_Models\\Tekla\\XS_FIRM",
+  "comment": "Обновлены шаблоны и макросы"
+}
+```
+
 ## Admin network whitelist API
 - List rules: `GET /admin/network/rules`
+- Get current managed ports from server config: `GET /admin/network/managed-ports`
+- Reapply current managed ports to all active tokens (using last known device IP): `POST /admin/network/reapply-managed-ports`
 - Add/update IP rules: `POST /admin/network/allow-ip`
 - Remove IP rules: `POST /admin/network/revoke-ip`
 
@@ -157,9 +191,32 @@ Request payload:
 ```json
 {
   "ip": "193.27.41.84",
-  "ports": [8080, 445, 3389]
+  "ports": [445, 3389, 80, 443]
 }
 ```
+
+If `ports` is omitted in allow/revoke requests, server uses `managed_ports` from `server/config.json`.
+
+## Admin updates API
+- Force refresh update manifest cache now: `POST /admin/updates/refresh`
+
+Example:
+
+```bash
+curl -X POST http://127.0.0.1:8080/admin/updates/refresh \
+  -H "X-Admin-Key: YOUR_ADMIN_KEY" \
+  -H "X-Admin-Actor: release-bot"
+```
+
+## Admin Tekla API
+- List Tekla standard client state from heartbeat data: `GET /admin/tekla/clients`
+- Update Tekla firm manifest from admin UI/API: `POST /admin/tekla/manifest`
+
+## Admin firm role API
+- List users with `admin_firm` role: `GET /admin/firm-admins`
+- Grant `admin_firm` role: `POST /admin/firm-admins/grant`
+- Revoke `admin_firm` role: `POST /admin/firm-admins/revoke`
+- Firm operations audit slice: `GET /admin/audit/firm?limit=120&include_state=true`
 
 ## Quick start (agent side)
 1. Install Python 3.11+ on client PC.

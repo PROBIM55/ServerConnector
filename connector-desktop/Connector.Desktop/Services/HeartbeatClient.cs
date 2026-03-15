@@ -81,13 +81,26 @@ public sealed class HeartbeatClient
         }
     }
 
-    public async Task SendHeartbeatAsync(string serverUrl, string deviceId, string token, string sessionId, CancellationToken ct)
+    public async Task SendHeartbeatAsync(
+        string serverUrl,
+        string deviceId,
+        string token,
+        string sessionId,
+        TeklaHeartbeatState? teklaState,
+        CancellationToken ct)
     {
         var payload = new
         {
             device_id = deviceId,
             hostname = Environment.MachineName,
-            agent_version = "1.0.0"
+            agent_version = "1.0.0",
+            tekla_installed_revision = teklaState?.InstalledRevision,
+            tekla_target_revision = teklaState?.TargetRevision,
+            tekla_pending_after_close = teklaState?.PendingAfterClose,
+            tekla_running = teklaState?.TeklaRunning,
+            tekla_last_check_utc = teklaState?.LastCheckUtc,
+            tekla_last_success_utc = teklaState?.LastSuccessUtc,
+            tekla_last_error = teklaState?.LastError
         };
 
         var url = serverUrl.TrimEnd('/') + "/heartbeat";
@@ -144,6 +157,50 @@ public sealed class HeartbeatClient
 
         return data;
     }
+
+    public async Task<TeklaManifestPublishResponse> PublishTeklaManifestAsync(
+        string serverUrl,
+        string token,
+        TeklaManifestPublishPayload payload,
+        CancellationToken ct)
+    {
+        var url = serverUrl.TrimEnd('/') + "/connect/tekla/manifest";
+        var json = JsonSerializer.Serialize(payload);
+        using var reqCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        reqCts.CancelAfter(TimeSpan.FromSeconds(40));
+        using var req = new HttpRequestMessage(HttpMethod.Post, url);
+        req.Headers.Add("X-Device-Token", token);
+        req.Content = new StringContent(json, Encoding.UTF8, "application/json");
+
+        using var res = await _http.SendAsync(req, reqCts.Token);
+        var body = await res.Content.ReadAsStringAsync(reqCts.Token);
+        if (!res.IsSuccessStatusCode)
+        {
+            throw new InvalidOperationException($"HTTP {(int)res.StatusCode}: {body}");
+        }
+
+        var result = JsonSerializer.Deserialize<TeklaManifestPublishResponse>(body, new JsonSerializerOptions
+        {
+            PropertyNameCaseInsensitive = true
+        });
+        if (result is null)
+        {
+            throw new InvalidOperationException("Некорректный ответ публикации Tekla manifest.");
+        }
+
+        return result;
+    }
+}
+
+public sealed class TeklaHeartbeatState
+{
+    public string InstalledRevision { get; set; } = "";
+    public string TargetRevision { get; set; } = "";
+    public bool PendingAfterClose { get; set; }
+    public bool TeklaRunning { get; set; }
+    public string LastCheckUtc { get; set; } = "";
+    public string LastSuccessUtc { get; set; } = "";
+    public string LastError { get; set; } = "";
 }
 
 public sealed class BootstrapResponse
@@ -169,6 +226,9 @@ public sealed class BootstrapResponse
     [JsonPropertyName("update_manifest_url")]
     public string UpdateManifestUrl { get; set; } = "";
 
+    [JsonPropertyName("is_firm_admin")]
+    public bool IsFirmAdmin { get; set; }
+
     [JsonPropertyName("smb_access")]
     public BootstrapSmbAccess SmbAccess { get; set; } = new();
 }
@@ -189,4 +249,31 @@ public sealed class BootstrapSmbAccess
 
     [JsonPropertyName("share_path")]
     public string SharePath { get; set; } = "";
+}
+
+public sealed class TeklaManifestPublishPayload
+{
+    [JsonPropertyName("source_path")]
+    public string SourcePath { get; set; } = "";
+
+    [JsonPropertyName("comment")]
+    public string Comment { get; set; } = "";
+}
+
+public sealed class TeklaManifestPublishResponse
+{
+    [JsonPropertyName("ok")]
+    public bool Ok { get; set; }
+
+    [JsonPropertyName("no_changes")]
+    public bool NoChanges { get; set; }
+
+    [JsonPropertyName("version")]
+    public string Version { get; set; } = "";
+
+    [JsonPropertyName("revision")]
+    public string Revision { get; set; } = "";
+
+    [JsonPropertyName("message")]
+    public string Message { get; set; } = "";
 }

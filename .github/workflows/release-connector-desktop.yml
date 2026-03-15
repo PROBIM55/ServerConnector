@@ -80,3 +80,20 @@ jobs:
           name: Structura Connector ${{ github.ref_name }}
           generate_release_notes: true
           files: connector-desktop/artifacts/Connector.Desktop.Setup.msi
+
+      - name: Refresh server updates manifest cache
+        if: ${{ secrets.CONNECTOR_UPDATES_REFRESH_URL != '' && secrets.CONNECTOR_ADMIN_API_KEY != '' }}
+        shell: pwsh
+        env:
+          REFRESH_URL: ${{ secrets.CONNECTOR_UPDATES_REFRESH_URL }}
+          ADMIN_KEY: ${{ secrets.CONNECTOR_ADMIN_API_KEY }}
+        run: |
+          $headers = @{
+            "X-Admin-Key" = $env:ADMIN_KEY
+            "X-Admin-Actor" = "github-release-bot"
+          }
+          $response = Invoke-RestMethod -Method POST -Uri $env:REFRESH_URL -Headers $headers -TimeoutSec 30
+          if (-not $response.ok) {
+            throw "Updates refresh endpoint returned non-ok response"
+          }
+          Write-Host "Server updates manifest refreshed to version $($response.manifest.version)"

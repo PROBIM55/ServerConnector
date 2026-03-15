@@ -7,8 +7,10 @@ import binascii
 import hmac
 import time
 import re
+import shutil
 import sqlite3
 import subprocess
+import threading
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import parse_qs, quote
@@ -30,6 +32,7 @@ ADMIN_LOGIN_UI_PATH = BASE_DIR / "admin_login.html"
 OPS_UI_PATH = BASE_DIR / "ops_ui.html"
 UPDATES_DIR = BASE_DIR / "updates"
 UPDATE_MANIFEST_PATH = UPDATES_DIR / "latest.json"
+TEKLA_FIRM_MANIFEST_PATH = UPDATES_DIR / "tekla_firm_latest.json"
 DEFAULT_TOKEN_EXPORT_DIR = Path(r"\\62.113.36.107\BIM_Models\Tokens")
 DEFAULT_SMB_SERVER_HOST = "62.113.36.107"
 DEFAULT_SMB_SHARE_NAME = "BIM_Models"
@@ -42,6 +45,7 @@ GITHUB_UPDATES_CACHE_TTL_SECONDS_DEFAULT = 300
 _github_manifest_cache_key = ""
 _github_manifest_cache_until = 0.0
 _github_manifest_cache_value: dict | None = None
+_tekla_publish_lock = threading.Lock()
 
 
 class Heartbeat(BaseModel):
@@ -49,6 +53,13 @@ class Heartbeat(BaseModel):
     public_ip: str | None = None
     hostname: str | None = None
     agent_version: str | None = None
+    tekla_installed_revision: str | None = None
+    tekla_target_revision: str | None = None
+    tekla_pending_after_close: bool | None = None
+    tekla_running: bool | None = None
+    tekla_last_check_utc: str | None = None
+    tekla_last_success_utc: str | None = None
+    tekla_last_error: str | None = None
 
 
 class CreateTokenRequest(BaseModel):
@@ -69,6 +80,26 @@ class BootstrapRequest(BaseModel):
 class NetworkRuleRequest(BaseModel):
     ip: str
     ports: list[int] | None = None
+
+
+class TeklaManifestUpdateRequest(BaseModel):
+    version: str
+    revision: str
+    published_at: str
+    target_path: str
+    minimum_connector_version: str
+    repo_url: str
+    repo_ref: str
+    notes: str | None = None
+
+
+class TeklaManifestPublishRequest(BaseModel):
+    source_path: str
+    comment: str
+
+
+class AdminRoleUpdateRequest(BaseModel):
+    username: str
 
 
 def load_config() -> dict:
@@ -129,11 +160,44 @@ def init_db() -> None:
         )
         conn.execute(
             """
+            CREATE TABLE IF NOT EXISTS tekla_client_state (
+                device_id TEXT PRIMARY KEY,
+                installed_revision TEXT,
+                target_revision TEXT,
+                pending_after_close INTEGER,
+                tekla_running INTEGER,
+                last_check_utc TEXT,
+                last_success_utc TEXT,
+                last_error TEXT,
+                updated_at TEXT NOT NULL
+            )
+            """
+        )
+
+        columns = {
+            row[1]
+            for row in conn.execute("PRAGMA table_info(tekla_client_state)").fetchall()
+        }
+        if "last_error" not in columns:
+            conn.execute("ALTER TABLE tekla_client_state ADD COLUMN last_error TEXT")
+        conn.execute(
+            """
             CREATE TABLE IF NOT EXISTS device_sessions (
                 device_id TEXT PRIMARY KEY,
                 session_id TEXT NOT NULL,
                 hostname TEXT,
                 public_ip TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS admin_user_roles (
+                username TEXT PRIMARY KEY,
+                is_system_admin INTEGER NOT NULL DEFAULT 0,
+                is_firm_admin INTEGER NOT NULL DEFAULT 0,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             )
@@ -158,6 +222,14 @@ def add_audit(event_type: str, device_id: str | None, actor: str | None, details
             """,
             (event_type, device_id, actor, details, utc_now()),
         )
+
+
+FIRM_AUDIT_EVENT_TYPES = {
+    "firm_admin_granted",
+    "firm_admin_revoked",
+    "tekla_manifest_updated",
+    "tekla_client_state",
+}
 
 
 def check_token(device_id: str, token: str | None, cfg: dict) -> None:
@@ -206,6 +278,99 @@ def upsert_heartbeat(payload: Heartbeat) -> None:
                 payload.hostname,
                 payload.agent_version,
                 utc_now(),
+            ),
+        )
+
+
+def upsert_tekla_client_state(payload: Heartbeat) -> None:
+    has_any = any(
+        [
+            payload.tekla_installed_revision is not None,
+            payload.tekla_target_revision is not None,
+            payload.tekla_pending_after_close is not None,
+            payload.tekla_running is not None,
+            payload.tekla_last_check_utc is not None,
+            payload.tekla_last_success_utc is not None,
+            payload.tekla_last_error is not None,
+        ]
+    )
+    if not has_any:
+        return
+
+    installed_revision = (payload.tekla_installed_revision or "").strip()
+    target_revision = (payload.tekla_target_revision or "").strip()
+    pending_after_close = 1 if payload.tekla_pending_after_close else 0
+    tekla_running = 1 if payload.tekla_running else 0
+    last_check_utc = (payload.tekla_last_check_utc or "").strip()
+    last_success_utc = (payload.tekla_last_success_utc or "").strip()
+    last_error = (payload.tekla_last_error or "").strip()
+
+    with sqlite3.connect(DB_PATH) as conn:
+        prev = conn.execute(
+            """
+            SELECT installed_revision, target_revision, pending_after_close, tekla_running,
+                   last_check_utc, last_success_utc, last_error
+            FROM tekla_client_state
+            WHERE device_id = ?
+            """,
+            (payload.device_id,),
+        ).fetchone()
+
+        conn.execute(
+            """
+            INSERT INTO tekla_client_state(
+                device_id,
+                installed_revision,
+                target_revision,
+                pending_after_close,
+                tekla_running,
+                last_check_utc,
+                last_success_utc,
+                last_error,
+                updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(device_id) DO UPDATE SET
+                installed_revision=excluded.installed_revision,
+                target_revision=excluded.target_revision,
+                pending_after_close=excluded.pending_after_close,
+                tekla_running=excluded.tekla_running,
+                last_check_utc=excluded.last_check_utc,
+                last_success_utc=excluded.last_success_utc,
+                last_error=excluded.last_error,
+                updated_at=excluded.updated_at
+            """,
+            (
+                payload.device_id,
+                installed_revision,
+                target_revision,
+                pending_after_close,
+                tekla_running,
+                last_check_utc,
+                last_success_utc,
+                last_error,
+                utc_now(),
+            ),
+        )
+
+    current = (
+        installed_revision,
+        target_revision,
+        pending_after_close,
+        tekla_running,
+        last_check_utc,
+        last_success_utc,
+        last_error,
+    )
+    if prev != current:
+        add_audit(
+            event_type="tekla_client_state",
+            device_id=payload.device_id,
+            actor=payload.device_id,
+            details=(
+                f"installed={installed_revision}; target={target_revision}; "
+                f"pending={pending_after_close}; running={tekla_running}; "
+                f"last_error={last_error}"
             ),
         )
 
@@ -379,6 +544,102 @@ def render_admin_login_page(next_url: str, error: str | None = None) -> str:
 
 def admin_actor_name(x_admin_actor: str | None) -> str:
     return (x_admin_actor or "admin").strip() or "admin"
+
+
+def normalize_admin_username(value: str) -> str:
+    normalized = value.strip().lower()
+    normalized = re.sub(r"[^a-z0-9._@-]+", "", normalized)
+    return normalized
+
+
+def get_admin_roles(username: str, cfg: dict) -> dict:
+    user = normalize_admin_username(username)
+    if not user:
+        return {"is_system_admin": False, "is_firm_admin": False}
+
+    default_admin = normalize_admin_username(str(cfg.get("admin_username", "admin")))
+    system_admin = user == default_admin
+    firm_admin = user == default_admin
+
+    with sqlite3.connect(DB_PATH) as conn:
+        row = conn.execute(
+            """
+            SELECT is_system_admin, is_firm_admin
+            FROM admin_user_roles
+            WHERE username = ?
+            """,
+            (user,),
+        ).fetchone()
+
+    if row:
+        system_admin = bool(row[0])
+        firm_admin = bool(row[1])
+
+    return {"is_system_admin": system_admin, "is_firm_admin": firm_admin}
+
+
+def set_firm_admin_role(username: str, is_firm_admin: bool, cfg: dict) -> dict:
+    user = normalize_admin_username(username)
+    if not user:
+        raise HTTPException(status_code=400, detail="username is required")
+
+    default_admin = normalize_admin_username(str(cfg.get("admin_username", "admin")))
+    default_system = user == default_admin
+
+    with sqlite3.connect(DB_PATH) as conn:
+        row = conn.execute(
+            "SELECT is_system_admin FROM admin_user_roles WHERE username = ?",
+            (user,),
+        ).fetchone()
+
+        current_system = bool(row[0]) if row else default_system
+        now = utc_now()
+        conn.execute(
+            """
+            INSERT INTO admin_user_roles(username, is_system_admin, is_firm_admin, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(username) DO UPDATE SET
+                is_system_admin=excluded.is_system_admin,
+                is_firm_admin=excluded.is_firm_admin,
+                updated_at=excluded.updated_at
+            """,
+            (user, 1 if current_system else 0, 1 if is_firm_admin else 0, now, now),
+        )
+
+    roles = get_admin_roles(user, cfg)
+    return {"username": user, **roles}
+
+
+def require_system_admin_access(
+    request: Request,
+    cfg: dict,
+    x_admin_key: str | None = None,
+    include_www_auth: bool = False,
+) -> str:
+    user = require_admin_access(request, cfg, x_admin_key, include_www_auth)
+    roles = get_admin_roles(user, cfg)
+    if not roles["is_system_admin"]:
+        raise HTTPException(status_code=403, detail="System admin role required")
+    return user
+
+
+def require_firm_admin_access(
+    request: Request,
+    cfg: dict,
+    x_admin_key: str | None = None,
+    include_www_auth: bool = False,
+) -> str:
+    user = require_admin_access(request, cfg, x_admin_key, include_www_auth)
+    roles = get_admin_roles(user, cfg)
+    if not roles["is_firm_admin"]:
+        raise HTTPException(status_code=403, detail="Firm admin role required")
+    return user
+
+
+def ensure_device_firm_admin(device_id: str, cfg: dict) -> None:
+    roles = get_admin_roles(device_id, cfg)
+    if not roles["is_firm_admin"]:
+        raise HTTPException(status_code=403, detail="Firm admin role required for this device")
 
 
 def resolve_token_export_dir(cfg: dict) -> Path:
@@ -776,6 +1037,297 @@ def load_local_update_manifest() -> dict:
     }
 
 
+def load_local_tekla_firm_manifest(cfg: dict | None = None) -> dict:
+    active_cfg = cfg or load_config()
+    if not TEKLA_FIRM_MANIFEST_PATH.exists():
+        raise HTTPException(status_code=404, detail="Tekla firm manifest not found")
+
+    try:
+        manifest = json.loads(TEKLA_FIRM_MANIFEST_PATH.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=500, detail="Invalid Tekla firm manifest JSON") from exc
+
+    version = str(manifest.get("version", "")).strip()
+    revision = str(manifest.get("revision", "")).strip()
+    published_at = str(manifest.get("published_at", "")).strip()
+    target_path = str(manifest.get("target_path", "")).strip() or str(
+        active_cfg.get("tekla_firm_target_path", "")
+    ).strip()
+    minimum_connector_version = str(manifest.get("minimum_connector_version", "")).strip()
+    repo_url = str(manifest.get("repo_url", "")).strip()
+    repo_ref = str(manifest.get("repo_ref", "")).strip()
+
+    if not version:
+        raise HTTPException(status_code=500, detail="Tekla firm manifest must contain version")
+    if not revision:
+        raise HTTPException(status_code=500, detail="Tekla firm manifest must contain revision")
+    if not published_at:
+        raise HTTPException(status_code=500, detail="Tekla firm manifest must contain published_at")
+    if not target_path:
+        raise HTTPException(
+            status_code=500,
+            detail="Tekla firm manifest must contain target_path or tekla_firm_target_path must be configured",
+        )
+    if not minimum_connector_version:
+        raise HTTPException(status_code=500, detail="Tekla firm manifest must contain minimum_connector_version")
+    if not repo_url:
+        raise HTTPException(status_code=500, detail="Tekla firm manifest must contain repo_url")
+    if not repo_ref:
+        raise HTTPException(status_code=500, detail="Tekla firm manifest must contain repo_ref")
+
+    return {
+        "version": version,
+        "revision": revision,
+        "published_at": published_at,
+        "target_path": target_path,
+        "minimum_connector_version": minimum_connector_version,
+        "repo_url": repo_url,
+        "repo_ref": repo_ref,
+        "notes": str(manifest.get("notes", "")).strip(),
+    }
+
+
+def save_local_tekla_firm_manifest(payload: TeklaManifestUpdateRequest) -> dict:
+    manifest = {
+        "version": payload.version.strip(),
+        "revision": payload.revision.strip(),
+        "published_at": payload.published_at.strip(),
+        "target_path": payload.target_path.strip(),
+        "minimum_connector_version": payload.minimum_connector_version.strip(),
+        "repo_url": payload.repo_url.strip(),
+        "repo_ref": payload.repo_ref.strip(),
+        "notes": (payload.notes or "").strip(),
+    }
+
+    if not manifest["version"]:
+        raise HTTPException(status_code=400, detail="version is required")
+    if not manifest["revision"]:
+        raise HTTPException(status_code=400, detail="revision is required")
+    if not manifest["published_at"]:
+        raise HTTPException(status_code=400, detail="published_at is required")
+    if not manifest["target_path"]:
+        raise HTTPException(status_code=400, detail="target_path is required")
+    if not manifest["minimum_connector_version"]:
+        raise HTTPException(status_code=400, detail="minimum_connector_version is required")
+    if not manifest["repo_url"]:
+        raise HTTPException(status_code=400, detail="repo_url is required")
+    if not manifest["repo_ref"]:
+        raise HTTPException(status_code=400, detail="repo_ref is required")
+
+    UPDATES_DIR.mkdir(parents=True, exist_ok=True)
+    TEKLA_FIRM_MANIFEST_PATH.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return manifest
+
+
+def parse_tekla_next_version(current_version: str) -> str:
+    raw = current_version.strip()
+    if not raw:
+        now = datetime.now(timezone.utc)
+        return f"{now.year}.{now.month:02d}.1"
+
+    match = re.match(r"^(.*?)(\d+)$", raw)
+    if not match:
+        return raw + ".1"
+
+    prefix = match.group(1)
+    counter = int(match.group(2)) + 1
+    return f"{prefix}{counter}"
+
+
+def run_git_command(
+    git_executable: str,
+    repo_worktree: Path,
+    args: list[str],
+    timeout_seconds: int = 120,
+) -> str:
+    cmd = [git_executable, *args]
+    run = subprocess.run(
+        cmd,
+        cwd=str(repo_worktree),
+        capture_output=True,
+        text=True,
+        timeout=timeout_seconds,
+    )
+    output = (run.stdout or "").strip()
+    error_output = (run.stderr or "").strip()
+    if run.returncode != 0:
+        details = error_output or output or "git command failed"
+        raise RuntimeError(f"{' '.join(args)}: {details}")
+    return output
+
+
+def replace_directory_contents(source_dir: Path, destination_dir: Path) -> None:
+    destination_dir.mkdir(parents=True, exist_ok=True)
+
+    for child in destination_dir.iterdir():
+        if child.name == ".git":
+            continue
+        if child.is_dir():
+            shutil.rmtree(child)
+        else:
+            child.unlink(missing_ok=True)
+
+    for child in source_dir.iterdir():
+        target = destination_dir / child.name
+        if child.is_dir():
+            shutil.copytree(child, target, dirs_exist_ok=True)
+        else:
+            shutil.copy2(child, target)
+
+
+def resolve_tekla_publish_settings(cfg: dict, current_manifest: dict) -> dict:
+    repo_worktree = Path(str(cfg.get("tekla_firm_repo_worktree", "")).strip())
+    if not str(repo_worktree).strip():
+        raise HTTPException(status_code=500, detail="tekla_firm_repo_worktree is not configured")
+    if not repo_worktree.exists() or not repo_worktree.is_dir():
+        raise HTTPException(status_code=500, detail="tekla_firm_repo_worktree does not exist")
+    if not (repo_worktree / ".git").exists():
+        raise HTTPException(status_code=500, detail="tekla_firm_repo_worktree is not a git repository")
+
+    repo_subdir = str(cfg.get("tekla_firm_repo_subdir", "")).strip()
+    if not repo_subdir:
+        raise HTTPException(status_code=500, detail="tekla_firm_repo_subdir is not configured")
+
+    git_executable = str(cfg.get("tekla_firm_git_executable", "git")).strip() or "git"
+    repo_ref = str(cfg.get("tekla_firm_repo_ref", "")).strip() or str(current_manifest.get("repo_ref", "")).strip() or "main"
+    repo_url = str(cfg.get("tekla_firm_repo_url", "")).strip() or str(current_manifest.get("repo_url", "")).strip()
+    target_path = str(cfg.get("tekla_firm_target_path", "")).strip() or str(current_manifest.get("target_path", "")).strip()
+    minimum_connector_version = str(cfg.get("tekla_firm_minimum_connector_version", "")).strip() or str(
+        current_manifest.get("minimum_connector_version", "")
+    ).strip() or "1.0.0"
+
+    if not repo_url:
+        raise HTTPException(status_code=500, detail="tekla_firm_repo_url is not configured")
+    if not target_path:
+        raise HTTPException(status_code=500, detail="tekla_firm_target_path is not configured")
+
+    return {
+        "repo_worktree": repo_worktree,
+        "repo_subdir": repo_subdir,
+        "git_executable": git_executable,
+        "repo_ref": repo_ref,
+        "repo_url": repo_url,
+        "target_path": target_path,
+        "minimum_connector_version": minimum_connector_version,
+    }
+
+
+def publish_tekla_firm_from_source(source_path: str, comment: str, cfg: dict, actor: str) -> dict:
+    source_dir = Path(source_path.strip())
+    if not source_dir.exists() or not source_dir.is_dir():
+        raise HTTPException(status_code=400, detail="source_path must point to an existing directory")
+    if not comment.strip():
+        raise HTTPException(status_code=400, detail="comment is required")
+
+    current_manifest = load_local_tekla_firm_manifest(cfg)
+    settings = resolve_tekla_publish_settings(cfg, current_manifest)
+
+    repo_worktree: Path = settings["repo_worktree"]
+    repo_subdir = settings["repo_subdir"]
+    git_executable = settings["git_executable"]
+    repo_ref = settings["repo_ref"]
+    destination_dir = repo_worktree / repo_subdir
+
+    remote_ref_exists = True
+    try:
+        run_git_command(git_executable, repo_worktree, ["fetch", "origin", repo_ref])
+    except RuntimeError as exc:
+        error_text = str(exc).lower()
+        if "couldn't find remote ref" in error_text or "couldn't find remote branch" in error_text:
+            remote_ref_exists = False
+        else:
+            raise
+
+    if remote_ref_exists:
+        run_git_command(git_executable, repo_worktree, ["checkout", repo_ref])
+        run_git_command(git_executable, repo_worktree, ["pull", "--rebase", "origin", repo_ref])
+    else:
+        try:
+            run_git_command(git_executable, repo_worktree, ["checkout", repo_ref])
+        except RuntimeError:
+            run_git_command(git_executable, repo_worktree, ["checkout", "--orphan", repo_ref])
+
+    replace_directory_contents(source_dir, destination_dir)
+
+    status = run_git_command(git_executable, repo_worktree, ["status", "--porcelain", "--", repo_subdir])
+    if not status.strip():
+        add_audit(
+            event_type="tekla_firm_publish_skipped",
+            device_id=None,
+            actor=actor,
+            details=f"source_path={source_dir}; reason=no_changes",
+        )
+        return {
+            "ok": True,
+            "no_changes": True,
+            "message": "Изменения не обнаружены. Публикация не выполнялась.",
+            "version": str(current_manifest.get("version", "")),
+            "revision": str(current_manifest.get("revision", "")),
+            "manifest": current_manifest,
+        }
+
+    next_version = parse_tekla_next_version(str(current_manifest.get("version", "")))
+    git_author_name = str(cfg.get("tekla_firm_git_author_name", "")).strip() or actor or "Structura Connector"
+    git_author_email = str(cfg.get("tekla_firm_git_author_email", "")).strip() or "connector@local"
+    run_git_command(git_executable, repo_worktree, ["add", "--", repo_subdir])
+    run_git_command(
+        git_executable,
+        repo_worktree,
+        [
+            "-c",
+            f"user.name={git_author_name}",
+            "-c",
+            f"user.email={git_author_email}",
+            "commit",
+            "-m",
+            f"tekla firm {next_version}: {comment.strip()}",
+        ],
+    )
+    if remote_ref_exists:
+        run_git_command(git_executable, repo_worktree, ["push", "origin", repo_ref])
+    else:
+        run_git_command(git_executable, repo_worktree, ["push", "-u", "origin", repo_ref])
+    revision = run_git_command(git_executable, repo_worktree, ["rev-parse", "--short", "HEAD"])
+
+    update_payload = TeklaManifestUpdateRequest(
+        version=next_version,
+        revision=revision,
+        published_at=utc_now(),
+        target_path=settings["target_path"],
+        minimum_connector_version=settings["minimum_connector_version"],
+        repo_url=settings["repo_url"],
+        repo_ref=repo_ref,
+        notes=comment.strip(),
+    )
+    manifest = save_local_tekla_firm_manifest(update_payload)
+
+    add_audit(
+        event_type="tekla_firm_publish_succeeded",
+        device_id=None,
+        actor=actor,
+        details=(
+            f"version={manifest.get('version', '')}; "
+            f"revision={manifest.get('revision', '')}; "
+            f"source_path={source_dir}; repo_ref={repo_ref}"
+        ),
+    )
+    add_audit(
+        event_type="tekla_manifest_updated",
+        device_id=None,
+        actor=actor,
+        details=f"version={manifest.get('version', '')}; revision={manifest.get('revision', '')}",
+    )
+
+    return {
+        "ok": True,
+        "no_changes": False,
+        "message": "Публикация выполнена успешно.",
+        "version": str(manifest.get("version", "")),
+        "revision": str(manifest.get("revision", "")),
+        "manifest": manifest,
+    }
+
+
 def normalize_release_version(tag_name: str) -> str:
     version = tag_name.strip()
     if version.lower().startswith("v"):
@@ -826,6 +1378,13 @@ def save_cached_github_manifest(key: str, manifest: dict, ttl_seconds: int) -> N
     _github_manifest_cache_key = key
     _github_manifest_cache_value = manifest
     _github_manifest_cache_until = time.time() + max(0, ttl_seconds)
+
+
+def clear_cached_github_manifest() -> None:
+    global _github_manifest_cache_key, _github_manifest_cache_until, _github_manifest_cache_value
+    _github_manifest_cache_key = ""
+    _github_manifest_cache_until = 0.0
+    _github_manifest_cache_value = None
 
 
 def load_github_update_manifest(cfg: dict) -> dict:
@@ -964,6 +1523,26 @@ def delete_device_token(device_id: str) -> bool:
         return True
 
 
+def get_managed_ports(cfg: dict) -> list[int]:
+    raw_ports = cfg.get("managed_ports", [3389, 1238, 445])
+    if not isinstance(raw_ports, list):
+        raise HTTPException(status_code=500, detail="managed_ports must be a list")
+
+    ports: list[int] = []
+    for raw in raw_ports:
+        try:
+            port = int(raw)
+        except (TypeError, ValueError):
+            continue
+        if 1 <= port <= 65535:
+            ports.append(port)
+
+    unique_ports = sorted(set(ports))
+    if not unique_ports:
+        raise HTTPException(status_code=500, detail="managed_ports is empty or invalid")
+    return unique_ports
+
+
 def apply_firewall(device_id: str, ip: str, ports: list[int]) -> None:
     ports_csv = ",".join(str(p) for p in ports)
     cmd = [
@@ -1004,6 +1583,11 @@ def updates_latest_manifest() -> dict:
     return load_update_manifest()
 
 
+@app.get("/updates/tekla/firm/latest.json")
+def updates_tekla_firm_latest_manifest() -> dict:
+    return load_local_tekla_firm_manifest()
+
+
 @app.get("/updates/files/{file_name}")
 def updates_file(file_name: str) -> FileResponse:
     safe_name = Path(file_name).name
@@ -1036,7 +1620,8 @@ def connect_bootstrap(
     )
 
     upsert_heartbeat(heartbeat_payload)
-    apply_firewall(device_id, client_ip, cfg.get("managed_ports", [3389, 1238, 445]))
+    upsert_tekla_client_state(heartbeat_payload)
+    apply_firewall(device_id, client_ip, get_managed_ports(cfg))
 
     try:
         smb_access = get_or_create_device_access(device_id, cfg, force_rotate=False)
@@ -1053,6 +1638,8 @@ def connect_bootstrap(
         ),
     )
 
+    roles = get_admin_roles(device_id, cfg)
+
     return {
         "ok": True,
         "session_id": session_id,
@@ -1061,6 +1648,7 @@ def connect_bootstrap(
         "public_ip": client_ip,
         "heartbeat_seconds": int(cfg.get("default_heartbeat_seconds", 60)),
         "update_manifest_url": str(cfg.get("update_manifest_url", "")).strip(),
+        "is_firm_admin": roles["is_firm_admin"],
         "smb_access": smb_access,
     }
 
@@ -1078,9 +1666,62 @@ def heartbeat(
     resolved_ip = resolve_client_ip(request, payload.public_ip)
     payload.public_ip = resolved_ip
     upsert_heartbeat(payload)
+    upsert_tekla_client_state(payload)
     touch_device_session(payload.device_id, payload.hostname, resolved_ip)
-    apply_firewall(payload.device_id, resolved_ip, cfg.get("managed_ports", [3389, 1238, 445]))
+    apply_firewall(payload.device_id, resolved_ip, get_managed_ports(cfg))
     return {"ok": True}
+
+
+@app.post("/connect/tekla/manifest")
+def connect_publish_tekla_manifest(
+    payload: TeklaManifestPublishRequest,
+    request: Request,
+    x_device_token: str | None = Header(default=None),
+    x_admin_actor: str | None = Header(default=None),
+) -> dict:
+    cfg = load_config()
+    token = (x_device_token or "").strip()
+    if not token:
+        raise HTTPException(status_code=401, detail="Missing token")
+
+    device_id, _, _ = resolve_device_by_token(token, cfg)
+    ensure_device_firm_admin(device_id, cfg)
+    actor = admin_actor_name(x_admin_actor) if x_admin_actor else device_id
+
+    if not _tekla_publish_lock.acquire(blocking=False):
+        raise HTTPException(status_code=409, detail="Tekla publish is already in progress")
+
+    add_audit(
+        event_type="tekla_firm_publish_started",
+        device_id=device_id,
+        actor=actor,
+        details=f"source_path={payload.source_path.strip()}",
+    )
+    try:
+        return publish_tekla_firm_from_source(
+            source_path=payload.source_path,
+            comment=payload.comment,
+            cfg=cfg,
+            actor=actor,
+        )
+    except HTTPException as exc:
+        add_audit(
+            event_type="tekla_firm_publish_failed",
+            device_id=device_id,
+            actor=actor,
+            details=f"source_path={payload.source_path.strip()}; error={exc.detail}",
+        )
+        raise
+    except Exception as exc:
+        add_audit(
+            event_type="tekla_firm_publish_failed",
+            device_id=device_id,
+            actor=actor,
+            details=f"source_path={payload.source_path.strip()}; error={str(exc)}",
+        )
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    finally:
+        _tekla_publish_lock.release()
 
 
 @app.post("/admin/tokens")
@@ -1284,6 +1925,163 @@ def admin_devices(request: Request, x_admin_key: str | None = Header(default=Non
     }
 
 
+@app.get("/admin/firm-admins")
+def admin_list_firm_admins(request: Request, x_admin_key: str | None = Header(default=None)) -> dict:
+    cfg = load_config()
+    require_system_admin_access(request, cfg, x_admin_key)
+
+    default_admin = normalize_admin_username(str(cfg.get("admin_username", "admin")))
+    items = []
+
+    if default_admin:
+        default_roles = get_admin_roles(default_admin, cfg)
+        if default_roles["is_firm_admin"]:
+            items.append(
+                {
+                    "username": default_admin,
+                    "is_system_admin": default_roles["is_system_admin"],
+                    "is_firm_admin": default_roles["is_firm_admin"],
+                    "is_default_admin": True,
+                }
+            )
+
+    with sqlite3.connect(DB_PATH) as conn:
+        rows = conn.execute(
+            """
+            SELECT username, is_system_admin, is_firm_admin, created_at, updated_at
+            FROM admin_user_roles
+            WHERE is_firm_admin = 1
+            ORDER BY username ASC
+            """
+        ).fetchall()
+
+    for row in rows:
+        username = normalize_admin_username(str(row[0]))
+        if not username:
+            continue
+        if username == default_admin:
+            continue
+        items.append(
+            {
+                "username": username,
+                "is_system_admin": bool(row[1]),
+                "is_firm_admin": bool(row[2]),
+                "created_at": row[3],
+                "updated_at": row[4],
+                "is_default_admin": False,
+            }
+        )
+
+    return {"items": items}
+
+
+@app.post("/admin/firm-admins/grant")
+def admin_grant_firm_admin(
+    payload: AdminRoleUpdateRequest,
+    request: Request,
+    x_admin_key: str | None = Header(default=None),
+    x_admin_actor: str | None = Header(default=None),
+) -> dict:
+    cfg = load_config()
+    auth_user = require_system_admin_access(request, cfg, x_admin_key)
+    result = set_firm_admin_role(payload.username, True, cfg)
+    actor = admin_actor_name(x_admin_actor) if x_admin_actor else auth_user
+    add_audit(
+        event_type="firm_admin_granted",
+        device_id=None,
+        actor=actor,
+        details=f"username={result['username']}",
+    )
+    return {"ok": True, "item": result}
+
+
+@app.post("/admin/firm-admins/revoke")
+def admin_revoke_firm_admin(
+    payload: AdminRoleUpdateRequest,
+    request: Request,
+    x_admin_key: str | None = Header(default=None),
+    x_admin_actor: str | None = Header(default=None),
+) -> dict:
+    cfg = load_config()
+    auth_user = require_system_admin_access(request, cfg, x_admin_key)
+    result = set_firm_admin_role(payload.username, False, cfg)
+    actor = admin_actor_name(x_admin_actor) if x_admin_actor else auth_user
+    add_audit(
+        event_type="firm_admin_revoked",
+        device_id=None,
+        actor=actor,
+        details=f"username={result['username']}",
+    )
+    return {"ok": True, "item": result}
+
+
+@app.get("/admin/tekla/clients")
+def admin_tekla_clients(request: Request, x_admin_key: str | None = Header(default=None)) -> dict:
+    cfg = load_config()
+    require_admin_access(request, cfg, x_admin_key)
+    with sqlite3.connect(DB_PATH) as conn:
+        rows = conn.execute(
+            """
+            SELECT t.device_id,
+                   t.installed_revision,
+                   t.target_revision,
+                   t.pending_after_close,
+                   t.tekla_running,
+                   t.last_check_utc,
+                   t.last_success_utc,
+                   t.last_error,
+                   t.updated_at,
+                   d.hostname,
+                   d.public_ip,
+                   tok.issued_to
+            FROM tekla_client_state t
+            LEFT JOIN devices d ON d.device_id = t.device_id
+            LEFT JOIN device_tokens tok ON tok.device_id = t.device_id
+            ORDER BY t.updated_at DESC
+            """
+        ).fetchall()
+
+    return {
+        "items": [
+            {
+                "device_id": r[0],
+                "installed_revision": r[1],
+                "target_revision": r[2],
+                "pending_after_close": bool(r[3]),
+                "tekla_running": bool(r[4]),
+                "last_check_utc": r[5],
+                "last_success_utc": r[6],
+                "last_error": r[7],
+                "updated_at": r[8],
+                "hostname": r[9],
+                "public_ip": r[10],
+                "issued_to": r[11],
+            }
+            for r in rows
+        ]
+    }
+
+
+@app.post("/admin/tekla/manifest")
+def admin_save_tekla_manifest(
+    payload: TeklaManifestUpdateRequest,
+    request: Request,
+    x_admin_key: str | None = Header(default=None),
+    x_admin_actor: str | None = Header(default=None),
+) -> dict:
+    cfg = load_config()
+    auth_user = require_firm_admin_access(request, cfg, x_admin_key)
+    manifest = save_local_tekla_firm_manifest(payload)
+    actor = admin_actor_name(x_admin_actor) if x_admin_actor else auth_user
+    add_audit(
+        event_type="tekla_manifest_updated",
+        device_id=None,
+        actor=actor,
+        details=f"version={manifest.get('version', '')}; revision={manifest.get('revision', '')}",
+    )
+    return {"ok": True, "manifest": manifest}
+
+
 @app.get("/admin/audit")
 def admin_audit(request: Request, x_admin_key: str | None = Header(default=None), limit: int = 100) -> dict:
     cfg = load_config()
@@ -1314,6 +2112,150 @@ def admin_audit(request: Request, x_admin_key: str | None = Header(default=None)
     }
 
 
+@app.get("/admin/audit/firm")
+def admin_firm_audit(
+    request: Request,
+    x_admin_key: str | None = Header(default=None),
+    limit: int = 100,
+    include_state: bool = True,
+) -> dict:
+    cfg = load_config()
+    require_system_admin_access(request, cfg, x_admin_key)
+    safe_limit = max(1, min(limit, 500))
+
+    event_types = [
+        "firm_admin_granted",
+        "firm_admin_revoked",
+        "tekla_firm_publish_started",
+        "tekla_firm_publish_succeeded",
+        "tekla_firm_publish_failed",
+        "tekla_firm_publish_skipped",
+        "tekla_manifest_updated",
+    ]
+    if include_state:
+        event_types.append("tekla_client_state")
+
+    placeholders = ",".join("?" for _ in event_types)
+    with sqlite3.connect(DB_PATH) as conn:
+        rows = conn.execute(
+            f"""
+            SELECT id, event_type, device_id, actor, details, created_at
+            FROM audit_events
+            WHERE event_type IN ({placeholders})
+            ORDER BY id DESC
+            LIMIT ?
+            """,
+            (*event_types, safe_limit),
+        ).fetchall()
+
+    return {
+        "items": [
+            {
+                "id": r[0],
+                "event_type": r[1],
+                "device_id": r[2],
+                "actor": r[3],
+                "details": r[4],
+                "created_at": r[5],
+            }
+            for r in rows
+        ]
+    }
+
+
+@app.post("/admin/updates/refresh")
+def admin_refresh_updates_manifest(
+    request: Request,
+    x_admin_key: str | None = Header(default=None),
+    x_admin_actor: str | None = Header(default=None),
+) -> dict:
+    cfg = load_config()
+    auth_user = require_admin_access(request, cfg, x_admin_key)
+    clear_cached_github_manifest()
+    manifest = load_update_manifest(cfg)
+    actor = admin_actor_name(x_admin_actor) if x_admin_actor else auth_user
+    add_audit(
+        event_type="updates_manifest_refresh",
+        device_id=None,
+        actor=actor,
+        details=f"version={manifest.get('version', '')}",
+    )
+    return {"ok": True, "manifest": manifest}
+
+
+@app.post("/admin/services/restart-tekla")
+def admin_restart_tekla_service(
+    request: Request,
+    x_admin_key: str | None = Header(default=None),
+    x_admin_actor: str | None = Header(default=None),
+) -> dict:
+    cfg = load_config()
+    auth_user = require_admin_access(request, cfg, x_admin_key)
+
+    command = (
+        "$svc = Get-Service | "
+        "Where-Object { $_.DisplayName -match 'Tekla Structures Multiuser Server|Tekla.*Multiuser|Multi-user' -or $_.Name -match 'tekla|multiuser|multi' } | "
+        "Sort-Object Name | Select-Object -First 1; "
+        "if (-not $svc) { throw 'Tekla multiuser service not found' }; "
+        "Restart-Service -Name $svc.Name -Force; "
+        "Start-Sleep -Seconds 2; "
+        "$after = Get-Service -Name $svc.Name; "
+        "[pscustomobject]@{ service_name=$after.Name; display_name=$after.DisplayName; status=[string]$after.Status; start_type=[string]$after.StartType } | ConvertTo-Json -Compress"
+    )
+    output = run_powershell(command)
+    result = json.loads(output) if output else {}
+
+    actor = admin_actor_name(x_admin_actor) if x_admin_actor else auth_user
+    add_audit(
+        event_type="service_restart_tekla",
+        device_id=None,
+        actor=actor,
+        details=f"service={result.get('service_name', '')}; status={result.get('status', '')}",
+    )
+    return {"ok": True, "result": result}
+
+
+@app.post("/admin/services/restart-revit")
+def admin_restart_revit_service(
+    request: Request,
+    x_admin_key: str | None = Header(default=None),
+    x_admin_actor: str | None = Header(default=None),
+) -> dict:
+    cfg = load_config()
+    auth_user = require_admin_access(request, cfg, x_admin_key)
+
+    command = (
+        "$was = Get-Service -Name 'WAS' -ErrorAction SilentlyContinue; "
+        "$w3svc = Get-Service -Name 'W3SVC' -ErrorAction SilentlyContinue; "
+        "if ($was -and $was.Status -ne 'Running') { Start-Service -Name 'WAS' }; "
+        "if ($w3svc -and $w3svc.Status -ne 'Running') { Start-Service -Name 'W3SVC' }; "
+        "$revitSvcs = Get-Service | Where-Object { $_.DisplayName -match 'Revit Server AutoSync' -or $_.Name -match '^Revit.*AutoSync' }; "
+        "foreach ($svc in $revitSvcs) { Restart-Service -Name $svc.Name -Force }; "
+        "Import-Module WebAdministration -ErrorAction SilentlyContinue | Out-Null; "
+        "$pools = Get-ChildItem IIS:/AppPools -ErrorAction SilentlyContinue | Where-Object { $_.Name -match '^RevitServerAppPool' } | Select-Object -ExpandProperty Name; "
+        "foreach ($pool in $pools) { Restart-WebAppPool -Name $pool }; "
+        "Start-Sleep -Seconds 2; "
+        "$svcOut = @(); foreach ($s in $revitSvcs) { $cur = Get-Service -Name $s.Name; $svcOut += [pscustomobject]@{ service_name=$cur.Name; display_name=$cur.DisplayName; status=[string]$cur.Status; start_type=[string]$cur.StartType } }; "
+        "$poolOut = @(); foreach ($p in $pools) { $state = (& 'C:/Windows/System32/inetsrv/appcmd.exe' list apppool $p /text:state); $poolOut += [pscustomobject]@{ app_pool=$p; state=$state } }; "
+        "[pscustomobject]@{ services=$svcOut; app_pools=$poolOut; was_status=([string](Get-Service -Name 'WAS' -ErrorAction SilentlyContinue).Status); w3svc_status=([string](Get-Service -Name 'W3SVC' -ErrorAction SilentlyContinue).Status) } | ConvertTo-Json -Compress -Depth 5"
+    )
+    output = run_powershell(command)
+    result = json.loads(output) if output else {}
+
+    actor = admin_actor_name(x_admin_actor) if x_admin_actor else auth_user
+    add_audit(
+        event_type="service_restart_revit",
+        device_id=None,
+        actor=actor,
+        details=(
+            f"services={len(result.get('services', []))}; "
+            f"app_pools={len(result.get('app_pools', []))}; "
+            f"was={result.get('was_status', '')}; w3svc={result.get('w3svc_status', '')}"
+        ),
+    )
+    return {"ok": True, "result": result}
+
+
 @app.get("/admin/network/rules")
 def admin_network_rules(request: Request, x_admin_key: str | None = Header(default=None)) -> dict:
     cfg = load_config()
@@ -1323,6 +2265,81 @@ def admin_network_rules(request: Request, x_admin_key: str | None = Header(defau
     except RuntimeError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     return {"items": items}
+
+
+@app.get("/admin/network/managed-ports")
+def admin_network_managed_ports(request: Request, x_admin_key: str | None = Header(default=None)) -> dict:
+    cfg = load_config()
+    require_admin_access(request, cfg, x_admin_key)
+    return {"managed_ports": get_managed_ports(cfg)}
+
+
+@app.post("/admin/network/reapply-managed-ports")
+def admin_network_reapply_managed_ports(
+    request: Request,
+    x_admin_key: str | None = Header(default=None),
+    x_admin_actor: str | None = Header(default=None),
+) -> dict:
+    cfg = load_config()
+    auth_user = require_admin_access(request, cfg, x_admin_key)
+    ports = get_managed_ports(cfg)
+
+    with sqlite3.connect(DB_PATH) as conn:
+        rows = conn.execute(
+            """
+            SELECT t.device_id,
+                   t.issued_to,
+                   COALESCE(d.public_ip, s.public_ip) AS effective_ip
+            FROM device_tokens t
+            LEFT JOIN devices d ON d.device_id = t.device_id
+            LEFT JOIN device_sessions s ON s.device_id = t.device_id
+            WHERE t.revoked_at IS NULL
+            ORDER BY t.created_at DESC
+            """
+        ).fetchall()
+
+    applied: list[dict] = []
+    skipped: list[dict] = []
+    failed: list[dict] = []
+
+    for row in rows:
+        device_id = str(row[0])
+        issued_to = row[1]
+        ip = (row[2] or "").strip()
+
+        if not ip:
+            skipped.append({"device_id": device_id, "issued_to": issued_to, "reason": "no_ip"})
+            continue
+
+        try:
+            safe_ip = normalize_ip(ip)
+            apply_firewall(device_id, safe_ip, ports)
+            applied.append({"device_id": device_id, "issued_to": issued_to, "ip": safe_ip})
+        except Exception as exc:
+            failed.append({"device_id": device_id, "issued_to": issued_to, "ip": ip, "error": str(exc)})
+
+    actor = admin_actor_name(x_admin_actor) if x_admin_actor else auth_user
+    add_audit(
+        event_type="network_reapply_managed_ports",
+        device_id=None,
+        actor=actor,
+        details=(
+            f"ports={','.join(str(p) for p in ports)}; "
+            f"applied={len(applied)}; skipped={len(skipped)}; failed={len(failed)}"
+        ),
+    )
+
+    return {
+        "ok": len(failed) == 0,
+        "managed_ports": ports,
+        "total_active_tokens": len(rows),
+        "applied_count": len(applied),
+        "skipped_count": len(skipped),
+        "failed_count": len(failed),
+        "applied": applied,
+        "skipped": skipped,
+        "failed": failed,
+    }
 
 
 @app.post("/admin/network/allow-ip")
@@ -1335,7 +2352,7 @@ def admin_network_allow_ip(
     cfg = load_config()
     auth_user = require_admin_access(request, cfg, x_admin_key)
     ip = normalize_ip(payload.ip)
-    ports = payload.ports or [8080, 445, 3389]
+    ports = payload.ports or get_managed_ports(cfg)
     unique_ports = sorted(set(int(p) for p in ports))
 
     try:
@@ -1363,7 +2380,7 @@ def admin_network_revoke_ip(
     cfg = load_config()
     auth_user = require_admin_access(request, cfg, x_admin_key)
     ip = normalize_ip(payload.ip)
-    ports = payload.ports or [8080, 445, 3389]
+    ports = payload.ports or get_managed_ports(cfg)
     unique_ports = sorted(set(int(p) for p in ports))
 
     try:

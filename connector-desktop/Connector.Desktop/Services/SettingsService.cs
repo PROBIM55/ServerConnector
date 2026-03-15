@@ -54,6 +54,21 @@ public sealed class SettingsService
             settings.SmbSharePath = @"\\62.113.36.107\BIM_Models";
         }
 
+        if (string.IsNullOrWhiteSpace(settings.TeklaStandardManifestUrl))
+        {
+            settings.TeklaStandardManifestUrl = "https://server.structura-most.ru/updates/tekla/firm/latest.json";
+        }
+
+        if (string.IsNullOrWhiteSpace(settings.TeklaStandardLocalPath))
+        {
+            settings.TeklaStandardLocalPath = @"C:\Company\TeklaFirm";
+        }
+
+        if (string.IsNullOrWhiteSpace(settings.TeklaPublishSourcePath))
+        {
+            settings.TeklaPublishSourcePath = @"\\62.113.36.107\BIM_Models\Tekla\XS_FIRM";
+        }
+
         return settings;
     }
 

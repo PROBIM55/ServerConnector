@@ -126,8 +126,41 @@
         </div>
       </section>
 
+      <section class="card">
+        <h2>Сервисы</h2>
+        <div class="sub" style="margin-bottom:10px;">Быстрый перезапуск серверных служб Tekla/Revit.</div>
+        <div class="actions">
+          <button class="warn" onclick="restartTeklaService(this)">Перезапустить Tekla сервер</button>
+          <button class="warn" onclick="restartRevitService(this)">Перезапустить Revit сервер</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Администраторы XS_FIRM</h2>
+        <div class="row">
+          <div>
+            <label>Username / Device ID admin_firm</label>
+            <input id="firmAdminUsername" placeholder="например gpsm-dv" />
+          </div>
+          <div>
+            <label>Действие</label>
+            <div class="actions" style="margin-top: 0;">
+              <button class="primary" onclick="grantFirmAdmin(this)">Назначить</button>
+              <button class="danger" onclick="revokeFirmAdmin(this)">Снять</button>
+            </div>
+          </div>
+        </div>
+        <div style="overflow:auto; max-height: 180px; margin-top:10px;">
+          <table>
+            <thead><tr><th>Username</th><th>System</th><th>Firm</th><th>Обновлено</th></tr></thead>
+            <tbody id="firmAdminsBody"></tbody>
+          </table>
+        </div>
+      </section>
+
       <section class="card full">
         <h2>Сетевой whitelist (интернет-доступ)</h2>
+        <div class="sub" id="managedPortsInfo" style="margin-bottom:10px;">Managed ports из сервера: загрузка...</div>
         <div class="row">
           <div>
             <label>Внешний IP</label>
@@ -135,12 +168,13 @@
           </div>
           <div>
             <label>Порты (через запятую)</label>
-            <input id="allowPorts" value="8080,445,3389" />
+            <input id="allowPorts" value="" />
           </div>
         </div>
         <div class="actions">
           <button class="primary" onclick="allowIpRule()">Добавить/обновить IP</button>
           <button class="danger" onclick="revokeIpRule()">Удалить IP из правил</button>
+          <button class="warn" onclick="reapplyManagedPortsForActiveTokens()">Применить managed ports всем активным токенам</button>
           <button onclick="loadNetworkRules()">Обновить список</button>
         </div>
         <div style="overflow:auto; max-height: 220px; margin-top: 12px;">
@@ -181,11 +215,75 @@
       </section>
 
       <section class="card full">
+        <h2>Стандарт Tekla (клиенты)</h2>
+        <div class="stat" style="margin-bottom:10px;">
+          <div class="pill"><b id="teklaTotal">0</b><span>Всего</span></div>
+          <div class="pill"><b id="teklaUpdated">0</b><span>Обновлены</span></div>
+          <div class="pill"><b id="teklaPending">0</b><span>Pending</span></div>
+          <div class="pill"><b id="teklaErrors">0</b><span>С ошибкой</span></div>
+        </div>
+        <div style="overflow:auto; max-height: 300px;">
+          <table>
+            <thead><tr><th>Пользователь</th><th>Устройство</th><th>Хост</th><th>IP</th><th>Установлено/Цель</th><th>Pending</th><th>Tekla</th><th>Ошибка</th><th>Проверка</th><th>Успех</th><th>Обновлено</th></tr></thead>
+            <tbody id="teklaClientsBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="card full">
+        <h2>Стандарт Tekla (публикация)</h2>
+        <div class="sub" id="teklaManifestInfo">Загрузка manifest...</div>
+        <div class="row" style="margin-top:10px;">
+          <div>
+            <label>Версия</label>
+            <input id="teklaVersion" placeholder="2026.03.1" />
+          </div>
+          <div>
+            <label>Ревизия</label>
+            <input id="teklaRevision" placeholder="r2" />
+          </div>
+        </div>
+        <div class="row" style="margin-top:10px;">
+          <div>
+            <label>Repo URL</label>
+            <input id="teklaRepoUrl" placeholder="https://github.com/org/repo.git" />
+          </div>
+          <div>
+            <label>Repo Ref</label>
+            <input id="teklaRepoRef" placeholder="main" />
+          </div>
+        </div>
+        <div class="row" style="margin-top:10px;">
+          <div>
+            <label>Целевой путь</label>
+            <input id="teklaTargetPath" placeholder="C:\\Company\\TeklaFirm" />
+          </div>
+          <div>
+            <label>Min Connector Version</label>
+            <input id="teklaMinConnector" placeholder="1.0.0" />
+          </div>
+        </div>
+        <div class="actions">
+          <button class="primary" onclick="publishTeklaManifest(this)">Опубликовать версию Tekla</button>
+        </div>
+      </section>
+
+      <section class="card full">
         <h2>Аудит (последние 100)</h2>
         <div style="overflow:auto; max-height: 240px;">
           <table>
             <thead><tr><th>ID</th><th>Событие</th><th>Устройство</th><th>Кто</th><th>Детали</th><th>Время</th></tr></thead>
             <tbody id="auditBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="card full">
+        <h2>Аудит admin_firm</h2>
+        <div style="overflow:auto; max-height: 220px;">
+          <table>
+            <thead><tr><th>ID</th><th>Событие</th><th>Устройство</th><th>Кто</th><th>Детали</th><th>Время</th></tr></thead>
+            <tbody id="firmAuditBody"></tbody>
           </table>
         </div>
       </section>
@@ -201,8 +299,11 @@
     const out = document.getElementById('out');
     const actorEl = document.getElementById('adminActor');
     const liveInfoEl = document.getElementById('liveInfo');
+    const managedPortsInfoEl = document.getElementById('managedPortsInfo');
+    const allowPortsEl = document.getElementById('allowPorts');
     const AUTO_REFRESH_MS = 15000;
     let autoRefreshId = null;
+    let managedPorts = [];
 
     actorEl.value = localStorage.getItem('connector_admin_actor') || '';
 
@@ -225,6 +326,24 @@
       out.textContent = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
     }
 
+    async function runWithButtonState(button, busyText, action) {
+      const initial = button.textContent;
+      button.disabled = true;
+      button.textContent = busyText;
+      try {
+        await action();
+        button.textContent = 'Готово';
+      } catch (e) {
+        button.textContent = 'Ошибка';
+        throw e;
+      } finally {
+        setTimeout(() => {
+          button.textContent = initial;
+          button.disabled = false;
+        }, 900);
+      }
+    }
+
     async function req(url, options = {}) {
       const r = await fetch(url, { credentials: 'same-origin', ...options });
       let data;
@@ -240,6 +359,34 @@
     async function logoutAdmin() {
       await fetch('/admin/logout', { method: 'POST', credentials: 'same-origin' });
       window.location.href = '/admin/login';
+    }
+
+    async function restartTeklaService(button) {
+      try {
+        await runWithButtonState(button, 'Перезапуск...', async () => {
+          const data = await req('/admin/services/restart-tekla', {
+            method: 'POST', headers: headers(false)
+          });
+          setOutput(data);
+          await refreshAll();
+        });
+      } catch (e) {
+        setOutput(`Ошибка перезапуска Tekla: ${e.message}`);
+      }
+    }
+
+    async function restartRevitService(button) {
+      try {
+        await runWithButtonState(button, 'Перезапуск...', async () => {
+          const data = await req('/admin/services/restart-revit', {
+            method: 'POST', headers: headers(false)
+          });
+          setOutput(data);
+          await refreshAll();
+        });
+      } catch (e) {
+        setOutput(`Ошибка перезапуска Revit: ${e.message}`);
+      }
     }
 
     async function issueToken() {
@@ -297,6 +444,26 @@
         .split(',')
         .map(x => Number(String(x).trim()))
         .filter(x => Number.isInteger(x) && x > 0 && x <= 65535);
+    }
+
+    async function loadManagedPorts() {
+      const data = await req('/admin/network/managed-ports', { headers: headers(false) });
+      managedPorts = (data.managed_ports || []).map(x => Number(x)).filter(Number.isInteger);
+      const csv = managedPorts.join(',');
+      managedPortsInfoEl.textContent = `Managed ports из сервера: ${csv || '-'}`;
+      if (!allowPortsEl.value.trim()) {
+        allowPortsEl.value = csv;
+      }
+      return managedPorts;
+    }
+
+    async function reapplyManagedPortsForActiveTokens() {
+      if (!confirm('Применить текущие managed ports ко всем активным (не отозванным) токенам?')) return;
+      const data = await req('/admin/network/reapply-managed-ports', {
+        method: 'POST', headers: headers(false)
+      });
+      setOutput(data);
+      await refreshAll();
     }
 
     async function allowIpRule() {
@@ -369,6 +536,107 @@
       return data.items || [];
     }
 
+    async function loadTeklaClients() {
+      const data = await req('/admin/tekla/clients', { headers: headers(false) });
+      const tbody = document.getElementById('teklaClientsBody');
+      tbody.innerHTML = '';
+      const items = data.items || [];
+      for (const t of items) {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${t.issued_to || '-'}</td><td class="mono">${t.device_id || '-'}</td><td>${t.hostname || '-'}</td><td class="mono">${t.public_ip || '-'}</td><td class="mono">${t.installed_revision || '-'} / ${t.target_revision || '-'}</td><td>${t.pending_after_close ? 'да' : 'нет'}</td><td>${t.tekla_running ? 'запущена' : 'не запущена'}</td><td>${t.last_error || '-'}</td><td>${fmt(t.last_check_utc)}</td><td>${fmt(t.last_success_utc)}</td><td>${fmt(t.updated_at)}</td>`;
+        tbody.appendChild(tr);
+      }
+      const updated = items.filter(x => x.installed_revision && x.target_revision && x.installed_revision === x.target_revision).length;
+      const pending = items.filter(x => !!x.pending_after_close).length;
+      const errors = items.filter(x => !!(x.last_error || '').trim()).length;
+      document.getElementById('teklaTotal').textContent = items.length;
+      document.getElementById('teklaUpdated').textContent = updated;
+      document.getElementById('teklaPending').textContent = pending;
+      document.getElementById('teklaErrors').textContent = errors;
+      return items;
+    }
+
+    async function loadTeklaManifestInfo() {
+      const data = await req('/updates/tekla/firm/latest.json', { headers: headers(false) });
+      const infoEl = document.getElementById('teklaManifestInfo');
+      infoEl.textContent = `Версия: ${data.version || '-'} | Ревизия: ${data.revision || '-'} | Min Connector: ${data.minimum_connector_version || '-'} | Путь: ${data.target_path || '-'} | Опубликовано: ${fmt(data.published_at)}`;
+      document.getElementById('teklaVersion').value = data.version || '';
+      document.getElementById('teklaRevision').value = data.revision || '';
+      document.getElementById('teklaRepoUrl').value = data.repo_url || '';
+      document.getElementById('teklaRepoRef').value = data.repo_ref || '';
+      document.getElementById('teklaTargetPath').value = data.target_path || '';
+      document.getElementById('teklaMinConnector').value = data.minimum_connector_version || '';
+      return data;
+    }
+
+    async function loadFirmAdmins() {
+      const data = await req('/admin/firm-admins', { headers: headers(false) });
+      const tbody = document.getElementById('firmAdminsBody');
+      tbody.innerHTML = '';
+      for (const item of data.items || []) {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${item.username || '-'}</td><td>${item.is_system_admin ? 'да' : 'нет'}</td><td>${item.is_firm_admin ? 'да' : 'нет'}</td><td>${fmt(item.updated_at)}</td>`;
+        tbody.appendChild(tr);
+      }
+      return data.items || [];
+    }
+
+    async function grantFirmAdmin(button) {
+      const username = (document.getElementById('firmAdminUsername').value || '').trim();
+      if (!username) { setOutput('Укажите username'); return; }
+      try {
+        await runWithButtonState(button, 'Назначение...', async () => {
+          const data = await req('/admin/firm-admins/grant', {
+            method: 'POST', headers: headers(true), body: JSON.stringify({ username })
+          });
+          setOutput(data);
+          await refreshAll();
+        });
+      } catch (e) {
+        setOutput(`Ошибка назначения admin_firm: ${e.message}`);
+      }
+    }
+
+    async function revokeFirmAdmin(button) {
+      const username = (document.getElementById('firmAdminUsername').value || '').trim();
+      if (!username) { setOutput('Укажите username'); return; }
+      try {
+        await runWithButtonState(button, 'Снятие...', async () => {
+          const data = await req('/admin/firm-admins/revoke', {
+            method: 'POST', headers: headers(true), body: JSON.stringify({ username })
+          });
+          setOutput(data);
+          await refreshAll();
+        });
+      } catch (e) {
+        setOutput(`Ошибка снятия admin_firm: ${e.message}`);
+      }
+    }
+
+    async function publishTeklaManifest(button) {
+      try {
+        await runWithButtonState(button, 'Публикация...', async () => {
+          const payload = {
+            version: document.getElementById('teklaVersion').value.trim(),
+            revision: document.getElementById('teklaRevision').value.trim(),
+            published_at: new Date().toISOString(),
+            target_path: document.getElementById('teklaTargetPath').value.trim(),
+            minimum_connector_version: document.getElementById('teklaMinConnector').value.trim(),
+            repo_url: document.getElementById('teklaRepoUrl').value.trim(),
+            repo_ref: document.getElementById('teklaRepoRef').value.trim(),
+            notes: 'Updated via admin UI'
+          };
+          const data = await req('/admin/tekla/manifest', {
+            method: 'POST', headers: headers(true), body: JSON.stringify(payload)
+          });
+          setOutput(data);
+          await refreshAll();
+        });
+      } catch (e) {
+        setOutput(`Ошибка публикации Tekla manifest: ${e.message}`);
+      }
+    }
+
     async function loadAudit() {
       const data = await req('/admin/audit?limit=100', { headers: headers(false) });
       const tbody = document.getElementById('auditBody');
@@ -381,16 +649,32 @@
       return data.items || [];
     }
 
+    async function loadFirmAudit() {
+      const data = await req('/admin/audit/firm?limit=120&include_state=true', { headers: headers(false) });
+      const tbody = document.getElementById('firmAuditBody');
+      tbody.innerHTML = '';
+      for (const item of data.items || []) {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${item.id}</td><td>${item.event_type}</td><td class="mono">${item.device_id || '-'}</td><td>${item.actor || '-'}</td><td>${item.details || '-'}</td><td>${fmt(item.created_at)}</td>`;
+        tbody.appendChild(tr);
+      }
+      return data.items || [];
+    }
+
     async function refreshAll() {
       try {
-        const [tokens, devices] = await Promise.all([loadTokens(), loadDevices()]);
+        await loadManagedPorts();
+        const [tokens, devices, teklaClients] = await Promise.all([loadTokens(), loadDevices(), loadTeklaClients()]);
+        await loadFirmAdmins();
+        await loadTeklaManifestInfo();
         await loadNetworkRules();
         await loadAudit();
+        await loadFirmAudit();
         document.getElementById('sTokens').textContent = tokens.length;
         document.getElementById('sDevices').textContent = devices.length;
         document.getElementById('sActive').textContent = tokens.filter(t => !t.revoked_at).length;
         document.getElementById('sRevoked').textContent = tokens.filter(t => !!t.revoked_at).length;
-        liveInfoEl.textContent = `Автообновление: каждые 15 сек | Обновлено: ${new Date().toLocaleTimeString('ru-RU')}`;
+        liveInfoEl.textContent = `Автообновление: каждые 15 сек | Tekla клиентов: ${teklaClients.length} | Обновлено: ${new Date().toLocaleTimeString('ru-RU')}`;
       } catch (e) {
         setOutput(`Ошибка обновления: ${e.message}`);
         liveInfoEl.textContent = 'Автообновление: ошибка авторизации или сети';
