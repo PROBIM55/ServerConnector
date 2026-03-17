@@ -13,7 +13,7 @@ import subprocess
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
-from urllib.parse import parse_qs, quote
+from urllib.parse import parse_qs, quote, unquote
 from urllib.error import HTTPError, URLError
 from urllib.request import Request as UrlRequest, urlopen
 
@@ -180,6 +180,13 @@ def init_db() -> None:
         }
         if "last_error" not in columns:
             conn.execute("ALTER TABLE tekla_client_state ADD COLUMN last_error TEXT")
+
+        token_columns = {
+            row[1]
+            for row in conn.execute("PRAGMA table_info(device_tokens)").fetchall()
+        }
+        if "token_value" not in token_columns:
+            conn.execute("ALTER TABLE device_tokens ADD COLUMN token_value TEXT")
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS device_sessions (
@@ -543,12 +550,16 @@ def render_admin_login_page(next_url: str, error: str | None = None) -> str:
 
 
 def admin_actor_name(x_admin_actor: str | None) -> str:
-    return (x_admin_actor or "admin").strip() or "admin"
+    raw = (x_admin_actor or "admin").strip() or "admin"
+    try:
+        return unquote(raw).strip() or "admin"
+    except Exception:
+        return raw
 
 
 def normalize_admin_username(value: str) -> str:
     normalized = value.strip().lower()
-    normalized = re.sub(r"[^a-z0-9._@-]+", "", normalized)
+    normalized = re.sub(r"\s+", " ", normalized)
     return normalized
 
 
@@ -640,6 +651,47 @@ def ensure_device_firm_admin(device_id: str, cfg: dict) -> None:
     roles = get_admin_roles(device_id, cfg)
     if not roles["is_firm_admin"]:
         raise HTTPException(status_code=403, detail="Firm admin role required for this device")
+
+
+def ensure_device_system_admin(device_id: str, cfg: dict) -> None:
+    roles = get_admin_roles(device_id, cfg)
+    if not roles["is_system_admin"]:
+        raise HTTPException(status_code=403, detail="System admin role required for this device")
+
+
+def restart_tekla_service_internal() -> dict:
+    command = (
+        "$svc = Get-Service | "
+        "Where-Object { $_.DisplayName -match 'Tekla Structures Multiuser Server|Tekla.*Multiuser|Multi-user' -or $_.Name -match 'tekla|multiuser|multi' } | "
+        "Sort-Object Name | Select-Object -First 1; "
+        "if (-not $svc) { throw 'Tekla multiuser service not found' }; "
+        "Restart-Service -Name $svc.Name -Force; "
+        "Start-Sleep -Seconds 2; "
+        "$after = Get-Service -Name $svc.Name; "
+        "[pscustomobject]@{ service_name=$after.Name; display_name=$after.DisplayName; status=[string]$after.Status; start_type=[string]$after.StartType } | ConvertTo-Json -Compress"
+    )
+    output = run_powershell(command)
+    return json.loads(output) if output else {}
+
+
+def restart_revit_service_internal() -> dict:
+    command = (
+        "$was = Get-Service -Name 'WAS' -ErrorAction SilentlyContinue; "
+        "$w3svc = Get-Service -Name 'W3SVC' -ErrorAction SilentlyContinue; "
+        "if ($was -and $was.Status -ne 'Running') { Start-Service -Name 'WAS' }; "
+        "if ($w3svc -and $w3svc.Status -ne 'Running') { Start-Service -Name 'W3SVC' }; "
+        "$revitSvcs = Get-Service | Where-Object { $_.DisplayName -match 'Revit Server AutoSync' -or $_.Name -match '^Revit.*AutoSync' }; "
+        "foreach ($svc in $revitSvcs) { Restart-Service -Name $svc.Name -Force }; "
+        "Import-Module WebAdministration -ErrorAction SilentlyContinue | Out-Null; "
+        "$pools = Get-ChildItem IIS:/AppPools -ErrorAction SilentlyContinue | Where-Object { $_.Name -match '^RevitServerAppPool' } | Select-Object -ExpandProperty Name; "
+        "foreach ($pool in $pools) { Restart-WebAppPool -Name $pool }; "
+        "Start-Sleep -Seconds 2; "
+        "$svcOut = @(); foreach ($s in $revitSvcs) { $cur = Get-Service -Name $s.Name; $svcOut += [pscustomobject]@{ service_name=$cur.Name; display_name=$cur.DisplayName; status=[string]$cur.Status; start_type=[string]$cur.StartType } }; "
+        "$poolOut = @(); foreach ($p in $pools) { $state = (& 'C:/Windows/System32/inetsrv/appcmd.exe' list apppool $p /text:state); $poolOut += [pscustomobject]@{ app_pool=$p; state=$state } }; "
+        "[pscustomobject]@{ services=$svcOut; app_pools=$poolOut; was_status=([string](Get-Service -Name 'WAS' -ErrorAction SilentlyContinue).Status); w3svc_status=([string](Get-Service -Name 'W3SVC' -ErrorAction SilentlyContinue).Status) } | ConvertTo-Json -Compress -Depth 5"
+    )
+    output = run_powershell(command)
+    return json.loads(output) if output else {}
 
 
 def resolve_token_export_dir(cfg: dict) -> Path:
@@ -911,10 +963,18 @@ def resolve_client_ip(request: Request, payload_ip: str | None = None) -> str:
 
 
 def run_powershell(command: str) -> str:
+    wrapped_command = (
+        "[Console]::InputEncoding = [System.Text.Encoding]::UTF8; "
+        "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; "
+        "$OutputEncoding = [System.Text.Encoding]::UTF8; "
+        + command
+    )
     run = subprocess.run(
-        ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command],
+        ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", wrapped_command],
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
     )
     if run.returncode != 0:
         raise RuntimeError((run.stderr or run.stdout).strip() or "PowerShell command failed")
@@ -1141,13 +1201,18 @@ def run_git_command(
     timeout_seconds: int = 120,
 ) -> str:
     cmd = [git_executable, *args]
-    run = subprocess.run(
-        cmd,
-        cwd=str(repo_worktree),
-        capture_output=True,
-        text=True,
-        timeout=timeout_seconds,
-    )
+    try:
+        run = subprocess.run(
+            cmd,
+            cwd=str(repo_worktree),
+            capture_output=True,
+            text=True,
+            timeout=timeout_seconds,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError(
+            f"{' '.join(args)}: command timed out after {timeout_seconds} seconds"
+        ) from exc
     output = (run.stdout or "").strip()
     error_output = (run.stderr or "").strip()
     if run.returncode != 0:
@@ -1212,6 +1277,27 @@ def resolve_tekla_publish_settings(cfg: dict, current_manifest: dict) -> dict:
     }
 
 
+def collect_oversized_files(root_dir: Path, max_file_bytes: int, max_results: int = 5) -> list[tuple[str, int]]:
+    found: list[tuple[str, int]] = []
+    for path in root_dir.rglob("*"):
+        if not path.is_file():
+            continue
+        try:
+            size_bytes = path.stat().st_size
+        except OSError:
+            continue
+        if size_bytes > max_file_bytes:
+            relative = str(path.relative_to(root_dir)).replace("\\", "/")
+            found.append((relative, size_bytes))
+            if len(found) >= max_results:
+                break
+    return found
+
+
+def format_size_mb(size_bytes: int) -> str:
+    return f"{size_bytes / (1024 * 1024):.2f} MB"
+
+
 def publish_tekla_firm_from_source(source_path: str, comment: str, cfg: dict, actor: str) -> dict:
     source_dir = Path(source_path.strip())
     if not source_dir.exists() or not source_dir.is_dir():
@@ -1227,10 +1313,30 @@ def publish_tekla_firm_from_source(source_path: str, comment: str, cfg: dict, ac
     git_executable = settings["git_executable"]
     repo_ref = settings["repo_ref"]
     destination_dir = repo_worktree / repo_subdir
+    max_file_bytes = parse_int(cfg.get("tekla_firm_max_file_bytes", 95 * 1024 * 1024), 95 * 1024 * 1024)
+    fetch_timeout_seconds = parse_int(cfg.get("tekla_firm_git_fetch_timeout_seconds", 120), 120)
+    push_timeout_seconds = parse_int(cfg.get("tekla_firm_git_push_timeout_seconds", 420), 420)
+
+    oversized = collect_oversized_files(source_dir, max_file_bytes=max_file_bytes)
+    if oversized:
+        details = "; ".join(f"{relative} ({format_size_mb(size)})" for relative, size in oversized)
+        add_audit(
+            event_type="tekla_firm_publish_blocked_large_files",
+            device_id=None,
+            actor=actor,
+            details=f"source_path={source_dir}; max={max_file_bytes}; files={details}",
+        )
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Source contains oversized files for GitHub publishing. "
+                f"Limit: {format_size_mb(max_file_bytes)}. Files: {details}"
+            ),
+        )
 
     remote_ref_exists = True
     try:
-        run_git_command(git_executable, repo_worktree, ["fetch", "origin", repo_ref])
+        run_git_command(git_executable, repo_worktree, ["fetch", "origin", repo_ref], timeout_seconds=fetch_timeout_seconds)
     except RuntimeError as exc:
         error_text = str(exc).lower()
         if "couldn't find remote ref" in error_text or "couldn't find remote branch" in error_text:
@@ -1240,7 +1346,12 @@ def publish_tekla_firm_from_source(source_path: str, comment: str, cfg: dict, ac
 
     if remote_ref_exists:
         run_git_command(git_executable, repo_worktree, ["checkout", repo_ref])
-        run_git_command(git_executable, repo_worktree, ["pull", "--rebase", "origin", repo_ref])
+        run_git_command(
+            git_executable,
+            repo_worktree,
+            ["pull", "--rebase", "origin", repo_ref],
+            timeout_seconds=fetch_timeout_seconds,
+        )
     else:
         try:
             run_git_command(git_executable, repo_worktree, ["checkout", repo_ref])
@@ -1269,6 +1380,7 @@ def publish_tekla_firm_from_source(source_path: str, comment: str, cfg: dict, ac
     next_version = parse_tekla_next_version(str(current_manifest.get("version", "")))
     git_author_name = str(cfg.get("tekla_firm_git_author_name", "")).strip() or actor or "Structura Connector"
     git_author_email = str(cfg.get("tekla_firm_git_author_email", "")).strip() or "connector@local"
+    head_before_commit = run_git_command(git_executable, repo_worktree, ["rev-parse", "HEAD"]).strip()
     run_git_command(git_executable, repo_worktree, ["add", "--", repo_subdir])
     run_git_command(
         git_executable,
@@ -1283,10 +1395,61 @@ def publish_tekla_firm_from_source(source_path: str, comment: str, cfg: dict, ac
             f"tekla firm {next_version}: {comment.strip()}",
         ],
     )
-    if remote_ref_exists:
-        run_git_command(git_executable, repo_worktree, ["push", "origin", repo_ref])
-    else:
-        run_git_command(git_executable, repo_worktree, ["push", "-u", "origin", repo_ref])
+    rollback_done = False
+    try:
+        if remote_ref_exists:
+            run_git_command(git_executable, repo_worktree, ["push", "origin", repo_ref], timeout_seconds=push_timeout_seconds)
+        else:
+            run_git_command(
+                git_executable,
+                repo_worktree,
+                ["push", "-u", "origin", repo_ref],
+                timeout_seconds=push_timeout_seconds,
+            )
+    except Exception as exc:
+        try:
+            run_git_command(git_executable, repo_worktree, ["reset", "--hard", head_before_commit], timeout_seconds=45)
+            rollback_done = True
+        except Exception as rollback_exc:
+            add_audit(
+                event_type="tekla_firm_publish_rollback_failed",
+                device_id=None,
+                actor=actor,
+                details=f"source_path={source_dir}; rollback_error={str(rollback_exc)}",
+            )
+        if rollback_done:
+            add_audit(
+                event_type="tekla_firm_publish_rolled_back",
+                device_id=None,
+                actor=actor,
+                details=f"source_path={source_dir}; reason=push_failed",
+            )
+        error_text = str(exc)
+        if "gh001" in error_text.lower() or "large files detected" in error_text.lower() or "exceeds github's file size limit" in error_text.lower():
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "GitHub отклонил публикацию из-за слишком больших файлов в runtime-папке. "
+                    "Уберите крупные файлы из 01_XS_FIRM или вынесите их в дистрибутивы/базу знаний. "
+                    f"Детали: {error_text}"
+                ),
+            ) from exc
+        if "timed out after" in error_text.lower():
+            raise HTTPException(
+                status_code=504,
+                detail=(
+                    "Публикация заняла слишком много времени на шаге git push. "
+                    "Сервер откатил локальный commit, можно повторить попытку. "
+                    f"Детали: {error_text}"
+                ),
+            ) from exc
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                "Ошибка git push при публикации XS_FIRM. Локальный commit откатан, можно повторить попытку. "
+                f"Детали: {error_text}"
+            ),
+        ) from exc
     revision = run_git_command(git_executable, repo_worktree, ["rev-parse", "--short", "HEAD"])
 
     update_payload = TeklaManifestUpdateRequest(
@@ -1484,16 +1647,17 @@ def create_device_token(device_id: str, issued_to: str | None) -> str:
     with sqlite3.connect(DB_PATH) as conn:
         conn.execute(
             """
-            INSERT INTO device_tokens(device_id, token_hash, issued_to, created_at, last_used_at, revoked_at)
-            VALUES (?, ?, ?, ?, NULL, NULL)
+            INSERT INTO device_tokens(device_id, token_hash, token_value, issued_to, created_at, last_used_at, revoked_at)
+            VALUES (?, ?, ?, ?, ?, NULL, NULL)
             ON CONFLICT(device_id) DO UPDATE SET
                 token_hash=excluded.token_hash,
+                token_value=excluded.token_value,
                 issued_to=excluded.issued_to,
                 created_at=excluded.created_at,
                 last_used_at=NULL,
                 revoked_at=NULL
             """,
-            (device_id, token_hash, issued_to, utc_now()),
+            (device_id, token_hash, raw_token, issued_to, utc_now()),
         )
         conn.execute("DELETE FROM device_sessions WHERE device_id = ?", (device_id,))
     return raw_token
@@ -1648,6 +1812,7 @@ def connect_bootstrap(
         "public_ip": client_ip,
         "heartbeat_seconds": int(cfg.get("default_heartbeat_seconds", 60)),
         "update_manifest_url": str(cfg.get("update_manifest_url", "")).strip(),
+        "is_system_admin": roles["is_system_admin"],
         "is_firm_admin": roles["is_firm_admin"],
         "smb_access": smb_access,
     }
@@ -1722,6 +1887,58 @@ def connect_publish_tekla_manifest(
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     finally:
         _tekla_publish_lock.release()
+
+
+@app.post("/connect/services/restart-tekla")
+def connect_restart_tekla_service(
+    x_device_token: str | None = Header(default=None),
+    x_admin_actor: str | None = Header(default=None),
+) -> dict:
+    cfg = load_config()
+    token = (x_device_token or "").strip()
+    if not token:
+        raise HTTPException(status_code=401, detail="Missing token")
+
+    device_id, _, _ = resolve_device_by_token(token, cfg)
+    roles = get_admin_roles(device_id, cfg)
+    if not (roles["is_system_admin"] or roles["is_firm_admin"]):
+        raise HTTPException(status_code=403, detail="System or firm admin role required for this device")
+    actor = admin_actor_name(x_admin_actor) if x_admin_actor else device_id
+    result = restart_tekla_service_internal()
+    add_audit(
+        event_type="service_restart_tekla",
+        device_id=device_id,
+        actor=actor,
+        details=f"service={result.get('service_name', '')}; status={result.get('status', '')}",
+    )
+    return {"ok": True, "result": result}
+
+
+@app.post("/connect/services/restart-revit")
+def connect_restart_revit_service(
+    x_device_token: str | None = Header(default=None),
+    x_admin_actor: str | None = Header(default=None),
+) -> dict:
+    cfg = load_config()
+    token = (x_device_token or "").strip()
+    if not token:
+        raise HTTPException(status_code=401, detail="Missing token")
+
+    device_id, _, _ = resolve_device_by_token(token, cfg)
+    ensure_device_system_admin(device_id, cfg)
+    actor = admin_actor_name(x_admin_actor) if x_admin_actor else device_id
+    result = restart_revit_service_internal()
+    add_audit(
+        event_type="service_restart_revit",
+        device_id=device_id,
+        actor=actor,
+        details=(
+            f"services={len(result.get('services', []))}; "
+            f"app_pools={len(result.get('app_pools', []))}; "
+            f"was={result.get('was_status', '')}; w3svc={result.get('w3svc_status', '')}"
+        ),
+    )
+    return {"ok": True, "result": result}
 
 
 @app.post("/admin/tokens")
@@ -1874,23 +2091,63 @@ def admin_list_tokens(request: Request, x_admin_key: str | None = Header(default
     with sqlite3.connect(DB_PATH) as conn:
         rows = conn.execute(
             """
-            SELECT device_id, issued_to, created_at, last_used_at, revoked_at
-            FROM device_tokens
-            ORDER BY created_at DESC
+            SELECT t.device_id,
+                   t.token_value,
+                   t.issued_to,
+                   t.created_at,
+                   t.last_used_at,
+                   t.revoked_at,
+                   a.smb_login,
+                   a.smb_username,
+                   a.smb_password,
+                   a.smb_share_unc,
+                   a.updated_at,
+                   d.public_ip,
+                   d.hostname,
+                   d.agent_version,
+                   d.updated_at,
+                   r.is_system_admin,
+                   r.is_firm_admin,
+                   s.installed_revision,
+                   s.target_revision,
+                   s.last_error,
+                   s.updated_at
+            FROM device_tokens t
+            LEFT JOIN device_access a ON a.device_id = t.device_id
+            LEFT JOIN devices d ON d.device_id = t.device_id
+            LEFT JOIN admin_user_roles r ON r.username = t.device_id
+            LEFT JOIN tekla_client_state s ON s.device_id = t.device_id
+            ORDER BY t.created_at DESC
             """
         ).fetchall()
-    return {
-        "items": [
+    items = []
+    for r in rows:
+        items.append(
             {
                 "device_id": r[0],
-                "issued_to": r[1],
-                "created_at": r[2],
-                "last_used_at": r[3],
-                "revoked_at": r[4],
+                "token": r[1],
+                "issued_to": r[2],
+                "created_at": r[3],
+                "last_used_at": r[4],
+                "revoked_at": r[5],
+                "smb_login": r[6],
+                "smb_username": r[7],
+                "smb_password": r[8],
+                "smb_share_unc": r[9],
+                "smb_updated_at": r[10],
+                "public_ip": r[11],
+                "hostname": r[12],
+                "agent_version": r[13],
+                "device_updated_at": r[14],
+                "is_system_admin": bool(r[15]),
+                "is_firm_admin": bool(r[16]),
+                "tekla_installed_revision": r[17],
+                "tekla_target_revision": r[18],
+                "tekla_last_error": r[19],
+                "tekla_updated_at": r[20],
             }
-            for r in rows
-        ]
-    }
+        )
+    return {"items": items}
 
 
 @app.get("/admin/devices")
@@ -2130,6 +2387,9 @@ def admin_firm_audit(
         "tekla_firm_publish_succeeded",
         "tekla_firm_publish_failed",
         "tekla_firm_publish_skipped",
+        "tekla_firm_publish_blocked_large_files",
+        "tekla_firm_publish_rolled_back",
+        "tekla_firm_publish_rollback_failed",
         "tekla_manifest_updated",
     ]
     if include_state:
@@ -2192,18 +2452,7 @@ def admin_restart_tekla_service(
     cfg = load_config()
     auth_user = require_admin_access(request, cfg, x_admin_key)
 
-    command = (
-        "$svc = Get-Service | "
-        "Where-Object { $_.DisplayName -match 'Tekla Structures Multiuser Server|Tekla.*Multiuser|Multi-user' -or $_.Name -match 'tekla|multiuser|multi' } | "
-        "Sort-Object Name | Select-Object -First 1; "
-        "if (-not $svc) { throw 'Tekla multiuser service not found' }; "
-        "Restart-Service -Name $svc.Name -Force; "
-        "Start-Sleep -Seconds 2; "
-        "$after = Get-Service -Name $svc.Name; "
-        "[pscustomobject]@{ service_name=$after.Name; display_name=$after.DisplayName; status=[string]$after.Status; start_type=[string]$after.StartType } | ConvertTo-Json -Compress"
-    )
-    output = run_powershell(command)
-    result = json.loads(output) if output else {}
+    result = restart_tekla_service_internal()
 
     actor = admin_actor_name(x_admin_actor) if x_admin_actor else auth_user
     add_audit(
@@ -2224,23 +2473,7 @@ def admin_restart_revit_service(
     cfg = load_config()
     auth_user = require_admin_access(request, cfg, x_admin_key)
 
-    command = (
-        "$was = Get-Service -Name 'WAS' -ErrorAction SilentlyContinue; "
-        "$w3svc = Get-Service -Name 'W3SVC' -ErrorAction SilentlyContinue; "
-        "if ($was -and $was.Status -ne 'Running') { Start-Service -Name 'WAS' }; "
-        "if ($w3svc -and $w3svc.Status -ne 'Running') { Start-Service -Name 'W3SVC' }; "
-        "$revitSvcs = Get-Service | Where-Object { $_.DisplayName -match 'Revit Server AutoSync' -or $_.Name -match '^Revit.*AutoSync' }; "
-        "foreach ($svc in $revitSvcs) { Restart-Service -Name $svc.Name -Force }; "
-        "Import-Module WebAdministration -ErrorAction SilentlyContinue | Out-Null; "
-        "$pools = Get-ChildItem IIS:/AppPools -ErrorAction SilentlyContinue | Where-Object { $_.Name -match '^RevitServerAppPool' } | Select-Object -ExpandProperty Name; "
-        "foreach ($pool in $pools) { Restart-WebAppPool -Name $pool }; "
-        "Start-Sleep -Seconds 2; "
-        "$svcOut = @(); foreach ($s in $revitSvcs) { $cur = Get-Service -Name $s.Name; $svcOut += [pscustomobject]@{ service_name=$cur.Name; display_name=$cur.DisplayName; status=[string]$cur.Status; start_type=[string]$cur.StartType } }; "
-        "$poolOut = @(); foreach ($p in $pools) { $state = (& 'C:/Windows/System32/inetsrv/appcmd.exe' list apppool $p /text:state); $poolOut += [pscustomobject]@{ app_pool=$p; state=$state } }; "
-        "[pscustomobject]@{ services=$svcOut; app_pools=$poolOut; was_status=([string](Get-Service -Name 'WAS' -ErrorAction SilentlyContinue).Status); w3svc_status=([string](Get-Service -Name 'W3SVC' -ErrorAction SilentlyContinue).Status) } | ConvertTo-Json -Compress -Depth 5"
-    )
-    output = run_powershell(command)
-    result = json.loads(output) if output else {}
+    result = restart_revit_service_internal()
 
     actor = admin_actor_name(x_admin_actor) if x_admin_actor else auth_user
     add_audit(

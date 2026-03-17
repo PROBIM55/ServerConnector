@@ -22,5 +22,6 @@ public sealed class AppSettings
     public string TeklaStandardRepoUrl { get; set; } = "";
     public string TeklaStandardRepoRef { get; set; } = "";
     public string TeklaPublishSourcePath { get; set; } = @"\\62.113.36.107\BIM_Models\Tekla\XS_FIRM";
+    public bool IsSystemAdmin { get; set; }
     public bool IsFirmAdmin { get; set; }
 }

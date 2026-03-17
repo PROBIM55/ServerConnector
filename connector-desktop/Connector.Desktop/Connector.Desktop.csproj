@@ -17,6 +17,7 @@
 
   <ItemGroup>
     <Content Include="Assets\structura_connector.ico" />
+    <Resource Include="Assets\structura_logo.png" />
   </ItemGroup>
 
   <ItemGroup>

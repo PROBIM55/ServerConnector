@@ -63,28 +63,6 @@ public sealed class TeklaStandardService
         return false;
     }
 
-    public bool IsTeklaRunning()
-    {
-        try
-        {
-            return Process.GetProcesses().Any(p =>
-            {
-                try
-                {
-                    return p.ProcessName.Contains("Tekla", StringComparison.OrdinalIgnoreCase);
-                }
-                catch
-                {
-                    return false;
-                }
-            });
-        }
-        catch
-        {
-            return false;
-        }
-    }
-
     public async Task<TeklaStandardManifest?> TryGetManifestAsync(string manifestUrl, CancellationToken ct)
     {
         if (!Uri.TryCreate(manifestUrl, UriKind.Absolute, out _))
@@ -147,11 +125,6 @@ public sealed class TeklaStandardService
 
     public TeklaApplyResult ApplyPendingGitUpdate(AppSettings settings)
     {
-        if (IsTeklaRunning())
-        {
-            return TeklaApplyResult.Fail("Tekla запущена. Применение отложено до закрытия Tekla.");
-        }
-
         if (string.IsNullOrWhiteSpace(settings.TeklaStandardTargetRevision))
         {
             return TeklaApplyResult.Fail("Нет целевой ревизии для применения.");
@@ -240,17 +213,6 @@ public sealed class TeklaStandardService
         }
 
         TryRunGit(gitExe, "clean -fd", localPath, out _, out _);
-
-        var structureCheck = ValidateFirmFolderStructure(localPath);
-        if (!structureCheck.IsSuccess)
-        {
-            if (!isFreshClone && hadHead && !string.IsNullOrWhiteSpace(previousHead))
-            {
-                TryRunGit(gitExe, $"checkout -f {previousHead}", localPath, out _, out _);
-                TryRunGit(gitExe, "clean -fd", localPath, out _, out _);
-            }
-            return structureCheck;
-        }
 
         settings.TeklaStandardInstalledRevision = targetRevision;
         settings.TeklaStandardLastSuccessUtc = DateTimeOffset.UtcNow;
@@ -349,25 +311,6 @@ public sealed class TeklaStandardService
         return true;
     }
 
-    private static TeklaApplyResult ValidateFirmFolderStructure(string localPath)
-    {
-        var expectedAny = new[]
-        {
-            Path.Combine(localPath, "attributes"),
-            Path.Combine(localPath, "template"),
-            Path.Combine(localPath, "profil"),
-            Path.Combine(localPath, "symbols"),
-            Path.Combine(localPath, "ProjectOrganizerData")
-        };
-
-        if (expectedAny.Any(Directory.Exists))
-        {
-            return TeklaApplyResult.Success("OK");
-        }
-
-        return TeklaApplyResult.Fail(
-            "Структура папки фирмы выглядит некорректной: не найдены ожидаемые каталоги (attributes/template/profil/symbols/ProjectOrganizerData).");
-    }
 }
 
 public sealed class TeklaStandardManifest

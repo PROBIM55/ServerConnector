@@ -72,7 +72,7 @@ public sealed class HeartbeatClient
         var body = await res.Content.ReadAsStringAsync(reqCts.Token);
         if (!res.IsSuccessStatusCode)
         {
-            throw new InvalidOperationException($"HTTP {(int)res.StatusCode}: {body}");
+            throw new InvalidOperationException($"HTTP {(int)res.StatusCode}: {ExtractErrorDetail(body)}");
         }
 
         if (!body.Contains("\"ok\":true", StringComparison.OrdinalIgnoreCase))
@@ -119,7 +119,7 @@ public sealed class HeartbeatClient
         var body = await res.Content.ReadAsStringAsync(reqCts.Token);
         if (!res.IsSuccessStatusCode)
         {
-            throw new InvalidOperationException($"HTTP {(int)res.StatusCode}: {body}");
+            throw new InvalidOperationException($"HTTP {(int)res.StatusCode}: {ExtractErrorDetail(body)}");
         }
     }
 
@@ -167,25 +167,100 @@ public sealed class HeartbeatClient
         var url = serverUrl.TrimEnd('/') + "/connect/tekla/manifest";
         var json = JsonSerializer.Serialize(payload);
         using var reqCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        reqCts.CancelAfter(TimeSpan.FromSeconds(40));
+        reqCts.CancelAfter(TimeSpan.FromMinutes(8));
         using var req = new HttpRequestMessage(HttpMethod.Post, url);
         req.Headers.Add("X-Device-Token", token);
         req.Content = new StringContent(json, Encoding.UTF8, "application/json");
+
+        try
+        {
+            using var res = await _http.SendAsync(req, reqCts.Token);
+            var body = await res.Content.ReadAsStringAsync(reqCts.Token);
+            if (!res.IsSuccessStatusCode)
+            {
+                throw new InvalidOperationException($"HTTP {(int)res.StatusCode}: {ExtractErrorDetail(body)}");
+            }
+
+            var result = JsonSerializer.Deserialize<TeklaManifestPublishResponse>(body, new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true
+            });
+            if (result is null)
+            {
+                throw new InvalidOperationException("Некорректный ответ публикации Tekla manifest.");
+            }
+
+            return result;
+        }
+        catch (TaskCanceledException ex) when (!ct.IsCancellationRequested)
+        {
+            throw new InvalidOperationException(
+                "Сервер слишком долго выполняет публикацию XS_FIRM. Попробуйте повторить позже и не запускайте публикацию повторно, пока предыдущая попытка не завершится.",
+                ex);
+        }
+    }
+
+    private static string ExtractErrorDetail(string body)
+    {
+        if (string.IsNullOrWhiteSpace(body))
+        {
+            return "Пустой ответ сервера.";
+        }
+
+        try
+        {
+            using var doc = JsonDocument.Parse(body);
+            if (doc.RootElement.ValueKind == JsonValueKind.Object &&
+                doc.RootElement.TryGetProperty("detail", out var detailElement))
+            {
+                if (detailElement.ValueKind == JsonValueKind.String)
+                {
+                    return detailElement.GetString() ?? body;
+                }
+
+                return detailElement.GetRawText();
+            }
+        }
+        catch
+        {
+        }
+
+        return body;
+    }
+
+    public async Task<ServiceRestartResponse> RestartManagedServiceAsync(
+        string serverUrl,
+        string token,
+        string serviceKey,
+        CancellationToken ct)
+    {
+        var normalized = serviceKey.Trim().ToLowerInvariant();
+        var path = normalized switch
+        {
+            "tekla" => "/connect/services/restart-tekla",
+            "revit" => "/connect/services/restart-revit",
+            _ => throw new InvalidOperationException("Неизвестный ключ сервиса для перезапуска.")
+        };
+
+        using var reqCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        reqCts.CancelAfter(TimeSpan.FromMinutes(2));
+        using var req = new HttpRequestMessage(HttpMethod.Post, serverUrl.TrimEnd('/') + path);
+        req.Headers.Add("X-Device-Token", token);
 
         using var res = await _http.SendAsync(req, reqCts.Token);
         var body = await res.Content.ReadAsStringAsync(reqCts.Token);
         if (!res.IsSuccessStatusCode)
         {
-            throw new InvalidOperationException($"HTTP {(int)res.StatusCode}: {body}");
+            throw new InvalidOperationException($"HTTP {(int)res.StatusCode}: {ExtractErrorDetail(body)}");
         }
 
-        var result = JsonSerializer.Deserialize<TeklaManifestPublishResponse>(body, new JsonSerializerOptions
+        var result = JsonSerializer.Deserialize<ServiceRestartResponse>(body, new JsonSerializerOptions
         {
             PropertyNameCaseInsensitive = true
         });
-        if (result is null)
+        if (result is null || !result.Ok)
         {
-            throw new InvalidOperationException("Некорректный ответ публикации Tekla manifest.");
+            throw new InvalidOperationException("Некорректный ответ сервера при перезапуске службы.");
         }
 
         return result;
@@ -225,6 +300,9 @@ public sealed class BootstrapResponse
 
     [JsonPropertyName("update_manifest_url")]
     public string UpdateManifestUrl { get; set; } = "";
+
+    [JsonPropertyName("is_system_admin")]
+    public bool IsSystemAdmin { get; set; }
 
     [JsonPropertyName("is_firm_admin")]
     public bool IsFirmAdmin { get; set; }
@@ -276,4 +354,13 @@ public sealed class TeklaManifestPublishResponse
 
     [JsonPropertyName("message")]
     public string Message { get; set; } = "";
+}
+
+public sealed class ServiceRestartResponse
+{
+    [JsonPropertyName("ok")]
+    public bool Ok { get; set; }
+
+    [JsonPropertyName("result")]
+    public JsonElement Result { get; set; }
 }

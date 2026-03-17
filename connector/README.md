@@ -126,6 +126,8 @@ Admin credentials source:
   - `tekla_firm_repo_subdir` (subfolder inside repo to mirror from source path)
   - `tekla_firm_repo_url` / `tekla_firm_repo_ref` (values written to published manifest)
   - `tekla_firm_minimum_connector_version` (default for published manifest)
+  - `tekla_firm_max_file_bytes` (default `99614720`, blocks oversized files before git push)
+  - `tekla_firm_git_fetch_timeout_seconds` / `tekla_firm_git_push_timeout_seconds` (timeouts for fetch/pull and push)
   - `tekla_firm_git_executable` (default `git`)
 
 GitHub release mode (recommended):

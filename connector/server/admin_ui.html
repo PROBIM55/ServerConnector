@@ -7,83 +7,134 @@
   <style>
     :root {
       --bg: #0b1016;
-      --panel: #151d27;
-      --panel-soft: #101822;
-      --stroke: #28364a;
+      --panel: #131b25;
+      --panel-soft: #0f1620;
+      --stroke: #243246;
       --text: #e8eef7;
-      --muted: #9eb0c7;
-      --accent: #5eead4;
-      --danger: #f87171;
+      --muted: #97abc4;
+      --accent: #76e4d0;
+      --accent-strong: #bde9ff;
       --warn: #fbbf24;
+      --danger: #f87171;
+      --ok: #4ade80;
     }
     * { box-sizing: border-box; }
     body {
       margin: 0;
       font-family: "Segoe UI", Tahoma, sans-serif;
       color: var(--text);
-      background: radial-gradient(1200px 600px at 80% -100px, #1e2e43, transparent), var(--bg);
+      background: radial-gradient(1200px 700px at 100% -100px, #1d2c42, transparent), var(--bg);
     }
-    .wrap { max-width: 1200px; margin: 0 auto; padding: 24px; }
-    .hero { display: flex; justify-content: space-between; align-items: end; gap: 16px; margin-bottom: 18px; }
+    .wrap { max-width: 1600px; margin: 0 auto; padding: 24px; }
+    .hero { display: flex; justify-content: space-between; align-items: end; gap: 18px; margin-bottom: 18px; }
     h1 { margin: 0; font-size: 28px; }
+    h2 { margin: 0 0 12px 0; font-size: 17px; }
     .sub { color: var(--muted); font-size: 14px; }
-    .grid { display: grid; grid-template-columns: 1.1fr 1fr; gap: 16px; }
     .card {
       background: linear-gradient(180deg, var(--panel), var(--panel-soft));
       border: 1px solid var(--stroke);
-      border-radius: 14px;
+      border-radius: 16px;
       padding: 16px;
-      box-shadow: 0 8px 24px rgba(0,0,0,.25);
+      box-shadow: 0 10px 28px rgba(0,0,0,.22);
+      margin-bottom: 16px;
     }
-    .card h2 { margin: 0 0 12px 0; font-size: 16px; }
-    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+    .row-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
     label { display:block; margin-bottom: 6px; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .05em; }
-    input, select {
+    input, textarea {
       width: 100%;
       border: 1px solid var(--stroke);
-      background: #0d141d;
+      background: #0c121b;
       color: var(--text);
       border-radius: 10px;
       padding: 10px 12px;
       outline: none;
     }
-    input:focus { border-color: var(--accent); }
+    input:focus, textarea:focus { border-color: var(--accent); }
     .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
     button {
       border: 1px solid var(--stroke);
-      background: #172130;
+      background: #162131;
       color: var(--text);
       border-radius: 10px;
       padding: 9px 12px;
       cursor: pointer;
+      transition: transform .12s ease, opacity .12s ease, box-shadow .16s ease, border-color .16s ease;
     }
-    button.primary { background: #113c39; border-color: #2a7c74; }
-    button.warn { background: #3f2d07; border-color: #7c5c11; }
-    button.danger { background: #3d1f22; border-color: #7b2f36; }
-    .full { grid-column: 1 / -1; }
-    .stat { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 12px; }
-    .pill { padding: 10px; border-radius: 10px; border: 1px solid var(--stroke); background: #0d141d; }
+    button:hover { box-shadow: 0 0 0 1px rgba(255,255,255,.04) inset; }
+    button:active { transform: translateY(1px) scale(.985); }
+    button[disabled] { opacity: .72; cursor: default; }
+    button.primary { background: #103835; border-color: #286d66; }
+    button.warn { background: #3b2c0d; border-color: #7f6114; }
+    button.danger { background: #3b1f22; border-color: #7a3138; }
+    button.ghost { background: #101720; border-color: #2a3a50; }
+    button.busy {
+      box-shadow: 0 0 0 1px rgba(118, 228, 208, .22), 0 0 18px rgba(118, 228, 208, .14);
+      border-color: #4d7e78;
+    }
+    button.done {
+      box-shadow: 0 0 0 1px rgba(74, 222, 128, .18), 0 0 18px rgba(74, 222, 128, .10);
+      border-color: #2f6b44;
+    }
+    button.failed {
+      box-shadow: 0 0 0 1px rgba(248, 113, 113, .18), 0 0 18px rgba(248, 113, 113, .10);
+      border-color: #7a3138;
+    }
+    .stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-bottom: 12px; }
+    .pill { padding: 10px; border-radius: 12px; border: 1px solid var(--stroke); background: #0d141d; }
     .pill b { display: block; font-size: 18px; }
     .pill span { color: var(--muted); font-size: 12px; }
-    table { width: 100%; border-collapse: collapse; font-size: 13px; }
-    th, td { text-align: left; padding: 8px; border-bottom: 1px solid #233044; }
-    th { color: var(--muted); font-weight: 600; }
+    .statusbar {
+      display: flex; justify-content: space-between; gap: 12px; align-items: center;
+      border: 1px solid var(--stroke); border-radius: 12px; background: #0d141d; padding: 10px 12px; margin-bottom: 14px;
+    }
+    .action-status {
+      margin-bottom: 14px;
+      padding: 11px 12px;
+      border-radius: 12px;
+      border: 1px solid var(--stroke);
+      background: #0d141d;
+      color: var(--muted);
+      min-height: 44px;
+      display: flex;
+      align-items: center;
+      transition: border-color .16s ease, box-shadow .16s ease, color .16s ease;
+    }
+    .action-status.busy { border-color: #4d7e78; color: var(--accent); box-shadow: 0 0 18px rgba(118, 228, 208, .08); }
+    .action-status.done { border-color: #2f6b44; color: var(--ok); box-shadow: 0 0 18px rgba(74, 222, 128, .07); }
+    .action-status.failed { border-color: #7a3138; color: var(--danger); box-shadow: 0 0 18px rgba(248, 113, 113, .07); }
+    .ok { color: var(--ok); }
+    .warn-text { color: var(--warn); }
+    .danger-text { color: var(--danger); }
     .mono { font-family: Consolas, monospace; }
+    .table-wrap { overflow: auto; max-height: 620px; border-radius: 12px; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 1480px; }
+    th, td { text-align: left; padding: 9px 8px; border-bottom: 1px solid #203044; vertical-align: top; }
+    th { color: var(--muted); font-weight: 600; position: sticky; top: 0; background: #101823; z-index: 1; }
+    tr.selected { background: rgba(118, 228, 208, 0.08); }
+    tr:hover { background: rgba(255,255,255,0.025); }
+    .token-cell { max-width: 240px; word-break: break-all; }
+    .secret-box { display: grid; gap: 4px; }
+    .muted-small { color: var(--muted); font-size: 12px; }
     .inline-actions { display: flex; gap: 6px; flex-wrap: wrap; }
     .inline-actions button { padding: 6px 8px; font-size: 12px; }
-    .out {
-      min-height: 110px;
-      background: #0d141d;
-      border: 1px solid var(--stroke);
-      border-radius: 10px;
-      padding: 10px;
-      white-space: pre-wrap;
-      overflow: auto;
+    .badge {
+      display: inline-block; padding: 4px 8px; border-radius: 999px; font-size: 12px;
+      border: 1px solid var(--stroke); background: #0d141d;
     }
-    @media (max-width: 980px) {
-      .grid { grid-template-columns: 1fr; }
-      .stat { grid-template-columns: 1fr 1fr; }
-      .row { grid-template-columns: 1fr; }
+    .badge.ok { color: var(--ok); border-color: #245b39; }
+    .badge.warn { color: var(--warn); border-color: #6a5310; }
+    .badge.danger { color: var(--danger); border-color: #6e2830; }
+    .out {
+      min-height: 90px; background: #0d141d; border: 1px solid var(--stroke);
+      border-radius: 10px; padding: 10px; white-space: pre-wrap; overflow: auto;
+    }
+    @media (max-width: 1200px) {
+      .row, .row-2, .stats { grid-template-columns: 1fr 1fr; }
+    }
+    @media (max-width: 800px) {
+      .hero { flex-direction: column; align-items: stretch; }
+      .row, .row-2, .stats { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -92,221 +143,187 @@
     <div class="hero">
       <div>
         <h1>Панель администратора коннектора</h1>
-        <div class="sub">Выдача, ротация и отзыв токенов. Контроль устройств и аудит.</div>
-        <div id="liveInfo" class="sub" style="margin-top:6px;">Автообновление: каждые 15 сек</div>
+        <div class="sub">Центральный список токенов, SMB-доступов, ролей и действий по устройствам.</div>
       </div>
       <div class="actions" style="margin:0;">
-        <button onclick="refreshAll()" class="primary">Обновить все</button>
-        <button onclick="logoutAdmin()" class="danger">Выйти</button>
+        <button class="primary" onclick="refreshAll()">Обновить все</button>
+        <button class="danger" onclick="logoutAdmin()">Выйти</button>
       </div>
     </div>
 
-    <div class="grid">
-      <section class="card">
-        <h2>Операции с токеном</h2>
-        <div class="sub" style="margin-bottom:10px;">Вы авторизованы. Все действия пишутся в аудит.</div>
-        <div class="row">
-          <div>
-            <label>ID устройства</label>
-            <input id="deviceId" placeholder="user-laptop-1" />
-          </div>
-          <div>
-            <label>Кому выдан (необязательно)</label>
-            <input id="issuedTo" placeholder="Компания | ФИО" />
-          </div>
+    <section class="card">
+      <div class="statusbar">
+        <div id="liveInfo" class="sub">Автообновление: каждые 15 сек</div>
+        <div id="selectionInfo" class="muted-small">Токен не выбран</div>
+      </div>
+      <div id="actionStatus" class="action-status">Готово к действиям</div>
+
+      <div class="stats">
+        <div class="pill"><b id="sTokens">0</b><span>Всего токенов</span></div>
+        <div class="pill"><b id="sActive">0</b><span>Активные</span></div>
+        <div class="pill"><b id="sRevoked">0</b><span>Отозванные</span></div>
+        <div class="pill"><b id="sFirmAdmins">0</b><span>Admin_firm</span></div>
+      </div>
+
+      <h2>Выдача нового токена</h2>
+      <div class="row">
+        <div>
+          <label>ID устройства</label>
+          <input id="deviceId" placeholder="user-laptop-1" />
         </div>
-        <div style="margin-top:10px;">
-          <label>Имя администратора (для аудита)</label>
+        <div>
+          <label>Кому выдан</label>
+          <input id="issuedTo" placeholder="Компания | ФИО" />
+        </div>
+        <div>
+          <label>Имя администратора</label>
           <input id="adminActor" placeholder="Александр" />
         </div>
-        <div class="actions">
-          <button class="primary" onclick="issueToken()">Выдать токен</button>
-          <button class="warn" onclick="rotateToken()">Ротировать токен</button>
-          <button class="danger" onclick="revokeToken()">Отозвать токен</button>
-        </div>
-      </section>
-
-      <section class="card">
-        <h2>Сервисы</h2>
-        <div class="sub" style="margin-bottom:10px;">Быстрый перезапуск серверных служб Tekla/Revit.</div>
-        <div class="actions">
-          <button class="warn" onclick="restartTeklaService(this)">Перезапустить Tekla сервер</button>
-          <button class="warn" onclick="restartRevitService(this)">Перезапустить Revit сервер</button>
-        </div>
-      </section>
-
-      <section class="card">
-        <h2>Администраторы XS_FIRM</h2>
-        <div class="row">
-          <div>
-            <label>Username / Device ID admin_firm</label>
-            <input id="firmAdminUsername" placeholder="например gpsm-dv" />
+        <div>
+          <label>Действие</label>
+          <div class="actions" style="margin-top:0;">
+            <button class="primary" id="issueTokenButton" onclick="issueToken(this)">Выдать токен</button>
           </div>
-          <div>
-            <label>Действие</label>
-            <div class="actions" style="margin-top: 0;">
-              <button class="primary" onclick="grantFirmAdmin(this)">Назначить</button>
-              <button class="danger" onclick="revokeFirmAdmin(this)">Снять</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Токены и устройства</h2>
+      <div class="sub" style="margin-bottom:10px;">Одна строка = одно устройство. Здесь же токен, SMB, роли и основные действия.</div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Устройство / пользователь</th>
+              <th>Токен</th>
+              <th>SMB</th>
+              <th>Состояние</th>
+              <th>Tekla admin</th>
+              <th>Tekla runtime</th>
+              <th>Действия</th>
+            </tr>
+          </thead>
+          <tbody id="tokensBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="row-2">
+        <div>
+          <h2>Сетевой whitelist</h2>
+          <div class="sub" id="managedPortsInfo" style="margin-bottom:10px;">Managed ports: загрузка...</div>
+          <div class="row-2">
+            <div>
+              <label>Внешний IP</label>
+              <input id="allowIp" placeholder="193.27.41.84" />
+            </div>
+            <div>
+              <label>Порты</label>
+              <input id="allowPorts" />
             </div>
           </div>
-        </div>
-        <div style="overflow:auto; max-height: 180px; margin-top:10px;">
-          <table>
-            <thead><tr><th>Username</th><th>System</th><th>Firm</th><th>Обновлено</th></tr></thead>
-            <tbody id="firmAdminsBody"></tbody>
-          </table>
-        </div>
-      </section>
-
-      <section class="card full">
-        <h2>Сетевой whitelist (интернет-доступ)</h2>
-        <div class="sub" id="managedPortsInfo" style="margin-bottom:10px;">Managed ports из сервера: загрузка...</div>
-        <div class="row">
-          <div>
-            <label>Внешний IP</label>
-            <input id="allowIp" placeholder="193.27.41.84" />
-          </div>
-          <div>
-            <label>Порты (через запятую)</label>
-            <input id="allowPorts" value="" />
+          <div class="actions">
+            <button class="primary" onclick="allowIpRule(this)">Добавить / обновить IP</button>
+            <button class="danger" onclick="revokeIpRule(this)">Удалить IP</button>
+            <button class="ghost" onclick="reapplyManagedPortsForActiveTokens(this)">Применить managed ports всем активным</button>
           </div>
         </div>
-        <div class="actions">
-          <button class="primary" onclick="allowIpRule()">Добавить/обновить IP</button>
-          <button class="danger" onclick="revokeIpRule()">Удалить IP из правил</button>
-          <button class="warn" onclick="reapplyManagedPortsForActiveTokens()">Применить managed ports всем активным токенам</button>
-          <button onclick="loadNetworkRules()">Обновить список</button>
-        </div>
-        <div style="overflow:auto; max-height: 220px; margin-top: 12px;">
-          <table>
-            <thead><tr><th>Правило</th><th>Порт</th><th>IP</th><th>Включено</th></tr></thead>
-            <tbody id="networkBody"></tbody>
-          </table>
-        </div>
-      </section>
 
-      <section class="card full">
-        <div class="stat">
-          <div class="pill"><b id="sDevices">0</b><span>Устройства</span></div>
-          <div class="pill"><b id="sTokens">0</b><span>Токены</span></div>
-          <div class="pill"><b id="sActive">0</b><span>Активные токены</span></div>
-          <div class="pill"><b id="sRevoked">0</b><span>Отозванные токены</span></div>
-        </div>
-      </section>
-
-      <section class="card">
-        <h2>Токены</h2>
-        <div style="overflow:auto; max-height: 300px;">
-          <table>
-            <thead><tr><th>Устройство</th><th>Кому выдан</th><th>Создан</th><th>Последнее использование</th><th>Отозван</th><th>Действия</th></tr></thead>
-            <tbody id="tokensBody"></tbody>
-          </table>
-        </div>
-      </section>
-
-      <section class="card">
-        <h2>Устройства</h2>
-        <div style="overflow:auto; max-height: 300px;">
-          <table>
-            <thead><tr><th>Устройство</th><th>IP</th><th>Хост</th><th>Обновлено</th></tr></thead>
-            <tbody id="devicesBody"></tbody>
-          </table>
-        </div>
-      </section>
-
-      <section class="card full">
-        <h2>Стандарт Tekla (клиенты)</h2>
-        <div class="stat" style="margin-bottom:10px;">
-          <div class="pill"><b id="teklaTotal">0</b><span>Всего</span></div>
-          <div class="pill"><b id="teklaUpdated">0</b><span>Обновлены</span></div>
-          <div class="pill"><b id="teklaPending">0</b><span>Pending</span></div>
-          <div class="pill"><b id="teklaErrors">0</b><span>С ошибкой</span></div>
-        </div>
-        <div style="overflow:auto; max-height: 300px;">
-          <table>
-            <thead><tr><th>Пользователь</th><th>Устройство</th><th>Хост</th><th>IP</th><th>Установлено/Цель</th><th>Pending</th><th>Tekla</th><th>Ошибка</th><th>Проверка</th><th>Успех</th><th>Обновлено</th></tr></thead>
-            <tbody id="teklaClientsBody"></tbody>
-          </table>
-        </div>
-      </section>
-
-      <section class="card full">
-        <h2>Стандарт Tekla (публикация)</h2>
-        <div class="sub" id="teklaManifestInfo">Загрузка manifest...</div>
-        <div class="row" style="margin-top:10px;">
-          <div>
-            <label>Версия</label>
-            <input id="teklaVersion" placeholder="2026.03.1" />
-          </div>
-          <div>
-            <label>Ревизия</label>
-            <input id="teklaRevision" placeholder="r2" />
+        <div>
+          <h2>Серверные действия</h2>
+          <div class="sub" style="margin-bottom:10px;">Быстрый перезапуск серверных служб Tekla/Revit.</div>
+          <div class="actions">
+            <button class="warn" onclick="restartTeklaService(this)">Перезапустить Tekla сервер</button>
+            <button class="warn" onclick="restartRevitService(this)">Перезапустить Revit сервер</button>
           </div>
         </div>
-        <div class="row" style="margin-top:10px;">
-          <div>
-            <label>Repo URL</label>
-            <input id="teklaRepoUrl" placeholder="https://github.com/org/repo.git" />
-          </div>
-          <div>
-            <label>Repo Ref</label>
-            <input id="teklaRepoRef" placeholder="main" />
-          </div>
-        </div>
-        <div class="row" style="margin-top:10px;">
-          <div>
-            <label>Целевой путь</label>
-            <input id="teklaTargetPath" placeholder="C:\\Company\\TeklaFirm" />
-          </div>
-          <div>
-            <label>Min Connector Version</label>
-            <input id="teklaMinConnector" placeholder="1.0.0" />
-          </div>
-        </div>
-        <div class="actions">
-          <button class="primary" onclick="publishTeklaManifest(this)">Опубликовать версию Tekla</button>
-        </div>
-      </section>
+      </div>
+    </section>
 
-      <section class="card full">
-        <h2>Аудит (последние 100)</h2>
-        <div style="overflow:auto; max-height: 240px;">
-          <table>
-            <thead><tr><th>ID</th><th>Событие</th><th>Устройство</th><th>Кто</th><th>Детали</th><th>Время</th></tr></thead>
-            <tbody id="auditBody"></tbody>
-          </table>
+    <section class="card">
+      <h2>Стандарт Tekla (публикация)</h2>
+      <div class="sub" id="teklaManifestInfo">Загрузка manifest...</div>
+      <div class="row-2" style="margin-top:10px;">
+        <div>
+          <label>Версия</label>
+          <input id="teklaVersion" placeholder="2026.03.1" />
         </div>
-      </section>
-
-      <section class="card full">
-        <h2>Аудит admin_firm</h2>
-        <div style="overflow:auto; max-height: 220px;">
-          <table>
-            <thead><tr><th>ID</th><th>Событие</th><th>Устройство</th><th>Кто</th><th>Детали</th><th>Время</th></tr></thead>
-            <tbody id="firmAuditBody"></tbody>
-          </table>
+        <div>
+          <label>Ревизия</label>
+          <input id="teklaRevision" placeholder="r2" />
         </div>
-      </section>
+      </div>
+      <div class="row-2" style="margin-top:10px;">
+        <div>
+          <label>Repo URL</label>
+          <input id="teklaRepoUrl" placeholder="https://github.com/org/repo.git" />
+        </div>
+        <div>
+          <label>Repo Ref</label>
+          <input id="teklaRepoRef" placeholder="main" />
+        </div>
+      </div>
+      <div class="row-2" style="margin-top:10px;">
+        <div>
+          <label>Целевой путь</label>
+          <input id="teklaTargetPath" placeholder="C:\Company\TeklaFirm" />
+        </div>
+        <div>
+          <label>Min Connector Version</label>
+          <input id="teklaMinConnector" placeholder="1.0.0" />
+        </div>
+      </div>
+      <div class="actions">
+        <button class="primary" onclick="publishTeklaManifest(this)">Опубликовать версию Tekla</button>
+      </div>
+    </section>
 
-      <section class="card full">
-        <h2>Результат последнего действия</h2>
-        <div id="out" class="out mono">Готово</div>
-      </section>
-    </div>
+    <section class="card">
+      <div class="row-2">
+        <div>
+          <h2>Аудит коннектора</h2>
+          <div class="table-wrap" style="max-height: 260px;">
+            <table style="min-width: 100%;">
+              <thead><tr><th>Когда</th><th>Действие</th><th>Устройство</th><th>Кто</th><th>Подробности</th></tr></thead>
+              <tbody id="auditBody"></tbody>
+            </table>
+          </div>
+        </div>
+        <div>
+          <h2>Аудит папки фирмы</h2>
+          <div class="table-wrap" style="max-height: 260px;">
+            <table style="min-width: 100%;">
+              <thead><tr><th>Когда</th><th>Действие</th><th>Устройство</th><th>Кто</th><th>Подробности</th></tr></thead>
+              <tbody id="firmAuditBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Результат последнего действия</h2>
+      <div id="out" class="out mono">Готово</div>
+    </section>
   </div>
 
   <script>
     const out = document.getElementById('out');
     const actorEl = document.getElementById('adminActor');
     const liveInfoEl = document.getElementById('liveInfo');
+    const selectionInfoEl = document.getElementById('selectionInfo');
+    const actionStatusEl = document.getElementById('actionStatus');
     const managedPortsInfoEl = document.getElementById('managedPortsInfo');
     const allowPortsEl = document.getElementById('allowPorts');
     const AUTO_REFRESH_MS = 15000;
     let autoRefreshId = null;
     let managedPorts = [];
+    let selectedDeviceId = '';
+    let tokenItemsCache = [];
 
     actorEl.value = localStorage.getItem('connector_admin_actor') || '';
-
     actorEl.addEventListener('change', () => localStorage.setItem('connector_admin_actor', actorEl.value.trim()));
 
     function fmt(v) {
@@ -314,45 +331,109 @@
       return String(v).replace('T', ' ').replace('Z', '');
     }
 
+    function safe(v) {
+      if (v === null || v === undefined || v === '') return '-';
+      return String(v)
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;');
+    }
+
     function headers(json = true) {
-      const h = {
-        'X-Admin-Actor': document.getElementById('adminActor').value || 'admin'
-      };
+      const actorRaw = document.getElementById('adminActor').value || 'admin';
+      const h = { 'X-Admin-Actor': encodeURIComponent(actorRaw) };
       if (json) h['Content-Type'] = 'application/json';
       return h;
     }
 
     function setOutput(data) {
       out.textContent = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
+      out.scrollTop = 0;
+    }
+
+    function setActionStatus(message, state = '') {
+      actionStatusEl.textContent = message;
+      actionStatusEl.className = `action-status${state ? ' ' + state : ''}`;
+    }
+
+    function setSelection(deviceId, issuedTo) {
+      selectedDeviceId = deviceId || '';
+      document.getElementById('deviceId').value = deviceId || '';
+      document.getElementById('issuedTo').value = issuedTo || '';
+      selectionInfoEl.textContent = deviceId ? `Выбрано устройство: ${deviceId}` : 'Токен не выбран';
+      renderTokenRows(tokenItemsCache);
+    }
+
+    function actionLabel(eventType) {
+      const map = {
+        token_created: 'Выдан токен',
+        token_rotated: 'Перевыдан токен',
+        token_revoked: 'Токен отозван',
+        token_deleted: 'Токен удален',
+        client_bootstrap: 'Клиент подключен',
+        service_restart_tekla: 'Перезапуск Tekla Server',
+        service_restart_revit: 'Перезапуск Revit Server',
+        tekla_manifest_updated: 'Обновлен manifest XS_FIRM',
+        tekla_firm_publish_started: 'Запущена публикация XS_FIRM',
+        tekla_firm_publish_succeeded: 'Публикация XS_FIRM завершена',
+        tekla_firm_publish_failed: 'Публикация XS_FIRM завершилась ошибкой',
+        tekla_firm_publish_skipped: 'Публикация XS_FIRM не потребовалась',
+        tekla_firm_publish_blocked_large_files: 'Публикация XS_FIRM заблокирована большими файлами',
+        tekla_firm_publish_rolled_back: 'Локальный commit XS_FIRM откатан',
+        firm_admin_granted: 'Назначен admin_firm',
+        firm_admin_revoked: 'Снят admin_firm'
+      };
+      return map[eventType] || eventType || '-';
+    }
+
+    function formatAuditDetails(details) {
+      if (!details) return '-';
+      return String(details).replaceAll('; ', '\n');
     }
 
     async function runWithButtonState(button, busyText, action) {
       const initial = button.textContent;
       button.disabled = true;
+      button.classList.remove('done', 'failed');
+      button.classList.add('busy');
       button.textContent = busyText;
+      setActionStatus(busyText, 'busy');
       try {
-        await action();
+        const result = await action();
         button.textContent = 'Готово';
+        button.classList.remove('busy');
+        button.classList.add('done');
+        setActionStatus(`Выполнено: ${initial}`, 'done');
+        return result;
       } catch (e) {
         button.textContent = 'Ошибка';
+        button.classList.remove('busy');
+        button.classList.add('failed');
+        setActionStatus(`Ошибка: ${e.message}`, 'failed');
         throw e;
       } finally {
         setTimeout(() => {
           button.textContent = initial;
           button.disabled = false;
-        }, 900);
+          button.classList.remove('busy', 'done', 'failed');
+        }, 1400);
       }
     }
 
     async function req(url, options = {}) {
       const r = await fetch(url, { credentials: 'same-origin', ...options });
+      const raw = await r.text();
       let data;
-      try { data = await r.json(); } catch { data = { ok: false, detail: await r.text() }; }
+      try {
+        data = raw ? JSON.parse(raw) : { ok: r.ok };
+      } catch {
+        data = { ok: false, detail: raw };
+      }
       if (r.status === 401) {
         window.location.href = '/admin/login?next=/admin/ui';
         throw new Error('Не авторизован');
       }
-      if (!r.ok) throw new Error(JSON.stringify(data));
+      if (!r.ok) throw new Error(data.detail || JSON.stringify(data));
       return data;
     }
 
@@ -361,320 +442,277 @@
       window.location.href = '/admin/login';
     }
 
-    async function restartTeklaService(button) {
-      try {
-        await runWithButtonState(button, 'Перезапуск...', async () => {
-          const data = await req('/admin/services/restart-tekla', {
-            method: 'POST', headers: headers(false)
-          });
-          setOutput(data);
-          await refreshAll();
-        });
-      } catch (e) {
-        setOutput(`Ошибка перезапуска Tekla: ${e.message}`);
+    function parsePorts(value) {
+      return String(value || '').split(',').map(x => Number(String(x).trim())).filter(x => Number.isInteger(x) && x > 0 && x <= 65535);
+    }
+
+    function statusBadge(text, cls = '') {
+      return `<span class="badge ${cls}">${safe(text)}</span>`;
+    }
+
+    function renderTokenRows(items) {
+      const tbody = document.getElementById('tokensBody');
+      tbody.innerHTML = '';
+      for (const t of items) {
+        const tr = document.createElement('tr');
+        if (selectedDeviceId && selectedDeviceId === t.device_id) tr.classList.add('selected');
+        tr.onclick = (e) => {
+          if (e.target.closest('button')) return;
+          setSelection(t.device_id, t.issued_to || '');
+        };
+
+        const tokenState = t.revoked_at ? statusBadge('Отозван', 'danger') : statusBadge('Активен', 'ok');
+        const firmState = t.is_firm_admin ? statusBadge('Назначен', 'ok') : statusBadge('Нет', 'warn');
+        const teklaRuntime = `${safe(t.tekla_installed_revision || '-') } / ${safe(t.tekla_target_revision || '-')}`;
+        const smbBlock = `
+          <div class="secret-box mono">
+            <div>login: ${safe(t.smb_login)}</div>
+            <div>user: ${safe(t.smb_username)}</div>
+            <div>pass: ${safe(t.smb_password)}</div>
+            <div>${safe(t.smb_share_unc)}</div>
+          </div>`;
+
+        const deviceTitle = deviceIdValue || '<пустой device_id>';
+
+        tr.innerHTML = `
+          <td>
+            <div><b>${safe(deviceTitle)}</b></div>
+            <div>${safe(t.issued_to)}</div>
+            <div class="muted-small">создан: ${fmt(t.created_at)}</div>
+            <div class="muted-small">last used: ${fmt(t.last_used_at)}</div>
+            <div class="muted-small">host/ip: ${safe(t.hostname)} / <span class="mono">${safe(t.public_ip)}</span></div>
+          </td>
+          <td class="token-cell mono">
+            <div>${safe(t.token || 'нет сохраненного значения')}</div>
+            <div class="muted-small">${tokenState}</div>
+          </td>
+          <td>${smbBlock}</td>
+          <td>
+            <div>${tokenState}</div>
+            <div class="muted-small">агент: ${safe(t.agent_version)}</div>
+            <div class="muted-small">heartbeat: ${fmt(t.device_updated_at)}</div>
+          </td>
+          <td>
+            <div>${firmState}</div>
+            <div class="muted-small">${t.is_system_admin ? 'system admin' : 'обычный admin'}</div>
+          </td>
+          <td>
+            <div class="mono">${teklaRuntime}</div>
+            <div class="muted-small">обновлено: ${fmt(t.tekla_updated_at)}</div>
+            <div class="muted-small">ошибка: ${safe(t.tekla_last_error || '-')}</div>
+          </td>
+          <td><div class="inline-actions"></div></td>`;
+
+        const actions = tr.querySelector('.inline-actions');
+        const deviceIdValue = (t.device_id || '').trim();
+
+        const rotateBtn = document.createElement('button');
+        rotateBtn.className = 'warn';
+        rotateBtn.textContent = 'Перевыдать';
+        rotateBtn.onclick = (e) => { e.stopPropagation(); rotateTokenFor(rotateBtn, deviceIdValue, t.issued_to || ''); };
+
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'danger';
+        deleteBtn.textContent = 'Удалить';
+        deleteBtn.onclick = (e) => { e.stopPropagation(); deleteToken(deleteBtn, deviceIdValue); };
+
+        const firmBtn = document.createElement('button');
+        firmBtn.className = t.is_firm_admin ? 'danger' : 'primary';
+        firmBtn.textContent = t.is_firm_admin ? 'Снять admin_firm' : 'Назначить admin_firm';
+        firmBtn.onclick = (e) => { e.stopPropagation(); toggleFirmAdmin(firmBtn, deviceIdValue, !t.is_firm_admin); };
+
+        if (!deviceIdValue) {
+          rotateBtn.disabled = true;
+          deleteBtn.disabled = true;
+          firmBtn.disabled = true;
+          firmBtn.textContent = 'Нет device_id';
+        }
+
+        actions.appendChild(rotateBtn);
+        actions.appendChild(deleteBtn);
+        actions.appendChild(firmBtn);
+        tbody.appendChild(tr);
       }
     }
 
-    async function restartRevitService(button) {
-      try {
-        await runWithButtonState(button, 'Перезапуск...', async () => {
-          const data = await req('/admin/services/restart-revit', {
-            method: 'POST', headers: headers(false)
-          });
-          setOutput(data);
-          await refreshAll();
-        });
-      } catch (e) {
-        setOutput(`Ошибка перезапуска Revit: ${e.message}`);
-      }
-    }
-
-    async function issueToken() {
+    async function issueToken(button) {
       const payload = {
         device_id: document.getElementById('deviceId').value.trim(),
         issued_to: document.getElementById('issuedTo').value.trim() || null
       };
-      const data = await req('/admin/tokens', { method: 'POST', headers: headers(true), body: JSON.stringify(payload) });
-      setOutput(data);
-      await refreshAll();
-    }
-
-    async function rotateToken() {
-      const deviceId = document.getElementById('deviceId').value.trim();
-      const payload = { issued_to: document.getElementById('issuedTo').value.trim() || null };
-      const data = await req(`/admin/tokens/${encodeURIComponent(deviceId)}/rotate`, {
-        method: 'POST', headers: headers(true), body: JSON.stringify(payload)
+      if (!payload.device_id) { setOutput('Укажите ID устройства'); return; }
+      await runWithButtonState(button, 'Выдача...', async () => {
+        const data = await req('/admin/tokens', { method: 'POST', headers: headers(true), body: JSON.stringify(payload) });
+        setOutput(data);
+        await refreshAll(payload.device_id);
       });
-      setOutput(data);
-      await refreshAll();
     }
 
-    async function rotateTokenFor(deviceId, issuedTo) {
-      const payload = { issued_to: issuedTo || null };
-      const data = await req(`/admin/tokens/${encodeURIComponent(deviceId)}/rotate`, {
-        method: 'POST', headers: headers(true), body: JSON.stringify(payload)
+    async function rotateTokenFor(button, deviceId, issuedTo) {
+      if (!deviceId) {
+        setOutput('Невозможно выполнить действие: пустой device_id.');
+        setActionStatus('Ошибка: пустой device_id', 'failed');
+        return;
+      }
+      await runWithButtonState(button, 'Перевыдача...', async () => {
+        const data = await req(`/admin/tokens/${encodeURIComponent(deviceId)}/rotate`, {
+          method: 'POST', headers: headers(true), body: JSON.stringify({ issued_to: issuedTo || null })
+        });
+        setOutput(data);
+        await refreshAll(deviceId);
       });
-      document.getElementById('deviceId').value = deviceId;
-      document.getElementById('issuedTo').value = issuedTo || '';
-      setOutput(data);
-      await refreshAll();
     }
 
-    async function revokeToken() {
-      const deviceId = document.getElementById('deviceId').value.trim();
-      const data = await req(`/admin/tokens/${encodeURIComponent(deviceId)}/revoke`, {
-        method: 'POST', headers: headers(false)
+    async function deleteToken(button, deviceId) {
+      if (!deviceId) {
+        setOutput('Невозможно выполнить действие: пустой device_id.');
+        setActionStatus('Ошибка: пустой device_id', 'failed');
+        return;
+      }
+      if (!confirm(`Удалить токен и SMB-доступ для устройства ${deviceId}?`)) return;
+      await runWithButtonState(button, 'Удаление...', async () => {
+        const data = await req(`/admin/tokens/${encodeURIComponent(deviceId)}`, { method: 'DELETE', headers: headers(false) });
+        setOutput(data);
+        if (selectedDeviceId === deviceId) setSelection('', '');
+        await refreshAll();
       });
-      setOutput(data);
-      await refreshAll();
     }
 
-    async function deleteToken(deviceId) {
-      if (!confirm(`Удалить токен для устройства ${deviceId}?`)) return;
-      const data = await req(`/admin/tokens/${encodeURIComponent(deviceId)}`, {
-        method: 'DELETE', headers: headers(false)
+    async function toggleFirmAdmin(button, deviceId, shouldGrant) {
+      if (!deviceId) {
+        setOutput('Невозможно выполнить действие: пустой device_id.');
+        setActionStatus('Ошибка: пустой device_id', 'failed');
+        return;
+      }
+      const url = shouldGrant ? '/admin/firm-admins/grant' : '/admin/firm-admins/revoke';
+      const busy = shouldGrant ? 'Назначение...' : 'Снятие...';
+      await runWithButtonState(button, busy, async () => {
+        const data = await req(url, { method: 'POST', headers: headers(true), body: JSON.stringify({ username: deviceId }) });
+        setOutput(data);
+        await refreshAll(deviceId);
       });
-      document.getElementById('deviceId').value = deviceId;
-      setOutput(data);
-      await refreshAll();
-    }
-
-    function parsePorts(value) {
-      return String(value || '')
-        .split(',')
-        .map(x => Number(String(x).trim()))
-        .filter(x => Number.isInteger(x) && x > 0 && x <= 65535);
     }
 
     async function loadManagedPorts() {
       const data = await req('/admin/network/managed-ports', { headers: headers(false) });
       managedPorts = (data.managed_ports || []).map(x => Number(x)).filter(Number.isInteger);
       const csv = managedPorts.join(',');
-      managedPortsInfoEl.textContent = `Managed ports из сервера: ${csv || '-'}`;
-      if (!allowPortsEl.value.trim()) {
-        allowPortsEl.value = csv;
-      }
-      return managedPorts;
+      managedPortsInfoEl.textContent = `Managed ports: ${csv || '-'}`;
+      if (!allowPortsEl.value.trim()) allowPortsEl.value = csv;
     }
 
-    async function reapplyManagedPortsForActiveTokens() {
-      if (!confirm('Применить текущие managed ports ко всем активным (не отозванным) токенам?')) return;
-      const data = await req('/admin/network/reapply-managed-ports', {
-        method: 'POST', headers: headers(false)
+    async function reapplyManagedPortsForActiveTokens(button) {
+      if (!confirm('Применить managed ports ко всем активным токенам?')) return;
+      await runWithButtonState(button, 'Применение...', async () => {
+        const data = await req('/admin/network/reapply-managed-ports', { method: 'POST', headers: headers(false) });
+        setOutput(data);
       });
-      setOutput(data);
-      await refreshAll();
     }
 
-    async function allowIpRule() {
+    async function allowIpRule(button) {
       const ip = document.getElementById('allowIp').value.trim();
       const ports = parsePorts(document.getElementById('allowPorts').value);
-      const data = await req('/admin/network/allow-ip', {
-        method: 'POST', headers: headers(true), body: JSON.stringify({ ip, ports })
+      await runWithButtonState(button, 'Сохранение...', async () => {
+        const data = await req('/admin/network/allow-ip', { method: 'POST', headers: headers(true), body: JSON.stringify({ ip, ports }) });
+        setOutput(data);
       });
-      setOutput(data);
-      await refreshAll();
     }
 
-    async function revokeIpRule() {
+    async function revokeIpRule(button) {
       const ip = document.getElementById('allowIp').value.trim();
       const ports = parsePorts(document.getElementById('allowPorts').value);
-      const data = await req('/admin/network/revoke-ip', {
-        method: 'POST', headers: headers(true), body: JSON.stringify({ ip, ports })
+      await runWithButtonState(button, 'Удаление...', async () => {
+        const data = await req('/admin/network/revoke-ip', { method: 'POST', headers: headers(true), body: JSON.stringify({ ip, ports }) });
+        setOutput(data);
       });
-      setOutput(data);
-      await refreshAll();
     }
 
-    async function loadNetworkRules() {
-      const data = await req('/admin/network/rules', { headers: headers(false) });
-      const tbody = document.getElementById('networkBody');
-      tbody.innerHTML = '';
-      for (const r of data.items || []) {
-        const tr = document.createElement('tr');
-        tr.innerHTML = `<td>${r.display_name || '-'}</td><td class="mono">${r.local_port || '-'}</td><td class="mono">${r.remote_address || '-'}</td><td>${r.enabled ? 'да' : 'нет'}</td>`;
-        tbody.appendChild(tr);
-      }
-      return data.items || [];
+    async function restartTeklaService(button) {
+      await runWithButtonState(button, 'Перезапуск...', async () => {
+        const data = await req('/admin/services/restart-tekla', { method: 'POST', headers: headers(false) });
+        setOutput(data);
+      });
     }
 
-    async function loadTokens() {
-      const data = await req('/admin/tokens', { headers: headers(false) });
-      const tbody = document.getElementById('tokensBody');
-      tbody.innerHTML = '';
-      for (const t of data.items || []) {
-        const tr = document.createElement('tr');
-        tr.innerHTML = `<td class="mono">${t.device_id || '-'}</td><td>${t.issued_to || '-'}</td><td>${fmt(t.created_at)}</td><td>${fmt(t.last_used_at)}</td><td>${fmt(t.revoked_at)}</td><td><div class="inline-actions"></div></td>`;
-        const actions = tr.querySelector('.inline-actions');
-
-        const rotateBtn = document.createElement('button');
-        rotateBtn.className = 'warn';
-        rotateBtn.textContent = 'Перевыдать';
-        rotateBtn.onclick = () => rotateTokenFor(t.device_id, t.issued_to || null);
-
-        const deleteBtn = document.createElement('button');
-        deleteBtn.className = 'danger';
-        deleteBtn.textContent = 'Удалить';
-        deleteBtn.onclick = () => deleteToken(t.device_id);
-
-        actions.appendChild(rotateBtn);
-        actions.appendChild(deleteBtn);
-        tbody.appendChild(tr);
-      }
-      return data.items || [];
-    }
-
-    async function loadDevices() {
-      const data = await req('/admin/devices', { headers: headers(false) });
-      const tbody = document.getElementById('devicesBody');
-      tbody.innerHTML = '';
-      for (const d of data.items || []) {
-        const tr = document.createElement('tr');
-        tr.innerHTML = `<td class="mono">${d.device_id || '-'}</td><td class="mono">${d.public_ip || '-'}</td><td>${d.hostname || '-'}</td><td>${fmt(d.updated_at)}</td>`;
-        tbody.appendChild(tr);
-      }
-      return data.items || [];
-    }
-
-    async function loadTeklaClients() {
-      const data = await req('/admin/tekla/clients', { headers: headers(false) });
-      const tbody = document.getElementById('teklaClientsBody');
-      tbody.innerHTML = '';
-      const items = data.items || [];
-      for (const t of items) {
-        const tr = document.createElement('tr');
-        tr.innerHTML = `<td>${t.issued_to || '-'}</td><td class="mono">${t.device_id || '-'}</td><td>${t.hostname || '-'}</td><td class="mono">${t.public_ip || '-'}</td><td class="mono">${t.installed_revision || '-'} / ${t.target_revision || '-'}</td><td>${t.pending_after_close ? 'да' : 'нет'}</td><td>${t.tekla_running ? 'запущена' : 'не запущена'}</td><td>${t.last_error || '-'}</td><td>${fmt(t.last_check_utc)}</td><td>${fmt(t.last_success_utc)}</td><td>${fmt(t.updated_at)}</td>`;
-        tbody.appendChild(tr);
-      }
-      const updated = items.filter(x => x.installed_revision && x.target_revision && x.installed_revision === x.target_revision).length;
-      const pending = items.filter(x => !!x.pending_after_close).length;
-      const errors = items.filter(x => !!(x.last_error || '').trim()).length;
-      document.getElementById('teklaTotal').textContent = items.length;
-      document.getElementById('teklaUpdated').textContent = updated;
-      document.getElementById('teklaPending').textContent = pending;
-      document.getElementById('teklaErrors').textContent = errors;
-      return items;
+    async function restartRevitService(button) {
+      await runWithButtonState(button, 'Перезапуск...', async () => {
+        const data = await req('/admin/services/restart-revit', { method: 'POST', headers: headers(false) });
+        setOutput(data);
+      });
     }
 
     async function loadTeklaManifestInfo() {
       const data = await req('/updates/tekla/firm/latest.json', { headers: headers(false) });
-      const infoEl = document.getElementById('teklaManifestInfo');
-      infoEl.textContent = `Версия: ${data.version || '-'} | Ревизия: ${data.revision || '-'} | Min Connector: ${data.minimum_connector_version || '-'} | Путь: ${data.target_path || '-'} | Опубликовано: ${fmt(data.published_at)}`;
+      document.getElementById('teklaManifestInfo').textContent = `Версия: ${data.version || '-'} | Ревизия: ${data.revision || '-'} | Min Connector: ${data.minimum_connector_version || '-'} | Путь: ${data.target_path || '-'} | Опубликовано: ${fmt(data.published_at)}`;
       document.getElementById('teklaVersion').value = data.version || '';
       document.getElementById('teklaRevision').value = data.revision || '';
       document.getElementById('teklaRepoUrl').value = data.repo_url || '';
       document.getElementById('teklaRepoRef').value = data.repo_ref || '';
       document.getElementById('teklaTargetPath').value = data.target_path || '';
       document.getElementById('teklaMinConnector').value = data.minimum_connector_version || '';
-      return data;
-    }
-
-    async function loadFirmAdmins() {
-      const data = await req('/admin/firm-admins', { headers: headers(false) });
-      const tbody = document.getElementById('firmAdminsBody');
-      tbody.innerHTML = '';
-      for (const item of data.items || []) {
-        const tr = document.createElement('tr');
-        tr.innerHTML = `<td>${item.username || '-'}</td><td>${item.is_system_admin ? 'да' : 'нет'}</td><td>${item.is_firm_admin ? 'да' : 'нет'}</td><td>${fmt(item.updated_at)}</td>`;
-        tbody.appendChild(tr);
-      }
-      return data.items || [];
-    }
-
-    async function grantFirmAdmin(button) {
-      const username = (document.getElementById('firmAdminUsername').value || '').trim();
-      if (!username) { setOutput('Укажите username'); return; }
-      try {
-        await runWithButtonState(button, 'Назначение...', async () => {
-          const data = await req('/admin/firm-admins/grant', {
-            method: 'POST', headers: headers(true), body: JSON.stringify({ username })
-          });
-          setOutput(data);
-          await refreshAll();
-        });
-      } catch (e) {
-        setOutput(`Ошибка назначения admin_firm: ${e.message}`);
-      }
-    }
-
-    async function revokeFirmAdmin(button) {
-      const username = (document.getElementById('firmAdminUsername').value || '').trim();
-      if (!username) { setOutput('Укажите username'); return; }
-      try {
-        await runWithButtonState(button, 'Снятие...', async () => {
-          const data = await req('/admin/firm-admins/revoke', {
-            method: 'POST', headers: headers(true), body: JSON.stringify({ username })
-          });
-          setOutput(data);
-          await refreshAll();
-        });
-      } catch (e) {
-        setOutput(`Ошибка снятия admin_firm: ${e.message}`);
-      }
     }
 
     async function publishTeklaManifest(button) {
-      try {
-        await runWithButtonState(button, 'Публикация...', async () => {
-          const payload = {
-            version: document.getElementById('teklaVersion').value.trim(),
-            revision: document.getElementById('teklaRevision').value.trim(),
-            published_at: new Date().toISOString(),
-            target_path: document.getElementById('teklaTargetPath').value.trim(),
-            minimum_connector_version: document.getElementById('teklaMinConnector').value.trim(),
-            repo_url: document.getElementById('teklaRepoUrl').value.trim(),
-            repo_ref: document.getElementById('teklaRepoRef').value.trim(),
-            notes: 'Updated via admin UI'
-          };
-          const data = await req('/admin/tekla/manifest', {
-            method: 'POST', headers: headers(true), body: JSON.stringify(payload)
-          });
-          setOutput(data);
-          await refreshAll();
-        });
-      } catch (e) {
-        setOutput(`Ошибка публикации Tekla manifest: ${e.message}`);
-      }
+      await runWithButtonState(button, 'Публикация...', async () => {
+        const payload = {
+          version: document.getElementById('teklaVersion').value.trim(),
+          revision: document.getElementById('teklaRevision').value.trim(),
+          published_at: new Date().toISOString(),
+          target_path: document.getElementById('teklaTargetPath').value.trim(),
+          minimum_connector_version: document.getElementById('teklaMinConnector').value.trim(),
+          repo_url: document.getElementById('teklaRepoUrl').value.trim(),
+          repo_ref: document.getElementById('teklaRepoRef').value.trim(),
+          notes: 'Updated via admin UI'
+        };
+        const data = await req('/admin/tekla/manifest', { method: 'POST', headers: headers(true), body: JSON.stringify(payload) });
+        setOutput(data);
+        await loadTeklaManifestInfo();
+      });
     }
 
-    async function loadAudit() {
-      const data = await req('/admin/audit?limit=100', { headers: headers(false) });
-      const tbody = document.getElementById('auditBody');
+    async function loadTokens() {
+      const data = await req('/admin/tokens', { headers: headers(false) });
+      tokenItemsCache = data.items || [];
+      renderTokenRows(tokenItemsCache);
+      document.getElementById('sTokens').textContent = tokenItemsCache.length;
+      document.getElementById('sActive').textContent = tokenItemsCache.filter(t => !t.revoked_at).length;
+      document.getElementById('sRevoked').textContent = tokenItemsCache.filter(t => !!t.revoked_at).length;
+      document.getElementById('sFirmAdmins').textContent = tokenItemsCache.filter(t => !!t.is_firm_admin).length;
+      return tokenItemsCache;
+    }
+
+    async function loadAuditInto(bodyId, url) {
+      const data = await req(url, { headers: headers(false) });
+      const tbody = document.getElementById(bodyId);
       tbody.innerHTML = '';
       for (const a of data.items || []) {
         const tr = document.createElement('tr');
-        tr.innerHTML = `<td>${a.id}</td><td>${a.event_type || '-'}</td><td class="mono">${a.device_id || '-'}</td><td>${a.actor || '-'}</td><td>${a.details || '-'}</td><td>${fmt(a.created_at)}</td>`;
+        tr.innerHTML = `
+          <td>${fmt(a.created_at)}</td>
+          <td>${safe(actionLabel(a.event_type))}</td>
+          <td class="mono">${safe(a.device_id)}</td>
+          <td>${safe(a.actor)}</td>
+          <td style="white-space: pre-wrap;">${safe(formatAuditDetails(a.details))}</td>`;
         tbody.appendChild(tr);
       }
-      return data.items || [];
     }
 
-    async function loadFirmAudit() {
-      const data = await req('/admin/audit/firm?limit=120&include_state=true', { headers: headers(false) });
-      const tbody = document.getElementById('firmAuditBody');
-      tbody.innerHTML = '';
-      for (const item of data.items || []) {
-        const tr = document.createElement('tr');
-        tr.innerHTML = `<td>${item.id}</td><td>${item.event_type}</td><td class="mono">${item.device_id || '-'}</td><td>${item.actor || '-'}</td><td>${item.details || '-'}</td><td>${fmt(item.created_at)}</td>`;
-        tbody.appendChild(tr);
-      }
-      return data.items || [];
-    }
-
-    async function refreshAll() {
+    async function refreshAll(preferredDeviceId = selectedDeviceId) {
       try {
-        await loadManagedPorts();
-        const [tokens, devices, teklaClients] = await Promise.all([loadTokens(), loadDevices(), loadTeklaClients()]);
-        await loadFirmAdmins();
-        await loadTeklaManifestInfo();
-        await loadNetworkRules();
-        await loadAudit();
-        await loadFirmAudit();
-        document.getElementById('sTokens').textContent = tokens.length;
-        document.getElementById('sDevices').textContent = devices.length;
-        document.getElementById('sActive').textContent = tokens.filter(t => !t.revoked_at).length;
-        document.getElementById('sRevoked').textContent = tokens.filter(t => !!t.revoked_at).length;
-        liveInfoEl.textContent = `Автообновление: каждые 15 сек | Tekla клиентов: ${teklaClients.length} | Обновлено: ${new Date().toLocaleTimeString('ru-RU')}`;
+        await Promise.all([
+          loadManagedPorts(),
+          loadTokens(),
+          loadTeklaManifestInfo(),
+          loadAuditInto('auditBody', '/admin/audit?limit=100'),
+          loadAuditInto('firmAuditBody', '/admin/audit/firm?limit=120&include_state=true')
+        ]);
+
+        if (preferredDeviceId) {
+          const match = tokenItemsCache.find(x => x.device_id === preferredDeviceId);
+          if (match) setSelection(match.device_id, match.issued_to || '');
+        }
+
+        liveInfoEl.textContent = `Автообновление: каждые 15 сек | Токенов: ${tokenItemsCache.length} | Обновлено: ${new Date().toLocaleTimeString('ru-RU')}`;
       } catch (e) {
         setOutput(`Ошибка обновления: ${e.message}`);
         liveInfoEl.textContent = 'Автообновление: ошибка авторизации или сети';
@@ -683,7 +721,7 @@
 
     function startAutoRefresh() {
       if (autoRefreshId) clearInterval(autoRefreshId);
-      autoRefreshId = setInterval(refreshAll, AUTO_REFRESH_MS);
+      autoRefreshId = setInterval(() => refreshAll(), AUTO_REFRESH_MS);
     }
 
     startAutoRefresh();

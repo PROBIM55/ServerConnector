@@ -1,7 +1,10 @@
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Net.Http;
+using System.Text;
+using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Threading;
 using Connector.Desktop.Models;
@@ -37,6 +40,8 @@ public partial class MainWindow : Window
     private UpdateManifest? _pendingUpdate;
     private string? _downloadedInstallerPath;
     private bool _updateOfferShown;
+    private string _lastUpdateBalloonVersion = string.Empty;
+    private string _lastUpdateWindowVersion = string.Empty;
     private bool _updateCheckInProgress;
     private bool _teklaCheckInProgress;
     private bool _teklaBalloonShown;
@@ -125,6 +130,48 @@ public partial class MainWindow : Window
             UpdateStateTextBlock.Text = "Обновление: ошибка установки";
             _updateOfferShown = false;
         }
+    }
+
+    private void ShowUpdateAvailableBalloon(UpdateManifest manifest)
+    {
+        var version = manifest.Version?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(version))
+        {
+            return;
+        }
+
+        if (string.Equals(_lastUpdateBalloonVersion, version, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        _lastUpdateBalloonVersion = version;
+        _trayIcon.ShowBalloonTip(
+            4000,
+            "Structura Connector",
+            "Доступна новая версия обновления: " + version + ". Откройте приложение и нажмите 'Проверить обновление'.",
+            Forms.ToolTipIcon.Info);
+    }
+
+    private void ShowUpdateAvailableWindowMessage(UpdateManifest manifest)
+    {
+        var version = manifest.Version?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(version))
+        {
+            return;
+        }
+
+        if (string.Equals(_lastUpdateWindowVersion, version, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        _lastUpdateWindowVersion = version;
+        System.Windows.MessageBox.Show(
+            "Доступна новая версия Structura Connector: " + version + ".\nНажмите кнопку 'Скачать и установить'.",
+            "Доступно обновление",
+            MessageBoxButton.OK,
+            MessageBoxImage.Information);
     }
 
     private async Task TryAutoConnectAsync()
@@ -252,13 +299,11 @@ public partial class MainWindow : Window
         var hasTargetRevision = !string.IsNullOrWhiteSpace(_settings.TeklaStandardTargetRevision);
         TeklaCurrentVersionTextBlock.Text = targetRevision;
         TeklaUpToDateTextBlock.Text = hasTargetRevision && !_teklaStandardService.IsUpdateAvailable(_settings) ? "да" : "нет";
-        TeklaPendingTextBlock.Text = _settings.TeklaStandardPendingAfterClose
-            ? "Отложенное применение: да"
-            : "Отложенное применение: нет";
-
-        var teklaRunning = _teklaStandardService.IsTeklaRunning();
-        TeklaProcessStateTextBlock.Text = teklaRunning ? "Tekla запущена" : "Tekla не запущена";
         TeklaRoleTextBlock.Text = _settings.IsFirmAdmin ? "Роль администратора: да" : "Роль администратора: нет";
+        TeklaLocalPathInfoTextBlock.Text = "Папка стандарта на этом ПК: " +
+                                           (string.IsNullOrWhiteSpace(_settings.TeklaStandardLocalPath)
+                                               ? DefaultTeklaStandardLocalPath
+                                               : _settings.TeklaStandardLocalPath);
         TeklaApplyButton.IsEnabled = !string.IsNullOrWhiteSpace(_settings.TeklaStandardTargetRevision);
 
         TeklaPublishPanel.Visibility = _settings.IsFirmAdmin ? Visibility.Visible : Visibility.Collapsed;
@@ -273,6 +318,10 @@ public partial class MainWindow : Window
         {
             TeklaPublishNotesTextBox.Text = "Публикация из Structura Connector";
         }
+
+        var canRestartTeklaServer = _settings.IsSystemAdmin || _settings.IsFirmAdmin;
+        ServerActionsPanel.Visibility = canRestartTeklaServer ? Visibility.Visible : Visibility.Collapsed;
+        RestartTeklaServerButton.IsEnabled = canRestartTeklaServer;
     }
 
     private void ShowTeklaPendingBalloon(string revision)
@@ -445,6 +494,7 @@ public partial class MainWindow : Window
             TeklaStandardRepoUrl = _settings.TeklaStandardRepoUrl,
             TeklaStandardRepoRef = _settings.TeklaStandardRepoRef,
             TeklaPublishSourcePath = teklaPublishSourcePath,
+            IsSystemAdmin = _settings.IsSystemAdmin,
             IsFirmAdmin = _settings.IsFirmAdmin
         };
     }
@@ -485,8 +535,8 @@ public partial class MainWindow : Window
             {
                 InstalledRevision = _settings.TeklaStandardInstalledRevision,
                 TargetRevision = _settings.TeklaStandardTargetRevision,
-                PendingAfterClose = _settings.TeklaStandardPendingAfterClose,
-                TeklaRunning = _teklaStandardService.IsTeklaRunning(),
+                PendingAfterClose = false,
+                TeklaRunning = false,
                 LastCheckUtc = _settings.TeklaStandardLastCheckUtc?.UtcDateTime.ToString("o") ?? string.Empty,
                 LastSuccessUtc = _settings.TeklaStandardLastSuccessUtc?.UtcDateTime.ToString("o") ?? string.Empty,
                 LastError = _settings.TeklaStandardLastError
@@ -698,6 +748,7 @@ public partial class MainWindow : Window
             TeklaPublishSourcePath = string.IsNullOrWhiteSpace(_settings.TeklaPublishSourcePath)
                 ? DefaultTeklaPublishSourcePath
                 : _settings.TeklaPublishSourcePath,
+            IsSystemAdmin = bootstrap.IsSystemAdmin,
             IsFirmAdmin = bootstrap.IsFirmAdmin
         };
         _settingsService.Save(_settings);
@@ -714,7 +765,17 @@ public partial class MainWindow : Window
         UpdateTeklaUi();
         AppendLog("Настройки сохранены.");
 
-        await ConnectSmbInternalAsync(bootstrap.SmbAccess.Login, bootstrap.SmbAccess.Password, sharePath, openExplorer: true);
+        var smbConnected = true;
+        try
+        {
+            await ConnectSmbInternalAsync(bootstrap.SmbAccess.Login, bootstrap.SmbAccess.Password, sharePath, openExplorer: true);
+        }
+        catch (Exception ex) when (IsWindowsSmbConflict(ex))
+        {
+            smbConnected = false;
+            AppendLog("SMB подключение не переключено автоматически (конфликт 1219). Текущая сессия SMB оставлена без изменений.");
+            AppendLog("Детали SMB конфликта: " + ex.Message);
+        }
 
         _timer.Stop();
         _timer.Start();
@@ -727,7 +788,9 @@ public partial class MainWindow : Window
         if (showSuccessDialog)
         {
             System.Windows.MessageBox.Show(
-                "Подключение выполнено. SMB доступ открыт, автоотправка heartbeat включена.",
+                smbConnected
+                    ? "Подключение выполнено. SMB доступ открыт, автоотправка heartbeat включена."
+                    : "Подключение выполнено. Автоотправка heartbeat включена, но SMB не переключен из-за активной сессии Windows (1219).",
                 "Structura Connector",
                 MessageBoxButton.OK,
                 MessageBoxImage.Information);
@@ -750,7 +813,7 @@ public partial class MainWindow : Window
                 : _settings.UpdateManifestUrl.Trim();
             if (!Uri.TryCreate(manifestUrl, UriKind.Absolute, out _))
             {
-                throw new InvalidOperationException("Введите корректный URL manifest обновлений.");
+                throw new InvalidOperationException("Введите корректный адрес обновлений.");
             }
 
             _settings.UpdateManifestUrl = manifestUrl;
@@ -761,7 +824,9 @@ public partial class MainWindow : Window
             if (manifest is null)
             {
                 _pendingUpdate = null;
-                UpdateStateTextBlock.Text = "Обновление: не удалось получить manifest";
+                _lastUpdateBalloonVersion = string.Empty;
+                _lastUpdateWindowVersion = string.Empty;
+                UpdateStateTextBlock.Text = "Обновление: не удалось получить данные";
                 UpdateActionButtonUi();
                 if (showDialogs)
                 {
@@ -775,6 +840,11 @@ public partial class MainWindow : Window
                 _pendingUpdate = manifest;
                 UpdateStateTextBlock.Text = $"Доступно обновление: {manifest.Version}";
                 AppendLog("Найдено обновление: " + manifest.Version);
+                ShowUpdateAvailableBalloon(manifest);
+                if (!showDialogs)
+                {
+                    ShowUpdateAvailableWindowMessage(manifest);
+                }
                 UpdateActionButtonUi();
                 if (showDialogs)
                 {
@@ -789,6 +859,8 @@ public partial class MainWindow : Window
             else
             {
                 _pendingUpdate = null;
+                _lastUpdateBalloonVersion = string.Empty;
+                _lastUpdateWindowVersion = string.Empty;
                 UpdateStateTextBlock.Text = $"Обновление: актуально ({_updateService.CurrentVersion})";
                 UpdateActionButtonUi();
                 if (showDialogs)
@@ -897,12 +969,12 @@ public partial class MainWindow : Window
             {
                 _settings.TeklaStandardTargetRevision = string.Empty;
                 _settings.TeklaStandardLastError = "manifest_not_received";
-                TeklaStatusTextBlock.Text = "Стандарт Tekla: manifest не получен";
+                TeklaStatusTextBlock.Text = "Стандарт Tekla: данные обновления недоступны";
                 _settingsService.Save(_settings);
                 UpdateTeklaUi();
                 if (showDialogs)
                 {
-                    System.Windows.MessageBox.Show("Не удалось получить manifest Стандарт Tekla.", "Стандарт Tekla", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    System.Windows.MessageBox.Show("Не удалось получить данные обновления Стандарт Tekla.", "Стандарт Tekla", MessageBoxButton.OK, MessageBoxImage.Warning);
                 }
                 return;
             }
@@ -928,27 +1000,8 @@ public partial class MainWindow : Window
             }
 
             AppendLog("Найдена новая ревизия Стандарт Tekla: " + manifest.Revision);
-            var teklaRunning = _teklaStandardService.IsTeklaRunning();
-            if (teklaRunning)
-            {
-                _settings.TeklaStandardPendingAfterClose = true;
-                _settings.TeklaStandardLastError = string.Empty;
-                TeklaStatusTextBlock.Text = "Стандарт Tekla: доступна ревизия " + manifest.Revision + ". Ожидаем закрытия Tekla.";
-                _settingsService.Save(_settings);
-                UpdateTeklaUi();
-                ShowTeklaPendingBalloon(manifest.Revision);
-                if (showDialogs)
-                {
-                    System.Windows.MessageBox.Show(
-                        "Обновление Стандарт Tekla найдено, но Tekla запущена. Применение отложено.",
-                        "Стандарт Tekla",
-                        MessageBoxButton.OK,
-                        MessageBoxImage.Information);
-                }
-                return;
-            }
-
             TeklaStatusTextBlock.Text = "Стандарт Tekla: доступна ревизия " + manifest.Revision;
+            _settings.TeklaStandardPendingAfterClose = false;
             _settings.TeklaStandardLastError = string.Empty;
             _settingsService.Save(_settings);
 
@@ -1024,10 +1077,6 @@ public partial class MainWindow : Window
             _settings.TeklaStandardLastError = result.Message;
             _settingsService.Save(_settings);
             UpdateTeklaUi();
-            if (_settings.TeklaStandardPendingAfterClose)
-            {
-                ShowTeklaPendingBalloon(_settings.TeklaStandardTargetRevision);
-            }
 
             if (showDialogs)
             {
@@ -1168,12 +1217,112 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            AppendLog("Ошибка публикации Tekla manifest: " + ex.Message);
-            System.Windows.MessageBox.Show(ex.Message, "Стандарт Tekla", MessageBoxButton.OK, MessageBoxImage.Error);
+            var message = GetFriendlyTeklaPublishErrorMessage(ex);
+            AppendLog("Ошибка публикации Tekla manifest: " + message);
+            System.Windows.MessageBox.Show(message, "Стандарт Tekla", MessageBoxButton.OK, MessageBoxImage.Error);
         }
         finally
         {
             TeklaPublishButton.IsEnabled = _settings.IsFirmAdmin;
+        }
+    }
+
+    private void TeklaPublishBrowse_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            using var dialog = new Forms.FolderBrowserDialog
+            {
+                Description = "Выберите папку фирмы для публикации",
+                ShowNewFolderButton = false,
+                SelectedPath = string.IsNullOrWhiteSpace(TeklaPublishSourcePathTextBox.Text)
+                    ? (string.IsNullOrWhiteSpace(_settings.TeklaPublishSourcePath)
+                        ? DefaultTeklaPublishSourcePath
+                        : _settings.TeklaPublishSourcePath)
+                    : TeklaPublishSourcePathTextBox.Text.Trim()
+            };
+
+            if (dialog.ShowDialog() == Forms.DialogResult.OK)
+            {
+                TeklaPublishSourcePathTextBox.Text = dialog.SelectedPath;
+                _settings.TeklaPublishSourcePath = dialog.SelectedPath;
+                _settingsService.Save(_settings);
+            }
+        }
+        catch (Exception ex)
+        {
+            AppendLog("Ошибка выбора папки фирмы: " + ex.Message);
+            System.Windows.MessageBox.Show(ex.Message, "Стандарт Tekla", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private static string GetFriendlyTeklaPublishErrorMessage(Exception ex)
+    {
+        var message = ex.Message?.Trim() ?? "Неизвестная ошибка публикации.";
+
+        if (message.StartsWith("HTTP 409:", StringComparison.OrdinalIgnoreCase))
+        {
+            return "На сервере уже выполняется публикация XS_FIRM. Дождитесь завершения текущей попытки и только потом повторите запуск.";
+        }
+
+        if (message.StartsWith("HTTP 504:", StringComparison.OrdinalIgnoreCase))
+        {
+            return message[9..].Trim();
+        }
+
+        if (message.StartsWith("HTTP 400:", StringComparison.OrdinalIgnoreCase) ||
+            message.StartsWith("HTTP 500:", StringComparison.OrdinalIgnoreCase))
+        {
+            return message[9..].Trim();
+        }
+
+        return message;
+    }
+
+    private async void RestartTeklaServer_Click(object sender, RoutedEventArgs e)
+    {
+        await RestartManagedServerAsync("tekla", RestartTeklaServerButton, "Tekla Server");
+    }
+
+    private async Task RestartManagedServerAsync(string serviceKey, System.Windows.Controls.Button button, string displayName)
+    {
+        try
+        {
+            var canRestart = serviceKey.Equals("tekla", StringComparison.OrdinalIgnoreCase)
+                ? (_settings.IsSystemAdmin || _settings.IsFirmAdmin)
+                : _settings.IsSystemAdmin;
+            if (!canRestart)
+            {
+                throw new InvalidOperationException(
+                    serviceKey.Equals("tekla", StringComparison.OrdinalIgnoreCase)
+                        ? "Перезапуск Tekla Server доступен только администратору Tekla или системному администратору."
+                        : "Перезапуск Revit Server доступен только системному администратору.");
+            }
+
+            var token = SettingsService.DecryptToken(_settings.TokenCipherBase64).Trim();
+            if (string.IsNullOrWhiteSpace(token))
+            {
+                throw new InvalidOperationException("Токен устройства не найден. Выполните подключение по токену.");
+            }
+
+            button.IsEnabled = false;
+            AppendLog("Запущен перезапуск службы: " + displayName);
+            var result = await _heartbeatClient.RestartManagedServiceAsync(_settings.ServerUrl, token, serviceKey, CancellationToken.None);
+            AppendLog("Служба перезапущена: " + displayName + "; ответ сервера: " + result.Result.ToString());
+            System.Windows.MessageBox.Show(
+                displayName + " успешно перезапущен.",
+                "Серверные действия",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+        }
+        catch (Exception ex)
+        {
+            AppendLog("Ошибка перезапуска службы " + displayName + ": " + ex.Message);
+            System.Windows.MessageBox.Show(ex.Message, "Серверные действия", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        finally
+        {
+            RestartTeklaServerButton.IsEnabled = _settings.IsSystemAdmin || _settings.IsFirmAdmin;
         }
     }
 
@@ -1211,22 +1360,100 @@ public partial class MainWindow : Window
             return login;
         }
 
-        if (login.Contains('\\') || login.Contains('@'))
+        if (login.Contains('@'))
         {
+            return login;
+        }
+
+        if (login.Contains('\\'))
+        {
+            var parts = login.Split('\\', 2, StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length == 2)
+            {
+                var prefix = parts[0].Trim();
+                var user = parts[1].Trim();
+                if (string.Equals(prefix, host, StringComparison.OrdinalIgnoreCase))
+                {
+                    return user;
+                }
+            }
             return login;
         }
 
         return $"{host}\\{login}";
     }
 
-    private static void RunProcessOrThrow(string fileName, params string[] args)
+    private static List<string> BuildSmbLoginCandidates(string login, string host)
+    {
+        var candidates = new List<string>();
+
+        void Add(string value)
+        {
+            var v = (value ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(v))
+            {
+                return;
+            }
+            if (!candidates.Contains(v, StringComparer.OrdinalIgnoreCase))
+            {
+                candidates.Add(v);
+            }
+        }
+
+        Add(NormalizeSmbLogin(login, host));
+        Add(login);
+
+        if (login.Contains('\\'))
+        {
+            var idx = login.LastIndexOf('\\');
+            if (idx >= 0 && idx + 1 < login.Length)
+            {
+                Add(login[(idx + 1)..]);
+            }
+        }
+
+        if (!login.Contains('\\') && !login.Contains('@'))
+        {
+            Add($"{host}\\{login}");
+        }
+
+        return candidates;
+    }
+
+    private static void ConnectShareWithAnyLogin(string shareRoot, string password, IEnumerable<string> loginCandidates)
+    {
+        Exception? last = null;
+        foreach (var candidate in loginCandidates)
+        {
+            try
+            {
+                RunProcessOrThrow("net", "use", shareRoot, password, $"/user:{candidate}", "/persistent:no");
+                return;
+            }
+            catch (InvalidOperationException ex)
+            {
+                last = ex;
+            }
+        }
+
+        if (last is not null)
+        {
+            throw last;
+        }
+
+        throw new InvalidOperationException("Не удалось выполнить SMB вход: отсутствуют варианты логина.");
+    }
+
+    private static (int ExitCode, string Output, string Error) RunProcess(string fileName, params string[] args)
     {
         var psi = new ProcessStartInfo(fileName)
         {
             UseShellExecute = false,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
-            CreateNoWindow = true
+            CreateNoWindow = true,
+            StandardOutputEncoding = Encoding.GetEncoding(866),
+            StandardErrorEncoding = Encoding.GetEncoding(866)
         };
 
         foreach (var arg in args)
@@ -1239,10 +1466,176 @@ public partial class MainWindow : Window
         var error = process.StandardError.ReadToEnd();
         process.WaitForExit();
 
-        if (process.ExitCode != 0)
+        return (process.ExitCode, NormalizeCliMessage(output), NormalizeCliMessage(error));
+    }
+
+    private static void RunProcessOrThrow(string fileName, params string[] args)
+    {
+        var result = RunProcess(fileName, args);
+
+        if (result.ExitCode != 0)
         {
-            var details = string.IsNullOrWhiteSpace(error) ? output : error;
-            throw new InvalidOperationException(details.Trim());
+            var details = string.IsNullOrWhiteSpace(result.Error) ? result.Output : result.Error;
+            throw new InvalidOperationException(details);
+        }
+    }
+
+    private static string NormalizeCliMessage(string value)
+    {
+        var text = (value ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return "Неизвестная ошибка командной строки.";
+        }
+
+        return text.Replace("\r", string.Empty).Trim();
+    }
+
+    private static bool IsWindowsSmbConflict(string message)
+    {
+        if (string.IsNullOrWhiteSpace(message))
+        {
+            return false;
+        }
+
+        return message.Contains("1219", StringComparison.OrdinalIgnoreCase) ||
+               message.Contains("множественное подключение", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsWindowsSmbConflict(Exception ex)
+    {
+        if (ex is null)
+        {
+            return false;
+        }
+
+        if (IsWindowsSmbConflict(ex.Message))
+        {
+            return true;
+        }
+
+        if (ex is AggregateException agg)
+        {
+            foreach (var inner in agg.Flatten().InnerExceptions)
+            {
+                if (IsWindowsSmbConflict(inner))
+                {
+                    return true;
+                }
+            }
+        }
+
+        return ex.InnerException is not null && IsWindowsSmbConflict(ex.InnerException);
+    }
+
+    private static bool IsWindowsNetConnectionNotFound(string message)
+    {
+        if (string.IsNullOrWhiteSpace(message))
+        {
+            return false;
+        }
+
+        return message.Contains("2250", StringComparison.OrdinalIgnoreCase) ||
+               message.Contains("не удалось найти сетевое подключение", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsWindowsNetNoEntries(string message)
+    {
+        if (string.IsNullOrWhiteSpace(message))
+        {
+            return false;
+        }
+
+        return message.Contains("2250", StringComparison.OrdinalIgnoreCase) ||
+               message.Contains("нет записей", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static IEnumerable<string> ExtractUncPaths(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            yield break;
+        }
+
+        var matches = Regex.Matches(text, @"\\\\[^\s]+\\[^\s]+");
+        foreach (Match match in matches)
+        {
+            var path = match.Value.Trim();
+            if (!string.IsNullOrWhiteSpace(path))
+            {
+                yield return path;
+            }
+        }
+    }
+
+    private static void DisconnectAllSmbSessions()
+    {
+        try
+        {
+            RunProcessOrThrow("net", "use", "*", "/delete", "/y");
+        }
+        catch (InvalidOperationException ex) when (IsWindowsNetNoEntries(ex.Message) || IsWindowsNetConnectionNotFound(ex.Message))
+        {
+            // No active SMB sessions in current user profile.
+        }
+    }
+
+    private static void DisconnectAllSmbSessionsForHost(string host)
+    {
+        var list = RunProcess("net", "use");
+        var hostPrefix = $@"\\{host}\";
+        var hostPaths = ExtractUncPaths(list.Output)
+            .Concat(ExtractUncPaths(list.Error))
+            .Where(path => path.StartsWith(hostPrefix, StringComparison.OrdinalIgnoreCase))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        foreach (var path in hostPaths)
+        {
+            try
+            {
+                RunProcessOrThrow("net", "use", path, "/delete", "/y");
+            }
+            catch (InvalidOperationException ex) when (IsWindowsNetConnectionNotFound(ex.Message) || IsWindowsNetNoEntries(ex.Message))
+            {
+                // Path already disconnected.
+            }
+        }
+
+        try
+        {
+            RunProcessOrThrow("net", "use", hostPrefix + "*", "/delete", "/y");
+        }
+        catch (InvalidOperationException ex) when (IsWindowsNetConnectionNotFound(ex.Message) || IsWindowsNetNoEntries(ex.Message))
+        {
+            // Fallback wildcard returned no active entries.
+        }
+    }
+
+    private static void DeleteStoredWindowsCredentialForHost(string host)
+    {
+        var targets = new[]
+        {
+            host,
+            $"TERMSRV/{host}",
+            $"Microsoft_Windows_Network/{host}"
+        };
+
+        foreach (var target in targets)
+        {
+            var result = RunProcess("cmdkey", $"/delete:{target}");
+            if (result.ExitCode == 0)
+            {
+                continue;
+            }
+
+            var details = string.IsNullOrWhiteSpace(result.Error) ? result.Output : result.Error;
+            if (details.Contains("не найден", StringComparison.OrdinalIgnoreCase) ||
+                details.Contains("cannot find", StringComparison.OrdinalIgnoreCase) ||
+                details.Contains("1168", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
         }
     }
 
@@ -1255,11 +1648,13 @@ public partial class MainWindow : Window
 
         var host = GetSmbHost(sharePath);
         var shareRoot = GetSmbShareRoot(sharePath);
-        var normalizedLogin = NormalizeSmbLogin(login, host);
-        SmbLoginTextBox.Text = normalizedLogin;
+        var loginCandidates = BuildSmbLoginCandidates(login, host);
+        SmbLoginTextBox.Text = loginCandidates.FirstOrDefault() ?? login;
 
         await Task.Run(() =>
         {
+            DeleteStoredWindowsCredentialForHost(host);
+
             try
             {
                 RunProcessOrThrow("net", "use", shareRoot, "/delete", "/y");
@@ -1269,7 +1664,31 @@ public partial class MainWindow : Window
                 // Ignore cleanup errors for non-existing mappings.
             }
 
-            RunProcessOrThrow("net", "use", shareRoot, password, $"/user:{normalizedLogin}", "/persistent:no");
+            try
+            {
+                ConnectShareWithAnyLogin(shareRoot, password, loginCandidates);
+            }
+            catch (InvalidOperationException ex) when (IsWindowsSmbConflict(ex.Message))
+            {
+                DisconnectAllSmbSessionsForHost(host);
+                try
+                {
+                    ConnectShareWithAnyLogin(shareRoot, password, loginCandidates);
+                }
+                catch (InvalidOperationException retryEx) when (IsWindowsSmbConflict(retryEx.Message))
+                {
+                    DisconnectAllSmbSessions();
+                    try
+                    {
+                        RunProcessOrThrow("net", "use", $@"\\{host}\IPC$", "/delete", "/y");
+                    }
+                    catch (InvalidOperationException ipcEx) when (IsWindowsNetConnectionNotFound(ipcEx.Message) || IsWindowsNetNoEntries(ipcEx.Message))
+                    {
+                        // IPC session not present.
+                    }
+                    ConnectShareWithAnyLogin(shareRoot, password, loginCandidates);
+                }
+            }
         });
 
         AppendLog($"SMB вход выполнен: {shareRoot}");
