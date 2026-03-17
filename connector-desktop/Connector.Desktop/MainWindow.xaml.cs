@@ -45,6 +45,7 @@ public partial class MainWindow : Window
     private bool _updateCheckInProgress;
     private bool _teklaCheckInProgress;
     private bool _teklaBalloonShown;
+    private bool _serverConnectionFailed;
     private static readonly TimeSpan UpdateCheckInterval = TimeSpan.FromMinutes(30);
 
     public MainWindow()
@@ -61,6 +62,7 @@ public partial class MainWindow : Window
         UpdateRunStateUi();
         UpdateActionButtonUi();
         UpdateTeklaUi();
+        UpdateHeaderStatusUi();
     }
 
     private void Window_Loaded(object sender, RoutedEventArgs e)
@@ -80,7 +82,7 @@ public partial class MainWindow : Window
         }
         _ = TryAutoConnectAsync();
         _ = CheckUpdatesAsync(showDialogs: false);
-        _ = CheckTeklaStandardAsync(showDialogs: false, autoApplyIfPossible: true);
+        _ = CheckTeklaStandardAsync(showDialogs: false, autoApplyIfPossible: false);
         _updateTimer.Interval = UpdateCheckInterval;
         _updateTimer.Start();
     }
@@ -105,7 +107,7 @@ public partial class MainWindow : Window
 
         _updateOfferShown = true;
 
-        var result = System.Windows.MessageBox.Show(
+        var result = ThemedDialogs.Show(this,
             "Доступна новая версия Structura Connector. Установить обновление сейчас?",
             "Обновление доступно",
             MessageBoxButton.YesNo,
@@ -167,7 +169,7 @@ public partial class MainWindow : Window
         }
 
         _lastUpdateWindowVersion = version;
-        System.Windows.MessageBox.Show(
+        ThemedDialogs.Show(this,
             "Доступна новая версия Structura Connector: " + version + ".\nНажмите кнопку 'Скачать и установить'.",
             "Доступно обновление",
             MessageBoxButton.OK,
@@ -191,10 +193,14 @@ public partial class MainWindow : Window
         catch (TaskCanceledException)
         {
             AppendLog("Автоподключение не выполнено: сервер ответил слишком медленно. Повторите подключение через кнопку.");
+            _serverConnectionFailed = true;
+            UpdateHeaderStatusUi();
         }
         catch (Exception ex)
         {
             AppendLog("Автоподключение не выполнено: " + ex.Message);
+            _serverConnectionFailed = true;
+            UpdateHeaderStatusUi();
         }
     }
 
@@ -275,7 +281,7 @@ public partial class MainWindow : Window
     private async void UpdateTimer_Tick(object? sender, EventArgs e)
     {
         await CheckUpdatesAsync(showDialogs: false);
-        await CheckTeklaStandardAsync(showDialogs: false, autoApplyIfPossible: true);
+        await CheckTeklaStandardAsync(showDialogs: false, autoApplyIfPossible: false);
     }
 
     private void UpdateActionButtonUi()
@@ -304,7 +310,7 @@ public partial class MainWindow : Window
                                            (string.IsNullOrWhiteSpace(_settings.TeklaStandardLocalPath)
                                                ? DefaultTeklaStandardLocalPath
                                                : _settings.TeklaStandardLocalPath);
-        TeklaApplyButton.IsEnabled = !string.IsNullOrWhiteSpace(_settings.TeklaStandardTargetRevision);
+        UpdateTeklaActionButtonUi();
 
         TeklaPublishPanel.Visibility = _settings.IsFirmAdmin ? Visibility.Visible : Visibility.Collapsed;
         TeklaPublishButton.IsEnabled = _settings.IsFirmAdmin;
@@ -322,6 +328,59 @@ public partial class MainWindow : Window
         var canRestartTeklaServer = _settings.IsSystemAdmin || _settings.IsFirmAdmin;
         ServerActionsPanel.Visibility = canRestartTeklaServer ? Visibility.Visible : Visibility.Collapsed;
         RestartTeklaServerButton.IsEnabled = canRestartTeklaServer;
+        UpdateHeaderStatusUi();
+    }
+
+    private void UpdateTeklaActionButtonUi()
+    {
+        var hasUpdate = !string.IsNullOrWhiteSpace(_settings.TeklaStandardTargetRevision) &&
+                        _teklaStandardService.IsUpdateAvailable(_settings);
+
+        TeklaCheckButton.Content = hasUpdate ? "Обновить" : "Проверить обновление";
+        TeklaCheckButton.Style = (Style)FindResource(hasUpdate ? "PrimaryButton" : "SecondaryButton");
+        TeklaCheckButton.IsEnabled = !_teklaCheckInProgress;
+    }
+
+    private void UpdateHeaderStatusUi()
+    {
+        var hasToken = !string.IsNullOrWhiteSpace(SettingsService.DecryptToken(_settings.TokenCipherBase64));
+        if (!hasToken)
+        {
+            HeaderServerStatusTextBlock.Text = "Сервер: подключение не выполнено";
+            HeaderServerStatusTextBlock.Foreground = System.Windows.Media.Brushes.DarkGray;
+        }
+        else if (_isRunning && !string.IsNullOrWhiteSpace(_activeSessionId) && !_serverConnectionFailed)
+        {
+            HeaderServerStatusTextBlock.Text = "Сервер: подключено";
+            HeaderServerStatusTextBlock.Foreground = System.Windows.Media.Brushes.MediumSpringGreen;
+        }
+        else if (_serverConnectionFailed)
+        {
+            HeaderServerStatusTextBlock.Text = "Сервер: подключение не выполнено";
+            HeaderServerStatusTextBlock.Foreground = System.Windows.Media.Brushes.Orange;
+        }
+        else
+        {
+            HeaderServerStatusTextBlock.Text = "Сервер: проверка подключения...";
+            HeaderServerStatusTextBlock.Foreground = System.Windows.Media.Brushes.Gainsboro;
+        }
+
+        if (string.IsNullOrWhiteSpace(_settings.TeklaStandardTargetRevision))
+        {
+            HeaderFirmStatusTextBlock.Text = "Папка фирмы: статус неизвестен";
+            HeaderFirmStatusTextBlock.Foreground = System.Windows.Media.Brushes.DarkGray;
+            return;
+        }
+
+        if (_teklaStandardService.IsUpdateAvailable(_settings))
+        {
+            HeaderFirmStatusTextBlock.Text = "Папка фирмы: требуется обновление";
+            HeaderFirmStatusTextBlock.Foreground = System.Windows.Media.Brushes.Orange;
+            return;
+        }
+
+        HeaderFirmStatusTextBlock.Text = "Папка фирмы: актуальна";
+        HeaderFirmStatusTextBlock.Foreground = System.Windows.Media.Brushes.MediumSpringGreen;
     }
 
     private void ShowTeklaPendingBalloon(string revision)
@@ -524,6 +583,7 @@ public partial class MainWindow : Window
 
         StartButton.IsEnabled = !_isRunning;
         StopButton.IsEnabled = _isRunning;
+        UpdateHeaderStatusUi();
     }
 
     private async Task SendHeartbeatSafeAsync()
@@ -549,7 +609,9 @@ public partial class MainWindow : Window
                 _activeSessionId,
                 teklaState,
                 CancellationToken.None);
+            _serverConnectionFailed = false;
             AppendLog("Heartbeat отправлен успешно.");
+            UpdateHeaderStatusUi();
         }
         catch (Exception ex)
         {
@@ -557,12 +619,15 @@ public partial class MainWindow : Window
             {
                 _timer.Stop();
                 _isRunning = false;
+                _serverConnectionFailed = true;
                 UpdateRunStateUi();
                 AppendLog("Сессия отключена: этот токен активирован на другом устройстве.");
                 return;
             }
 
+            _serverConnectionFailed = true;
             AppendLog("Ошибка heartbeat: " + ex.Message);
+            UpdateHeaderStatusUi();
         }
     }
 
@@ -591,7 +656,7 @@ public partial class MainWindow : Window
         catch (Exception ex)
         {
             AppendLog("Ошибка запуска: " + ex.Message);
-            System.Windows.MessageBox.Show(ex.Message, "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+            ThemedDialogs.Show(this, ex.Message, "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
@@ -612,7 +677,7 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            System.Windows.MessageBox.Show(ex.Message, "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+            ThemedDialogs.Show(this, ex.Message, "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
@@ -631,7 +696,7 @@ public partial class MainWindow : Window
             {
                 var ip = await _heartbeatClient.ResolvePublicIpAsync(CancellationToken.None);
                 AppendLog("Подключение к серверу проверено. Внешний IP: " + ip);
-                System.Windows.MessageBox.Show(
+                ThemedDialogs.Show(this, 
                     "Сервер доступен и отвечает /health.\nВнешний IP: " + ip,
                     "Проверка подключения",
                     MessageBoxButton.OK,
@@ -640,7 +705,7 @@ public partial class MainWindow : Window
             catch (Exception ipEx)
             {
                 AppendLog("Сервер доступен, но внешний IP определить не удалось: " + ipEx.Message);
-                System.Windows.MessageBox.Show(
+                ThemedDialogs.Show(this, 
                     "Сервер доступен и отвечает /health.\n" +
                     "Но внешний IP определить не удалось, поэтому отправка heartbeat может не работать.\n\n" +
                     ipEx.Message,
@@ -652,7 +717,7 @@ public partial class MainWindow : Window
         catch (Exception ex)
         {
             AppendLog("Ошибка проверки подключения: " + ex.Message);
-            System.Windows.MessageBox.Show(ex.Message, "Ошибка проверки подключения", MessageBoxButton.OK, MessageBoxImage.Error);
+            ThemedDialogs.Show(this, ex.Message, "Ошибка проверки подключения", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
@@ -664,7 +729,7 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            System.Windows.MessageBox.Show(ex.Message, "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+            ThemedDialogs.Show(this, ex.Message, "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
@@ -684,12 +749,16 @@ public partial class MainWindow : Window
         {
             const string message = "Сервер отвечает дольше обычного. Подождите немного и повторите подключение.";
             AppendLog("Ошибка автоподключения по токену: " + message);
-            System.Windows.MessageBox.Show(message, "Время ожидания истекло", MessageBoxButton.OK, MessageBoxImage.Warning);
+            _serverConnectionFailed = true;
+            UpdateHeaderStatusUi();
+            ThemedDialogs.Show(this, message, "Время ожидания истекло", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
         catch (Exception ex)
         {
             AppendLog("Ошибка автоподключения по токену: " + ex.Message);
-            System.Windows.MessageBox.Show(ex.Message, "Ошибка подключения", MessageBoxButton.OK, MessageBoxImage.Error);
+            _serverConnectionFailed = true;
+            UpdateHeaderStatusUi();
+            ThemedDialogs.Show(this, ex.Message, "Ошибка подключения", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
@@ -755,6 +824,7 @@ public partial class MainWindow : Window
         _autoStartService.SetEnabled(true);
         _timer.Interval = TimeSpan.FromSeconds(_settings.HeartbeatSeconds);
         _activeSessionId = bootstrap.SessionId;
+        _serverConnectionFailed = false;
 
         DeviceIdTextBox.Text = _settings.DeviceId;
         IntervalTextBox.Text = _settings.HeartbeatSeconds.ToString();
@@ -787,7 +857,7 @@ public partial class MainWindow : Window
 
         if (showSuccessDialog)
         {
-            System.Windows.MessageBox.Show(
+            ThemedDialogs.Show(this, 
                 smbConnected
                     ? "Подключение выполнено. SMB доступ открыт, автоотправка heartbeat включена."
                     : "Подключение выполнено. Автоотправка heartbeat включена, но SMB не переключен из-за активной сессии Windows (1219).",
@@ -830,7 +900,7 @@ public partial class MainWindow : Window
                 UpdateActionButtonUi();
                 if (showDialogs)
                 {
-                    System.Windows.MessageBox.Show("Не удалось проверить обновления.", "Обновления", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    ThemedDialogs.Show(this, "Не удалось проверить обновления.", "Обновления", MessageBoxButton.OK, MessageBoxImage.Warning);
                 }
                 return;
             }
@@ -848,7 +918,7 @@ public partial class MainWindow : Window
                 UpdateActionButtonUi();
                 if (showDialogs)
                 {
-                    System.Windows.MessageBox.Show(
+                    ThemedDialogs.Show(this,
                         "Доступна новая версия: " + manifest.Version +
                         (string.IsNullOrWhiteSpace(manifest.Notes) ? "" : "\n\n" + manifest.Notes),
                         "Обновления",
@@ -865,7 +935,7 @@ public partial class MainWindow : Window
                 UpdateActionButtonUi();
                 if (showDialogs)
                 {
-                    System.Windows.MessageBox.Show("Установлена актуальная версия.", "Обновления", MessageBoxButton.OK, MessageBoxImage.Information);
+                    ThemedDialogs.Show(this, "Установлена актуальная версия.", "Обновления", MessageBoxButton.OK, MessageBoxImage.Information);
                 }
             }
         }
@@ -877,7 +947,7 @@ public partial class MainWindow : Window
             UpdateActionButtonUi();
             if (showDialogs)
             {
-                System.Windows.MessageBox.Show(ex.Message, "Ошибка обновлений", MessageBoxButton.OK, MessageBoxImage.Error);
+                ThemedDialogs.Show(this, ex.Message, "Ошибка обновлений", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
         finally
@@ -916,7 +986,7 @@ public partial class MainWindow : Window
             _downloadedInstallerPath = await _updateService.DownloadInstallerAsync(_pendingUpdate, CancellationToken.None);
             AppendLog("Скачан установщик обновления: " + _downloadedInstallerPath);
 
-            var result = System.Windows.MessageBox.Show(
+            var result = ThemedDialogs.Show(this,
                 "Установщик скачан. Закрыть приложение и запустить обновление сейчас?",
                 "Обновление",
                 MessageBoxButton.YesNo,
@@ -938,7 +1008,7 @@ public partial class MainWindow : Window
             UpdateActionButton.IsEnabled = _pendingUpdate is not null;
             UpdateStateTextBlock.Text = "Обновление: ошибка установки";
             AppendLog("Ошибка установки обновления: " + ex.Message);
-            System.Windows.MessageBox.Show(ex.Message, "Ошибка обновления", MessageBoxButton.OK, MessageBoxImage.Error);
+            ThemedDialogs.Show(this, ex.Message, "Ошибка обновления", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
@@ -951,7 +1021,6 @@ public partial class MainWindow : Window
 
         _teklaCheckInProgress = true;
         TeklaCheckButton.IsEnabled = false;
-        TeklaApplyButton.IsEnabled = false;
 
         try
         {
@@ -974,7 +1043,7 @@ public partial class MainWindow : Window
                 UpdateTeklaUi();
                 if (showDialogs)
                 {
-                    System.Windows.MessageBox.Show("Не удалось получить данные обновления Стандарт Tekla.", "Стандарт Tekla", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    ThemedDialogs.Show(this, "Не удалось получить данные обновления Стандарт Tekla.", "Стандарт Tekla", MessageBoxButton.OK, MessageBoxImage.Warning);
                 }
                 return;
             }
@@ -994,7 +1063,7 @@ public partial class MainWindow : Window
                 UpdateTeklaUi();
                 if (showDialogs)
                 {
-                    System.Windows.MessageBox.Show("Стандарт Tekla уже актуален.", "Стандарт Tekla", MessageBoxButton.OK, MessageBoxImage.Information);
+                    ThemedDialogs.Show(this, "Стандарт Tekla уже актуален.", "Стандарт Tekla", MessageBoxButton.OK, MessageBoxImage.Information);
                 }
                 return;
             }
@@ -1014,7 +1083,7 @@ public partial class MainWindow : Window
             UpdateTeklaUi();
             if (showDialogs)
             {
-                System.Windows.MessageBox.Show(
+                ThemedDialogs.Show(this, 
                     "Доступна новая ревизия Стандарт Tekla: " + manifest.Revision,
                     "Стандарт Tekla",
                     MessageBoxButton.OK,
@@ -1029,7 +1098,7 @@ public partial class MainWindow : Window
             AppendLog("Ошибка проверки Стандарт Tekla: " + ex.Message);
             if (showDialogs)
             {
-                System.Windows.MessageBox.Show(ex.Message, "Стандарт Tekla", MessageBoxButton.OK, MessageBoxImage.Error);
+                ThemedDialogs.Show(this, ex.Message, "Стандарт Tekla", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
         finally
@@ -1068,7 +1137,7 @@ public partial class MainWindow : Window
                 UpdateTeklaUi();
                 if (showDialogs)
                 {
-                    System.Windows.MessageBox.Show(result.Message, "Стандарт Tekla", MessageBoxButton.OK, MessageBoxImage.Information);
+                    ThemedDialogs.Show(this, result.Message, "Стандарт Tekla", MessageBoxButton.OK, MessageBoxImage.Information);
                 }
                 return;
             }
@@ -1080,7 +1149,7 @@ public partial class MainWindow : Window
 
             if (showDialogs)
             {
-                System.Windows.MessageBox.Show(result.Message, "Стандарт Tekla", MessageBoxButton.OK, MessageBoxImage.Warning);
+                ThemedDialogs.Show(this, result.Message, "Стандарт Tekla", MessageBoxButton.OK, MessageBoxImage.Warning);
             }
         }
         catch (Exception ex)
@@ -1091,19 +1160,22 @@ public partial class MainWindow : Window
             AppendLog("Ошибка применения Стандарт Tekla: " + ex.Message);
             if (showDialogs)
             {
-                System.Windows.MessageBox.Show(ex.Message, "Стандарт Tekla", MessageBoxButton.OK, MessageBoxImage.Error);
+                ThemedDialogs.Show(this, ex.Message, "Стандарт Tekla", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
     }
 
-    private async void TeklaCheck_Click(object sender, RoutedEventArgs e)
+    private async void TeklaUpdateAction_Click(object sender, RoutedEventArgs e)
     {
-        await CheckTeklaStandardAsync(showDialogs: true, autoApplyIfPossible: false);
-    }
+        var hasUpdate = !string.IsNullOrWhiteSpace(_settings.TeklaStandardTargetRevision) &&
+                        _teklaStandardService.IsUpdateAvailable(_settings);
+        if (hasUpdate)
+        {
+            await ApplyTeklaStandardAsync(showDialogs: true, forceRefresh: false);
+            return;
+        }
 
-    private async void TeklaApply_Click(object sender, RoutedEventArgs e)
-    {
-        await ApplyTeklaStandardAsync(showDialogs: true, forceRefresh: true);
+        await CheckTeklaStandardAsync(showDialogs: true, autoApplyIfPossible: false);
     }
 
     private void TeklaOpenFolder_Click(object sender, RoutedEventArgs e)
@@ -1125,7 +1197,7 @@ public partial class MainWindow : Window
         catch (Exception ex)
         {
             AppendLog("Ошибка открытия папки Стандарт Tekla: " + ex.Message);
-            System.Windows.MessageBox.Show(ex.Message, "Стандарт Tekla", MessageBoxButton.OK, MessageBoxImage.Error);
+            ThemedDialogs.Show(this, ex.Message, "Стандарт Tekla", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
@@ -1149,7 +1221,7 @@ public partial class MainWindow : Window
         catch (Exception ex)
         {
             AppendLog("Ошибка открытия лога Стандарт Tekla: " + ex.Message);
-            System.Windows.MessageBox.Show(ex.Message, "Стандарт Tekla", MessageBoxButton.OK, MessageBoxImage.Error);
+            ThemedDialogs.Show(this, ex.Message, "Стандарт Tekla", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
@@ -1207,7 +1279,7 @@ public partial class MainWindow : Window
             }
             await CheckTeklaStandardAsync(showDialogs: false, autoApplyIfPossible: false);
 
-            System.Windows.MessageBox.Show(
+            ThemedDialogs.Show(this, 
                 result.NoChanges
                     ? "Изменений в эталонной папке не найдено. Публикация не требуется."
                     : "Публикация Tekla manifest выполнена успешно.",
@@ -1219,7 +1291,7 @@ public partial class MainWindow : Window
         {
             var message = GetFriendlyTeklaPublishErrorMessage(ex);
             AppendLog("Ошибка публикации Tekla manifest: " + message);
-            System.Windows.MessageBox.Show(message, "Стандарт Tekla", MessageBoxButton.OK, MessageBoxImage.Error);
+            ThemedDialogs.Show(this, message, "Стандарт Tekla", MessageBoxButton.OK, MessageBoxImage.Error);
         }
         finally
         {
@@ -1252,7 +1324,7 @@ public partial class MainWindow : Window
         catch (Exception ex)
         {
             AppendLog("Ошибка выбора папки фирмы: " + ex.Message);
-            System.Windows.MessageBox.Show(ex.Message, "Стандарт Tekla", MessageBoxButton.OK, MessageBoxImage.Error);
+            ThemedDialogs.Show(this, ex.Message, "Стандарт Tekla", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
@@ -1309,7 +1381,7 @@ public partial class MainWindow : Window
             AppendLog("Запущен перезапуск службы: " + displayName);
             var result = await _heartbeatClient.RestartManagedServiceAsync(_settings.ServerUrl, token, serviceKey, CancellationToken.None);
             AppendLog("Служба перезапущена: " + displayName + "; ответ сервера: " + result.Result.ToString());
-            System.Windows.MessageBox.Show(
+            ThemedDialogs.Show(this, 
                 displayName + " успешно перезапущен.",
                 "Серверные действия",
                 MessageBoxButton.OK,
@@ -1318,7 +1390,7 @@ public partial class MainWindow : Window
         catch (Exception ex)
         {
             AppendLog("Ошибка перезапуска службы " + displayName + ": " + ex.Message);
-            System.Windows.MessageBox.Show(ex.Message, "Серверные действия", MessageBoxButton.OK, MessageBoxImage.Error);
+            ThemedDialogs.Show(this, ex.Message, "Серверные действия", MessageBoxButton.OK, MessageBoxImage.Error);
         }
         finally
         {
@@ -1718,7 +1790,7 @@ public partial class MainWindow : Window
         catch (Exception ex)
         {
             AppendLog("Ошибка SMB входа: " + ex.Message);
-            System.Windows.MessageBox.Show(ex.Message, "Ошибка SMB входа", MessageBoxButton.OK, MessageBoxImage.Error);
+            ThemedDialogs.Show(this, ex.Message, "Ошибка SMB входа", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
@@ -1744,7 +1816,7 @@ public partial class MainWindow : Window
         catch (Exception ex)
         {
             AppendLog("Ошибка открытия SMB папки: " + ex.Message);
-            System.Windows.MessageBox.Show(ex.Message, "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+            ThemedDialogs.Show(this, ex.Message, "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 }

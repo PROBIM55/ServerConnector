@@ -225,19 +225,21 @@
                     Padding="16"
                     Margin="0,0,0,10">
                 <StackPanel>
-                    <Image Source="/Assets/structura_logo.png"
-                           Height="76"
-                           HorizontalAlignment="Left"
-                           Stretch="Uniform" />
-                    <TextBlock Text="Подключение, обновление и работа со стандартом Tekla"
+                    <TextBlock Text="Structura" FontSize="34" FontWeight="SemiBold" />
+                    <TextBlock x:Name="HeaderServerStatusTextBlock"
+                               Text="Сервер: подключение не выполнено"
                                Margin="0,8,0,0"
+                               Foreground="#93A5BE" />
+                    <TextBlock x:Name="HeaderFirmStatusTextBlock"
+                               Text="Папка фирмы: статус неизвестен"
+                               Margin="0,4,0,0"
                                Foreground="#93A5BE" />
                 </StackPanel>
             </Border>
 
             <Grid Grid.Row="1">
                 <TabControl Background="Transparent" BorderThickness="0">
-                    <TabItem Header="Connector">
+                    <TabItem Header="Коннектор">
                         <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,6,0">
                             <Grid Margin="12,10,12,12">
                                 <Grid.RowDefinitions>
@@ -390,7 +392,7 @@
                                     </Grid.RowDefinitions>
 
                                     <TextBlock Grid.Row="0" Grid.ColumnSpan="2" Text="Менеджер Стандарт Tekla" FontSize="19" FontWeight="SemiBold" />
-                                    <TextBlock Grid.Row="1" Grid.ColumnSpan="2" Text="Проверка и обновление стандарта Tekla для вашей рабочей папки."
+                                    <TextBlock Grid.Row="1" Grid.ColumnSpan="2" Text="Обновляйте папку фирмы и проверяйте актуальность версии."
                                                Margin="0,6,0,14" Foreground="#A9BBD3" TextWrapping="Wrap" />
 
                                     <Label Grid.Row="2" Grid.Column="0" Content="Актуальность версии" VerticalAlignment="Center" />
@@ -407,8 +409,7 @@
                                     </StackPanel>
 
                                     <WrapPanel Grid.Row="5" Grid.ColumnSpan="2" Margin="0,8,0,0">
-                                        <Button x:Name="TeklaCheckButton" Style="{StaticResource SecondaryButton}" Content="Проверить обновление" Click="TeklaCheck_Click" />
-                                        <Button x:Name="TeklaApplyButton" Style="{StaticResource PrimaryButton}" Content="Обновить сейчас" Click="TeklaApply_Click" />
+                                        <Button x:Name="TeklaCheckButton" Style="{StaticResource SecondaryButton}" Content="Проверить обновление" Click="TeklaUpdateAction_Click" />
                                     </WrapPanel>
 
                                     <Border Grid.Row="6"
@@ -431,7 +432,7 @@
 
                                     <Border Grid.Row="7" Grid.ColumnSpan="2" Margin="0,14,0,0" Padding="10" BorderBrush="#2A3E5C" BorderThickness="1" CornerRadius="10" x:Name="TeklaPublishPanel" Visibility="Collapsed">
                                         <StackPanel>
-                                            <TextBlock Text="Публикация папки фирмы (роль admin_firm)" FontWeight="SemiBold" />
+                                            <TextBlock Text="Публикация папки фирмы" FontWeight="SemiBold" />
                                             <TextBlock Text="Укажите папку фирмы и комментарий к обновлению." Foreground="#A9BBD3" Margin="0,4,0,10" TextWrapping="Wrap" />
 
                                             <Label Content="Путь к эталонной папке" />

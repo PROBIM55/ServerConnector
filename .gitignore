@@ -13,6 +13,7 @@ opencode.jsonc
 **/obj/
 connector-desktop/publish/
 connector-desktop/artifacts/
+connector-desktop/Connector.Desktop/tools/
 connector/agent/ConnectorAgentPackage.zip
 connector/agent/ConnectorAgentSetup.exe
 connector/agent/~ConnectorAgentSetup.CAB
