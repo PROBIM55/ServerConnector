@@ -220,7 +220,7 @@ public sealed class HeartbeatClient
         catch (TaskCanceledException ex) when (!ct.IsCancellationRequested)
         {
             throw new InvalidOperationException(
-                "Сервер слишком долго выполняет публикацию XS_FIRM. Попробуйте повторить позже и не запускайте публикацию повторно, пока предыдущая попытка не завершится.",
+                "Сервер слишком долго выполняет публикацию Tekla sync. Попробуйте повторить позже и не запускайте публикацию повторно, пока предыдущая попытка не завершится.",
                 ex);
         }
     }
@@ -336,6 +336,9 @@ public sealed class BootstrapResponse
 
     [JsonPropertyName("smb_access")]
     public BootstrapSmbAccess SmbAccess { get; set; } = new();
+
+    [JsonPropertyName("web_access")]
+    public BootstrapWebAccess WebAccess { get; set; } = new();
 }
 
 public sealed class BootstrapSmbAccess
@@ -356,8 +359,32 @@ public sealed class BootstrapSmbAccess
     public string SharePath { get; set; } = "";
 }
 
+public sealed class BootstrapWebAccess
+{
+    [JsonPropertyName("speckle")]
+    public BootstrapWebServiceAccess Speckle { get; set; } = new();
+
+    [JsonPropertyName("nextcloud")]
+    public BootstrapWebServiceAccess Nextcloud { get; set; } = new();
+}
+
+public sealed class BootstrapWebServiceAccess
+{
+    [JsonPropertyName("url")]
+    public string Url { get; set; } = "";
+
+    [JsonPropertyName("login")]
+    public string Login { get; set; } = "";
+
+    [JsonPropertyName("password")]
+    public string Password { get; set; } = "";
+}
+
 public sealed class TeklaManifestPublishPayload
 {
+    [JsonPropertyName("target")]
+    public string Target { get; set; } = "";
+
     [JsonPropertyName("source_path")]
     public string SourcePath { get; set; } = "";
 
@@ -369,6 +396,9 @@ public sealed class TeklaManifestPublishResponse
 {
     [JsonPropertyName("ok")]
     public bool Ok { get; set; }
+
+    [JsonPropertyName("target")]
+    public string Target { get; set; } = "";
 
     [JsonPropertyName("no_changes")]
     public bool NoChanges { get; set; }

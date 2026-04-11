@@ -33,6 +33,8 @@ OPS_UI_PATH = BASE_DIR / "ops_ui.html"
 UPDATES_DIR = BASE_DIR / "updates"
 UPDATE_MANIFEST_PATH = UPDATES_DIR / "latest.json"
 TEKLA_FIRM_MANIFEST_PATH = UPDATES_DIR / "tekla_firm_latest.json"
+TEKLA_EXTENSIONS_MANIFEST_PATH = UPDATES_DIR / "tekla_extensions_latest.json"
+TEKLA_LIBRARIES_MANIFEST_PATH = UPDATES_DIR / "tekla_libraries_latest.json"
 DEFAULT_TOKEN_EXPORT_DIR = Path(r"\\62.113.36.107\BIM_Models\Tokens")
 DEFAULT_SMB_SERVER_HOST = "62.113.36.107"
 DEFAULT_SMB_SHARE_NAME = "BIM_Models"
@@ -85,6 +87,7 @@ class NetworkRuleRequest(BaseModel):
 
 
 class TeklaManifestUpdateRequest(BaseModel):
+    target: str | None = None
     version: str
     revision: str
     published_at: str
@@ -92,16 +95,39 @@ class TeklaManifestUpdateRequest(BaseModel):
     minimum_connector_version: str
     repo_url: str
     repo_ref: str
+    repo_subdir: str | None = None
     notes: str | None = None
 
 
 class TeklaManifestPublishRequest(BaseModel):
+    target: str | None = None
     source_path: str
     comment: str
 
 
 class AdminRoleUpdateRequest(BaseModel):
     username: str
+
+
+class DeviceWebAccessUpdateRequest(BaseModel):
+    device_id: str
+    speckle_url: str | None = None
+    speckle_login: str | None = None
+    speckle_password: str | None = None
+    nextcloud_url: str | None = None
+    nextcloud_login: str | None = None
+    nextcloud_password: str | None = None
+
+
+class TokenWebAccessUpdateRequest(BaseModel):
+    token: str
+    issued_to: str | None = None
+    speckle_url: str | None = None
+    speckle_login: str | None = None
+    speckle_password: str | None = None
+    nextcloud_url: str | None = None
+    nextcloud_login: str | None = None
+    nextcloud_password: str | None = None
 
 
 def load_config() -> dict:
@@ -214,6 +240,20 @@ def init_db() -> None:
                 is_system_admin INTEGER NOT NULL DEFAULT 0,
                 is_firm_admin INTEGER NOT NULL DEFAULT 0,
                 created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS device_web_access (
+                device_id TEXT PRIMARY KEY,
+                speckle_url TEXT,
+                speckle_login TEXT,
+                speckle_password TEXT,
+                nextcloud_url TEXT,
+                nextcloud_login TEXT,
+                nextcloud_password TEXT,
                 updated_at TEXT NOT NULL
             )
             """
@@ -852,6 +892,122 @@ def get_or_create_device_access(device_id: str, cfg: dict, force_rotate: bool = 
     return smb_access
 
 
+def normalize_web_access_url(value: str | None, default_value: str) -> str:
+    return (value or default_value).strip() or default_value
+
+
+def get_device_web_access(device_id: str, cfg: dict | None = None) -> dict:
+    active_cfg = cfg or load_config()
+    default_speckle_url = normalize_web_access_url(
+        str(active_cfg.get("speckle_url", "")).strip(),
+        "https://speckle.structura-most.ru",
+    )
+    default_nextcloud_url = normalize_web_access_url(
+        str(active_cfg.get("nextcloud_url", "")).strip(),
+        "https://cloud.structura-most.ru",
+    )
+
+    with sqlite3.connect(DB_PATH) as conn:
+        row = conn.execute(
+            """
+            SELECT speckle_url, speckle_login, speckle_password,
+                   nextcloud_url, nextcloud_login, nextcloud_password, updated_at
+            FROM device_web_access
+            WHERE device_id = ?
+            """,
+            (device_id,),
+        ).fetchone()
+
+    if not row:
+        return {
+            "speckle": {
+                "url": default_speckle_url,
+                "login": "",
+                "password": "",
+            },
+            "nextcloud": {
+                "url": default_nextcloud_url,
+                "login": "",
+                "password": "",
+            },
+            "updated_at": "",
+        }
+
+    return {
+        "speckle": {
+            "url": row[0] or default_speckle_url,
+            "login": row[1] or "",
+            "password": row[2] or "",
+        },
+        "nextcloud": {
+            "url": row[3] or default_nextcloud_url,
+            "login": row[4] or "",
+            "password": row[5] or "",
+        },
+        "updated_at": row[6] or "",
+    }
+
+
+def save_device_web_access(payload: DeviceWebAccessUpdateRequest, cfg: dict | None = None) -> dict:
+    active_cfg = cfg or load_config()
+    device_id = payload.device_id.strip()
+    if not device_id:
+        raise HTTPException(status_code=400, detail="device_id is required")
+
+    speckle_url = normalize_web_access_url(
+        payload.speckle_url,
+        str(active_cfg.get("speckle_url", "")).strip() or "https://speckle.structura-most.ru",
+    )
+    nextcloud_url = normalize_web_access_url(
+        payload.nextcloud_url,
+        str(active_cfg.get("nextcloud_url", "")).strip() or "https://cloud.structura-most.ru",
+    )
+    now = utc_now()
+
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute(
+            """
+            INSERT INTO device_web_access(
+                device_id,
+                speckle_url,
+                speckle_login,
+                speckle_password,
+                nextcloud_url,
+                nextcloud_login,
+                nextcloud_password,
+                updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(device_id) DO UPDATE SET
+                speckle_url=excluded.speckle_url,
+                speckle_login=excluded.speckle_login,
+                speckle_password=excluded.speckle_password,
+                nextcloud_url=excluded.nextcloud_url,
+                nextcloud_login=excluded.nextcloud_login,
+                nextcloud_password=excluded.nextcloud_password,
+                updated_at=excluded.updated_at
+            """,
+            (
+                device_id,
+                speckle_url,
+                (payload.speckle_login or "").strip(),
+                payload.speckle_password or "",
+                nextcloud_url,
+                (payload.nextcloud_login or "").strip(),
+                payload.nextcloud_password or "",
+                now,
+            ),
+        )
+
+    return get_device_web_access(device_id, active_cfg)
+
+
+def delete_device_web_access(device_id: str) -> bool:
+    with sqlite3.connect(DB_PATH) as conn:
+        cur = conn.execute("DELETE FROM device_web_access WHERE device_id = ?", (device_id,))
+        return cur.rowcount > 0
+
+
 def create_device_session(device_id: str, hostname: str | None, public_ip: str) -> str:
     session_id = secrets.token_urlsafe(24)
     now = utc_now()
@@ -944,6 +1100,24 @@ def resolve_device_by_token(token: str, cfg: dict) -> tuple[str, str | None, boo
             return str(device_id), None, False
 
     raise HTTPException(status_code=401, detail="Invalid token")
+
+
+def normalize_human_name(value: str | None) -> str:
+    raw = (value or "").strip().casefold()
+    if not raw:
+        return ""
+    cleaned = re.sub(r"[^0-9a-zа-яё\s\-]+", " ", raw, flags=re.IGNORECASE)
+    return re.sub(r"\s+", " ", cleaned).strip()
+
+
+def is_human_name_match(expected: str | None, actual: str | None) -> bool:
+    expected_norm = normalize_human_name(expected)
+    actual_norm = normalize_human_name(actual)
+    if not expected_norm:
+        return True
+    if not actual_norm:
+        return False
+    return expected_norm in actual_norm or actual_norm in expected_norm
 
 
 def normalize_ip(value: str) -> str:
@@ -1119,44 +1293,108 @@ def load_local_update_manifest() -> dict:
 
 
 def load_local_tekla_firm_manifest(cfg: dict | None = None) -> dict:
+    return load_local_tekla_manifest("firm", cfg)
+
+
+def normalize_tekla_sync_target(value: str | None) -> str:
+    normalized = (value or "firm").strip().lower()
+    aliases = {
+        "firm": "firm",
+        "xs_firm": "firm",
+        "xsfirm": "firm",
+        "extensions": "extensions",
+        "extension": "extensions",
+        "libraries": "libraries",
+        "library": "libraries",
+    }
+    target = aliases.get(normalized)
+    if not target:
+        raise HTTPException(status_code=400, detail="Unknown Tekla sync target")
+    return target
+
+
+def get_tekla_sync_target_meta(target: str) -> dict:
+    normalized = normalize_tekla_sync_target(target)
+    mapping = {
+        "firm": {
+            "config_prefix": "tekla_firm",
+            "manifest_path": TEKLA_FIRM_MANIFEST_PATH,
+            "manifest_label": "Tekla firm manifest",
+            "target_label": "XS_FIRM",
+            "audit_prefix": "tekla_firm",
+            "default_target_path": r"C:\Company\TeklaFirm",
+        },
+        "extensions": {
+            "config_prefix": "tekla_extensions",
+            "manifest_path": TEKLA_EXTENSIONS_MANIFEST_PATH,
+            "manifest_label": "Tekla extensions manifest",
+            "target_label": "Extensions",
+            "audit_prefix": "tekla_extensions",
+            "default_target_path": r"C:\TeklaStructures\2025.0\Environments\common\Extensions",
+        },
+        "libraries": {
+            "config_prefix": "tekla_libraries",
+            "manifest_path": TEKLA_LIBRARIES_MANIFEST_PATH,
+            "manifest_label": "Tekla libraries manifest",
+            "target_label": "Libraries",
+            "audit_prefix": "tekla_libraries",
+            "default_target_path": r"%APPDATA%\Grasshopper\Libraries",
+        },
+    }
+    return mapping[normalized]
+
+
+def load_local_tekla_manifest(target: str, cfg: dict | None = None) -> dict:
     active_cfg = cfg or load_config()
-    if not TEKLA_FIRM_MANIFEST_PATH.exists():
-        raise HTTPException(status_code=404, detail="Tekla firm manifest not found")
+    normalized_target = normalize_tekla_sync_target(target)
+    meta = get_tekla_sync_target_meta(normalized_target)
+    manifest_path: Path = meta["manifest_path"]
+    config_prefix = meta["config_prefix"]
+    manifest_label = meta["manifest_label"]
+
+    if not manifest_path.exists():
+        raise HTTPException(status_code=404, detail=f"{manifest_label} not found")
 
     try:
-        manifest = json.loads(TEKLA_FIRM_MANIFEST_PATH.read_text(encoding="utf-8"))
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
-        raise HTTPException(status_code=500, detail="Invalid Tekla firm manifest JSON") from exc
+        raise HTTPException(status_code=500, detail=f"Invalid {manifest_label} JSON") from exc
 
     version = str(manifest.get("version", "")).strip()
     revision = str(manifest.get("revision", "")).strip()
     published_at = str(manifest.get("published_at", "")).strip()
     target_path = str(manifest.get("target_path", "")).strip() or str(
-        active_cfg.get("tekla_firm_target_path", "")
+        active_cfg.get(f"{config_prefix}_target_path", "")
+    ).strip() or str(meta.get("default_target_path", "")).strip()
+    minimum_connector_version = str(manifest.get("minimum_connector_version", "")).strip() or str(
+        active_cfg.get(f"{config_prefix}_minimum_connector_version", "")
     ).strip()
-    minimum_connector_version = str(manifest.get("minimum_connector_version", "")).strip()
-    repo_url = str(manifest.get("repo_url", "")).strip()
-    repo_ref = str(manifest.get("repo_ref", "")).strip()
+    repo_url = str(manifest.get("repo_url", "")).strip() or str(active_cfg.get(f"{config_prefix}_repo_url", "")).strip()
+    repo_ref = str(manifest.get("repo_ref", "")).strip() or str(active_cfg.get(f"{config_prefix}_repo_ref", "")).strip()
+    repo_subdir = str(manifest.get("repo_subdir", "")).strip() or str(
+        active_cfg.get(f"{config_prefix}_repo_subdir", "")
+    ).strip()
 
     if not version:
-        raise HTTPException(status_code=500, detail="Tekla firm manifest must contain version")
+        raise HTTPException(status_code=500, detail=f"{manifest_label} must contain version")
     if not revision:
-        raise HTTPException(status_code=500, detail="Tekla firm manifest must contain revision")
+        raise HTTPException(status_code=500, detail=f"{manifest_label} must contain revision")
     if not published_at:
-        raise HTTPException(status_code=500, detail="Tekla firm manifest must contain published_at")
-    if not target_path:
+        raise HTTPException(status_code=500, detail=f"{manifest_label} must contain published_at")
+    if normalized_target != "libraries" and not target_path:
         raise HTTPException(
             status_code=500,
-            detail="Tekla firm manifest must contain target_path or tekla_firm_target_path must be configured",
+            detail=f"{manifest_label} must contain target_path or {config_prefix}_target_path must be configured",
         )
     if not minimum_connector_version:
-        raise HTTPException(status_code=500, detail="Tekla firm manifest must contain minimum_connector_version")
+        raise HTTPException(status_code=500, detail=f"{manifest_label} must contain minimum_connector_version")
     if not repo_url:
-        raise HTTPException(status_code=500, detail="Tekla firm manifest must contain repo_url")
+        raise HTTPException(status_code=500, detail=f"{manifest_label} must contain repo_url")
     if not repo_ref:
-        raise HTTPException(status_code=500, detail="Tekla firm manifest must contain repo_ref")
+        raise HTTPException(status_code=500, detail=f"{manifest_label} must contain repo_ref")
 
     return {
+        "target": normalized_target,
         "version": version,
         "revision": revision,
         "published_at": published_at,
@@ -1164,12 +1402,21 @@ def load_local_tekla_firm_manifest(cfg: dict | None = None) -> dict:
         "minimum_connector_version": minimum_connector_version,
         "repo_url": repo_url,
         "repo_ref": repo_ref,
+        "repo_subdir": repo_subdir,
         "notes": str(manifest.get("notes", "")).strip(),
     }
 
 
-def save_local_tekla_firm_manifest(payload: TeklaManifestUpdateRequest) -> dict:
+def save_local_tekla_manifest(target: str, payload: TeklaManifestUpdateRequest, cfg: dict | None = None) -> dict:
+    active_cfg = cfg or load_config()
+    normalized_target = normalize_tekla_sync_target(target)
+    meta = get_tekla_sync_target_meta(normalized_target)
+    config_prefix = meta["config_prefix"]
+    manifest_path: Path = meta["manifest_path"]
+
+    repo_subdir = str(payload.repo_subdir or "").strip() or str(active_cfg.get(f"{config_prefix}_repo_subdir", "")).strip()
     manifest = {
+        "target": normalized_target,
         "version": payload.version.strip(),
         "revision": payload.revision.strip(),
         "published_at": payload.published_at.strip(),
@@ -1177,6 +1424,7 @@ def save_local_tekla_firm_manifest(payload: TeklaManifestUpdateRequest) -> dict:
         "minimum_connector_version": payload.minimum_connector_version.strip(),
         "repo_url": payload.repo_url.strip(),
         "repo_ref": payload.repo_ref.strip(),
+        "repo_subdir": repo_subdir,
         "notes": (payload.notes or "").strip(),
     }
 
@@ -1186,7 +1434,7 @@ def save_local_tekla_firm_manifest(payload: TeklaManifestUpdateRequest) -> dict:
         raise HTTPException(status_code=400, detail="revision is required")
     if not manifest["published_at"]:
         raise HTTPException(status_code=400, detail="published_at is required")
-    if not manifest["target_path"]:
+    if normalized_target != "libraries" and not manifest["target_path"]:
         raise HTTPException(status_code=400, detail="target_path is required")
     if not manifest["minimum_connector_version"]:
         raise HTTPException(status_code=400, detail="minimum_connector_version is required")
@@ -1196,8 +1444,12 @@ def save_local_tekla_firm_manifest(payload: TeklaManifestUpdateRequest) -> dict:
         raise HTTPException(status_code=400, detail="repo_ref is required")
 
     UPDATES_DIR.mkdir(parents=True, exist_ok=True)
-    TEKLA_FIRM_MANIFEST_PATH.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return manifest
+
+
+def save_local_tekla_firm_manifest(payload: TeklaManifestUpdateRequest, cfg: dict | None = None) -> dict:
+    return save_local_tekla_manifest("firm", payload, cfg)
 
 
 def parse_tekla_next_version(current_version: str) -> str:
@@ -1261,33 +1513,35 @@ def replace_directory_contents(source_dir: Path, destination_dir: Path) -> None:
             shutil.copy2(child, target)
 
 
-def resolve_tekla_publish_settings(cfg: dict, current_manifest: dict) -> dict:
-    repo_worktree = Path(str(cfg.get("tekla_firm_repo_worktree", "")).strip())
+def resolve_tekla_publish_settings(target: str, cfg: dict, current_manifest: dict) -> dict:
+    meta = get_tekla_sync_target_meta(target)
+    config_prefix = meta["config_prefix"]
+    repo_worktree = Path(str(cfg.get(f"{config_prefix}_repo_worktree", "")).strip())
     if not str(repo_worktree).strip():
-        raise HTTPException(status_code=500, detail="tekla_firm_repo_worktree is not configured")
+        raise HTTPException(status_code=500, detail=f"{config_prefix}_repo_worktree is not configured")
     if not repo_worktree.exists() or not repo_worktree.is_dir():
-        raise HTTPException(status_code=500, detail="tekla_firm_repo_worktree does not exist")
+        raise HTTPException(status_code=500, detail=f"{config_prefix}_repo_worktree does not exist")
     if not (repo_worktree / ".git").exists():
-        raise HTTPException(status_code=500, detail="tekla_firm_repo_worktree is not a git repository")
+        raise HTTPException(status_code=500, detail=f"{config_prefix}_repo_worktree is not a git repository")
 
-    repo_subdir = str(cfg.get("tekla_firm_repo_subdir", "")).strip()
-    if not repo_subdir:
-        raise HTTPException(status_code=500, detail="tekla_firm_repo_subdir is not configured")
+    repo_subdir = str(cfg.get(f"{config_prefix}_repo_subdir", "")).strip() or str(current_manifest.get("repo_subdir", "")).strip()
 
-    git_executable = str(cfg.get("tekla_firm_git_executable", "git")).strip() or "git"
-    repo_ref = str(cfg.get("tekla_firm_repo_ref", "")).strip() or str(current_manifest.get("repo_ref", "")).strip() or "main"
-    repo_url = str(cfg.get("tekla_firm_repo_url", "")).strip() or str(current_manifest.get("repo_url", "")).strip()
-    target_path = str(cfg.get("tekla_firm_target_path", "")).strip() or str(current_manifest.get("target_path", "")).strip()
-    minimum_connector_version = str(cfg.get("tekla_firm_minimum_connector_version", "")).strip() or str(
+    git_executable = str(cfg.get(f"{config_prefix}_git_executable", "git")).strip() or "git"
+    repo_ref = str(cfg.get(f"{config_prefix}_repo_ref", "")).strip() or str(current_manifest.get("repo_ref", "")).strip() or "main"
+    repo_url = str(cfg.get(f"{config_prefix}_repo_url", "")).strip() or str(current_manifest.get("repo_url", "")).strip()
+    target_path = str(cfg.get(f"{config_prefix}_target_path", "")).strip() or str(current_manifest.get("target_path", "")).strip()
+    target_path = target_path or str(meta.get("default_target_path", "")).strip()
+    minimum_connector_version = str(cfg.get(f"{config_prefix}_minimum_connector_version", "")).strip() or str(
         current_manifest.get("minimum_connector_version", "")
     ).strip() or "1.0.0"
 
     if not repo_url:
-        raise HTTPException(status_code=500, detail="tekla_firm_repo_url is not configured")
+        raise HTTPException(status_code=500, detail=f"{config_prefix}_repo_url is not configured")
     if not target_path:
-        raise HTTPException(status_code=500, detail="tekla_firm_target_path is not configured")
+        raise HTTPException(status_code=500, detail=f"{config_prefix}_target_path is not configured")
 
     return {
+        "target": normalize_tekla_sync_target(target),
         "repo_worktree": repo_worktree,
         "repo_subdir": repo_subdir,
         "git_executable": git_executable,
@@ -1319,30 +1573,35 @@ def format_size_mb(size_bytes: int) -> str:
     return f"{size_bytes / (1024 * 1024):.2f} MB"
 
 
-def publish_tekla_firm_from_source(source_path: str, comment: str, cfg: dict, actor: str) -> dict:
+def publish_tekla_target_from_source(target: str, source_path: str, comment: str, cfg: dict, actor: str) -> dict:
+    normalized_target = normalize_tekla_sync_target(target)
+    meta = get_tekla_sync_target_meta(normalized_target)
+    target_label = meta["target_label"]
+    audit_prefix = meta["audit_prefix"]
     source_dir = Path(source_path.strip())
     if not source_dir.exists() or not source_dir.is_dir():
         raise HTTPException(status_code=400, detail="source_path must point to an existing directory")
     if not comment.strip():
         raise HTTPException(status_code=400, detail="comment is required")
 
-    current_manifest = load_local_tekla_firm_manifest(cfg)
-    settings = resolve_tekla_publish_settings(cfg, current_manifest)
+    current_manifest = load_local_tekla_manifest(normalized_target, cfg)
+    settings = resolve_tekla_publish_settings(normalized_target, cfg, current_manifest)
 
     repo_worktree: Path = settings["repo_worktree"]
     repo_subdir = settings["repo_subdir"]
     git_executable = settings["git_executable"]
     repo_ref = settings["repo_ref"]
     destination_dir = repo_worktree / repo_subdir
-    max_file_bytes = parse_int(cfg.get("tekla_firm_max_file_bytes", 95 * 1024 * 1024), 95 * 1024 * 1024)
-    fetch_timeout_seconds = parse_int(cfg.get("tekla_firm_git_fetch_timeout_seconds", 120), 120)
-    push_timeout_seconds = parse_int(cfg.get("tekla_firm_git_push_timeout_seconds", 420), 420)
+    config_prefix = meta["config_prefix"]
+    max_file_bytes = parse_int(cfg.get(f"{config_prefix}_max_file_bytes", 95 * 1024 * 1024), 95 * 1024 * 1024)
+    fetch_timeout_seconds = parse_int(cfg.get(f"{config_prefix}_git_fetch_timeout_seconds", 120), 120)
+    push_timeout_seconds = parse_int(cfg.get(f"{config_prefix}_git_push_timeout_seconds", 420), 420)
 
     oversized = collect_oversized_files(source_dir, max_file_bytes=max_file_bytes)
     if oversized:
         details = "; ".join(f"{relative} ({format_size_mb(size)})" for relative, size in oversized)
         add_audit(
-            event_type="tekla_firm_publish_blocked_large_files",
+            event_type=f"{audit_prefix}_publish_blocked_large_files",
             device_id=None,
             actor=actor,
             details=f"source_path={source_dir}; max={max_file_bytes}; files={details}",
@@ -1384,13 +1643,14 @@ def publish_tekla_firm_from_source(source_path: str, comment: str, cfg: dict, ac
     status = run_git_command(git_executable, repo_worktree, ["status", "--porcelain", "--", repo_subdir])
     if not status.strip():
         add_audit(
-            event_type="tekla_firm_publish_skipped",
+            event_type=f"{audit_prefix}_publish_skipped",
             device_id=None,
             actor=actor,
             details=f"source_path={source_dir}; reason=no_changes",
         )
         return {
             "ok": True,
+            "target": normalized_target,
             "no_changes": True,
             "message": "Изменения не обнаружены. Публикация не выполнялась.",
             "version": str(current_manifest.get("version", "")),
@@ -1399,8 +1659,8 @@ def publish_tekla_firm_from_source(source_path: str, comment: str, cfg: dict, ac
         }
 
     next_version = parse_tekla_next_version(str(current_manifest.get("version", "")))
-    git_author_name = str(cfg.get("tekla_firm_git_author_name", "")).strip() or actor or "Structura Connector"
-    git_author_email = str(cfg.get("tekla_firm_git_author_email", "")).strip() or "connector@local"
+    git_author_name = str(cfg.get(f"{config_prefix}_git_author_name", "")).strip() or actor or "Structura Connector"
+    git_author_email = str(cfg.get(f"{config_prefix}_git_author_email", "")).strip() or "connector@local"
     head_before_commit = run_git_command(git_executable, repo_worktree, ["rev-parse", "HEAD"]).strip()
     run_git_command(git_executable, repo_worktree, ["add", "--", repo_subdir])
     run_git_command(
@@ -1413,7 +1673,7 @@ def publish_tekla_firm_from_source(source_path: str, comment: str, cfg: dict, ac
             f"user.email={git_author_email}",
             "commit",
             "-m",
-            f"tekla firm {next_version}: {comment.strip()}",
+            f"{normalized_target} {next_version}: {comment.strip()}",
         ],
     )
     rollback_done = False
@@ -1433,14 +1693,14 @@ def publish_tekla_firm_from_source(source_path: str, comment: str, cfg: dict, ac
             rollback_done = True
         except Exception as rollback_exc:
             add_audit(
-                event_type="tekla_firm_publish_rollback_failed",
+                event_type=f"{audit_prefix}_publish_rollback_failed",
                 device_id=None,
                 actor=actor,
                 details=f"source_path={source_dir}; rollback_error={str(rollback_exc)}",
             )
         if rollback_done:
             add_audit(
-                event_type="tekla_firm_publish_rolled_back",
+                event_type=f"{audit_prefix}_publish_rolled_back",
                 device_id=None,
                 actor=actor,
                 details=f"source_path={source_dir}; reason=push_failed",
@@ -1467,13 +1727,14 @@ def publish_tekla_firm_from_source(source_path: str, comment: str, cfg: dict, ac
         raise HTTPException(
             status_code=500,
             detail=(
-                "Ошибка git push при публикации XS_FIRM. Локальный commit откатан, можно повторить попытку. "
+                f"Ошибка git push при публикации {target_label}. Локальный commit откатан, можно повторить попытку. "
                 f"Детали: {error_text}"
             ),
         ) from exc
     revision = run_git_command(git_executable, repo_worktree, ["rev-parse", "--short", "HEAD"])
 
     update_payload = TeklaManifestUpdateRequest(
+        target=normalized_target,
         version=next_version,
         revision=revision,
         published_at=utc_now(),
@@ -1481,12 +1742,13 @@ def publish_tekla_firm_from_source(source_path: str, comment: str, cfg: dict, ac
         minimum_connector_version=settings["minimum_connector_version"],
         repo_url=settings["repo_url"],
         repo_ref=repo_ref,
+        repo_subdir=settings["repo_subdir"],
         notes=comment.strip(),
     )
-    manifest = save_local_tekla_firm_manifest(update_payload)
+    manifest = save_local_tekla_manifest(normalized_target, update_payload, cfg)
 
     add_audit(
-        event_type="tekla_firm_publish_succeeded",
+        event_type=f"{audit_prefix}_publish_succeeded",
         device_id=None,
         actor=actor,
         details=(
@@ -1499,17 +1761,26 @@ def publish_tekla_firm_from_source(source_path: str, comment: str, cfg: dict, ac
         event_type="tekla_manifest_updated",
         device_id=None,
         actor=actor,
-        details=f"version={manifest.get('version', '')}; revision={manifest.get('revision', '')}",
+        details=(
+            f"target={normalized_target}; "
+            f"version={manifest.get('version', '')}; "
+            f"revision={manifest.get('revision', '')}"
+        ),
     )
 
     return {
         "ok": True,
+        "target": normalized_target,
         "no_changes": False,
         "message": "Публикация выполнена успешно.",
         "version": str(manifest.get("version", "")),
         "revision": str(manifest.get("revision", "")),
         "manifest": manifest,
     }
+
+
+def publish_tekla_firm_from_source(source_path: str, comment: str, cfg: dict, actor: str) -> dict:
+    return publish_tekla_target_from_source("firm", source_path, comment, cfg, actor)
 
 
 def normalize_release_version(tag_name: str) -> str:
@@ -1704,8 +1975,9 @@ def delete_device_token(device_id: str) -> bool:
             return False
         conn.execute("DELETE FROM device_tokens WHERE device_id = ?", (device_id,))
         conn.execute("DELETE FROM device_access WHERE device_id = ?", (device_id,))
+        conn.execute("DELETE FROM device_web_access WHERE device_id = ?", (device_id,))
         conn.execute("DELETE FROM device_sessions WHERE device_id = ?", (device_id,))
-        return True
+    return True
 
 
 def get_managed_ports(cfg: dict) -> list[int]:
@@ -1773,6 +2045,16 @@ def updates_tekla_firm_latest_manifest() -> dict:
     return load_local_tekla_firm_manifest()
 
 
+@app.get("/updates/tekla/extensions/latest.json")
+def updates_tekla_extensions_latest_manifest() -> dict:
+    return load_local_tekla_manifest("extensions")
+
+
+@app.get("/updates/tekla/libraries/latest.json")
+def updates_tekla_libraries_latest_manifest() -> dict:
+    return load_local_tekla_manifest("libraries")
+
+
 @app.get("/updates/files/{file_name}")
 def updates_file(file_name: str) -> FileResponse:
     safe_name = Path(file_name).name
@@ -1836,6 +2118,7 @@ def connect_bootstrap(
         "is_system_admin": roles["is_system_admin"],
         "is_firm_admin": roles["is_firm_admin"],
         "smb_access": smb_access,
+        "web_access": get_device_web_access(device_id, cfg),
     }
 
 
@@ -1873,18 +2156,22 @@ def connect_publish_tekla_manifest(
     device_id, _, _ = resolve_device_by_token(token, cfg)
     ensure_device_firm_admin(device_id, cfg)
     actor = admin_actor_name(x_admin_actor) if x_admin_actor else device_id
+    target = normalize_tekla_sync_target(payload.target)
+    target_meta = get_tekla_sync_target_meta(target)
+    audit_prefix = target_meta["audit_prefix"]
 
     if not _tekla_publish_lock.acquire(blocking=False):
         raise HTTPException(status_code=409, detail="Tekla publish is already in progress")
 
     add_audit(
-        event_type="tekla_firm_publish_started",
+        event_type=f"{audit_prefix}_publish_started",
         device_id=device_id,
         actor=actor,
-        details=f"source_path={payload.source_path.strip()}",
+        details=f"target={target}; source_path={payload.source_path.strip()}",
     )
     try:
-        return publish_tekla_firm_from_source(
+        return publish_tekla_target_from_source(
+            target=target,
             source_path=payload.source_path,
             comment=payload.comment,
             cfg=cfg,
@@ -1892,18 +2179,18 @@ def connect_publish_tekla_manifest(
         )
     except HTTPException as exc:
         add_audit(
-            event_type="tekla_firm_publish_failed",
+            event_type=f"{audit_prefix}_publish_failed",
             device_id=device_id,
             actor=actor,
-            details=f"source_path={payload.source_path.strip()}; error={exc.detail}",
+            details=f"target={target}; source_path={payload.source_path.strip()}; error={exc.detail}",
         )
         raise
     except Exception as exc:
         add_audit(
-            event_type="tekla_firm_publish_failed",
+            event_type=f"{audit_prefix}_publish_failed",
             device_id=device_id,
             actor=actor,
-            details=f"source_path={payload.source_path.strip()}; error={str(exc)}",
+            details=f"target={target}; source_path={payload.source_path.strip()}; error={str(exc)}",
         )
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     finally:
@@ -2134,12 +2421,20 @@ def admin_list_tokens(request: Request, x_admin_key: str | None = Header(default
                    s.installed_revision,
                    s.target_revision,
                    s.last_error,
-                   s.updated_at
+                   s.updated_at,
+                   w.speckle_url,
+                   w.speckle_login,
+                   w.speckle_password,
+                   w.nextcloud_url,
+                   w.nextcloud_login,
+                   w.nextcloud_password,
+                   w.updated_at
             FROM device_tokens t
             LEFT JOIN device_access a ON a.device_id = t.device_id
             LEFT JOIN devices d ON d.device_id = t.device_id
             LEFT JOIN admin_user_roles r ON r.username = t.device_id
             LEFT JOIN tekla_client_state s ON s.device_id = t.device_id
+            LEFT JOIN device_web_access w ON w.device_id = t.device_id
             ORDER BY t.created_at DESC
             """
         ).fetchall()
@@ -2170,6 +2465,13 @@ def admin_list_tokens(request: Request, x_admin_key: str | None = Header(default
                 "tekla_target_revision": r[20],
                 "tekla_last_error": r[21],
                 "tekla_updated_at": r[22],
+                "speckle_url": r[23],
+                "speckle_login": r[24],
+                "speckle_password": r[25],
+                "nextcloud_url": r[26],
+                "nextcloud_login": r[27],
+                "nextcloud_password": r[28],
+                "web_access_updated_at": r[29],
             }
         )
     return {"items": items}
@@ -2205,6 +2507,113 @@ def admin_devices(request: Request, x_admin_key: str | None = Header(default=Non
             for r in rows
         ]
     }
+
+
+@app.get("/admin/web-access/{device_id}")
+def admin_get_web_access(
+    request: Request,
+    device_id: str,
+    x_admin_key: str | None = Header(default=None),
+) -> dict:
+    cfg = load_config()
+    require_admin_access(request, cfg, x_admin_key)
+    return {
+        "ok": True,
+        "device_id": device_id,
+        "web_access": get_device_web_access(device_id, cfg),
+    }
+
+
+@app.post("/admin/web-access")
+def admin_save_web_access(
+    request: Request,
+    payload: DeviceWebAccessUpdateRequest,
+    x_admin_key: str | None = Header(default=None),
+    x_admin_actor: str | None = Header(default=None),
+) -> dict:
+    cfg = load_config()
+    auth_user = require_admin_access(request, cfg, x_admin_key)
+    saved = save_device_web_access(payload, cfg)
+    add_audit(
+        event_type="web_access_updated",
+        device_id=payload.device_id.strip(),
+        actor=admin_actor_name(x_admin_actor) if x_admin_actor else auth_user,
+        details="speckle_login=" + (payload.speckle_login or "").strip() + "; nextcloud_login=" + (payload.nextcloud_login or "").strip(),
+    )
+    return {
+        "ok": True,
+        "device_id": payload.device_id.strip(),
+        "web_access": saved,
+    }
+
+
+@app.post("/admin/web-access/by-token")
+def admin_save_web_access_by_token(
+    request: Request,
+    payload: TokenWebAccessUpdateRequest,
+    x_admin_key: str | None = Header(default=None),
+    x_admin_actor: str | None = Header(default=None),
+) -> dict:
+    cfg = load_config()
+    auth_user = require_admin_access(request, cfg, x_admin_key)
+    token = payload.token.strip()
+    if not token:
+        raise HTTPException(status_code=400, detail="token is required")
+
+    device_id, issued_to, _ = resolve_device_by_token(token, cfg)
+    if payload.issued_to and not is_human_name_match(payload.issued_to, issued_to):
+        raise HTTPException(
+            status_code=409,
+            detail="Токен не соответствует указанному ФИО. Проверьте данные и повторите попытку.",
+        )
+
+    save_payload = DeviceWebAccessUpdateRequest(
+        device_id=device_id,
+        speckle_url=payload.speckle_url,
+        speckle_login=payload.speckle_login,
+        speckle_password=payload.speckle_password,
+        nextcloud_url=payload.nextcloud_url,
+        nextcloud_login=payload.nextcloud_login,
+        nextcloud_password=payload.nextcloud_password,
+    )
+    saved = save_device_web_access(save_payload, cfg)
+    add_audit(
+        event_type="web_access_updated",
+        device_id=device_id,
+        actor=admin_actor_name(x_admin_actor) if x_admin_actor else auth_user,
+        details="source=token; issued_to="
+        + (issued_to or "").strip()
+        + "; speckle_login="
+        + (payload.speckle_login or "").strip()
+        + "; nextcloud_login="
+        + (payload.nextcloud_login or "").strip(),
+    )
+    return {
+        "ok": True,
+        "device_id": device_id,
+        "issued_to": issued_to or "",
+        "web_access": saved,
+    }
+
+
+@app.delete("/admin/web-access/{device_id}")
+def admin_delete_web_access(
+    request: Request,
+    device_id: str,
+    x_admin_key: str | None = Header(default=None),
+    x_admin_actor: str | None = Header(default=None),
+) -> dict:
+    cfg = load_config()
+    auth_user = require_admin_access(request, cfg, x_admin_key)
+    deleted = delete_device_web_access(device_id)
+    if deleted:
+        add_audit(
+            event_type="web_access_deleted",
+            device_id=device_id,
+            actor=admin_actor_name(x_admin_actor) if x_admin_actor else auth_user,
+            details=None,
+        )
+    return {"ok": True, "device_id": device_id, "deleted": deleted}
 
 
 @app.get("/admin/firm-admins")
@@ -2357,15 +2766,71 @@ def admin_save_tekla_manifest(
 ) -> dict:
     cfg = load_config()
     auth_user = require_firm_admin_access(request, cfg, x_admin_key)
-    manifest = save_local_tekla_firm_manifest(payload)
+    target = normalize_tekla_sync_target(payload.target)
+    manifest = save_local_tekla_manifest(target, payload, cfg)
     actor = admin_actor_name(x_admin_actor) if x_admin_actor else auth_user
     add_audit(
         event_type="tekla_manifest_updated",
         device_id=None,
         actor=actor,
-        details=f"version={manifest.get('version', '')}; revision={manifest.get('revision', '')}",
+        details=(
+            f"target={target}; "
+            f"version={manifest.get('version', '')}; "
+            f"revision={manifest.get('revision', '')}"
+        ),
     )
     return {"ok": True, "manifest": manifest}
+
+
+@app.post("/admin/tekla/manifest/publish")
+def admin_publish_tekla_manifest(
+    payload: TeklaManifestPublishRequest,
+    request: Request,
+    x_admin_key: str | None = Header(default=None),
+    x_admin_actor: str | None = Header(default=None),
+) -> dict:
+    cfg = load_config()
+    auth_user = require_firm_admin_access(request, cfg, x_admin_key)
+    actor = admin_actor_name(x_admin_actor) if x_admin_actor else auth_user
+    target = normalize_tekla_sync_target(payload.target)
+    target_meta = get_tekla_sync_target_meta(target)
+    audit_prefix = target_meta["audit_prefix"]
+
+    if not _tekla_publish_lock.acquire(blocking=False):
+        raise HTTPException(status_code=409, detail="Tekla publish is already in progress")
+
+    add_audit(
+        event_type=f"{audit_prefix}_publish_started",
+        device_id=None,
+        actor=actor,
+        details=f"target={target}; source_path={payload.source_path.strip()}",
+    )
+    try:
+        return publish_tekla_target_from_source(
+            target=target,
+            source_path=payload.source_path,
+            comment=payload.comment,
+            cfg=cfg,
+            actor=actor,
+        )
+    except HTTPException as exc:
+        add_audit(
+            event_type=f"{audit_prefix}_publish_failed",
+            device_id=None,
+            actor=actor,
+            details=f"target={target}; source_path={payload.source_path.strip()}; error={exc.detail}",
+        )
+        raise
+    except Exception as exc:
+        add_audit(
+            event_type=f"{audit_prefix}_publish_failed",
+            device_id=None,
+            actor=actor,
+            details=f"target={target}; source_path={payload.source_path.strip()}; error={str(exc)}",
+        )
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    finally:
+        _tekla_publish_lock.release()
 
 
 @app.get("/admin/audit")
@@ -2419,6 +2884,20 @@ def admin_firm_audit(
         "tekla_firm_publish_blocked_large_files",
         "tekla_firm_publish_rolled_back",
         "tekla_firm_publish_rollback_failed",
+        "tekla_extensions_publish_started",
+        "tekla_extensions_publish_succeeded",
+        "tekla_extensions_publish_failed",
+        "tekla_extensions_publish_skipped",
+        "tekla_extensions_publish_blocked_large_files",
+        "tekla_extensions_publish_rolled_back",
+        "tekla_extensions_publish_rollback_failed",
+        "tekla_libraries_publish_started",
+        "tekla_libraries_publish_succeeded",
+        "tekla_libraries_publish_failed",
+        "tekla_libraries_publish_skipped",
+        "tekla_libraries_publish_blocked_large_files",
+        "tekla_libraries_publish_rolled_back",
+        "tekla_libraries_publish_rollback_failed",
         "tekla_manifest_updated",
     ]
     if include_state:
@@ -2756,7 +3235,7 @@ def admin_logout(request: Request) -> RedirectResponse:
 
 
 @app.get("/admin/ui", response_class=HTMLResponse)
-def admin_ui(request: Request, x_admin_key: str | None = Header(default=None)) -> str:
+def admin_ui(request: Request, x_admin_key: str | None = Header(default=None)):
     cfg = load_config()
     if not ADMIN_UI_PATH.exists():
         raise HTTPException(status_code=404, detail="Admin UI not found")
@@ -2766,8 +3245,11 @@ def admin_ui(request: Request, x_admin_key: str | None = Header(default=None)) -
         next_url = quote("/admin/ui", safe="/")
         return RedirectResponse(url=f"/admin/login?next={next_url}", status_code=303)
 
+    response = HTMLResponse(content=ADMIN_UI_PATH.read_text(encoding="utf-8"))
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    response.headers["Pragma"] = "no-cache"
+
     if not request.cookies.get(ADMIN_SESSION_COOKIE):
-        response = HTMLResponse(content=ADMIN_UI_PATH.read_text(encoding="utf-8"))
         use_secure_cookie = should_use_secure_admin_cookie(request, cfg)
         response.set_cookie(
             key=ADMIN_SESSION_COOKIE,
@@ -2778,9 +3260,8 @@ def admin_ui(request: Request, x_admin_key: str | None = Header(default=None)) -
             secure=use_secure_cookie,
             path="/",
         )
-        return response
 
-    return ADMIN_UI_PATH.read_text(encoding="utf-8")
+    return response
 
 
 @app.get("/ops/ui", response_class=HTMLResponse)

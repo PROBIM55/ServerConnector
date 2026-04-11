@@ -64,9 +64,55 @@ public sealed class SettingsService
             settings.TeklaStandardLocalPath = @"C:\Company\TeklaFirm";
         }
 
-        if (string.IsNullOrWhiteSpace(settings.TeklaPublishSourcePath))
+        if (string.IsNullOrWhiteSpace(settings.TeklaPublishSourcePath) ||
+            string.Equals(settings.TeklaPublishSourcePath, @"\\62.113.36.107\BIM_Models\Tekla\XS_FIRM", StringComparison.OrdinalIgnoreCase))
         {
-            settings.TeklaPublishSourcePath = @"\\62.113.36.107\BIM_Models\Tekla\XS_FIRM";
+            settings.TeklaPublishSourcePath = @"\\62.113.36.107\BIM_Models\Tekla\02_ПАПКА ФИРМЫ\01_XS_FIRM";
+        }
+
+        if (string.IsNullOrWhiteSpace(settings.TeklaExtensionsManifestUrl))
+        {
+            settings.TeklaExtensionsManifestUrl = "https://server.structura-most.ru/updates/tekla/extensions/latest.json";
+        }
+
+        if (string.IsNullOrWhiteSpace(settings.TeklaExtensionsLocalPath))
+        {
+            settings.TeklaExtensionsLocalPath = @"C:\TeklaStructures\2025.0\Environments\common\Extensions";
+        }
+
+        if (string.IsNullOrWhiteSpace(settings.TeklaExtensionsPublishSourcePath) ||
+            string.Equals(settings.TeklaExtensionsPublishSourcePath, @"\\62.113.36.107\BIM_Models\Tekla\Extension", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(settings.TeklaExtensionsPublishSourcePath, @"\\62.113.36.107\BIM_Models\Tekla\Extensions", StringComparison.OrdinalIgnoreCase))
+        {
+            settings.TeklaExtensionsPublishSourcePath = @"\\62.113.36.107\BIM_Models\Tekla\02_ПАПКА ФИРМЫ\07_Extensions";
+        }
+
+        if (string.IsNullOrWhiteSpace(settings.TeklaLibrariesManifestUrl))
+        {
+            settings.TeklaLibrariesManifestUrl = "https://server.structura-most.ru/updates/tekla/libraries/latest.json";
+        }
+
+        if (string.IsNullOrWhiteSpace(settings.TeklaLibrariesLocalPath))
+        {
+            settings.TeklaLibrariesLocalPath = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                "Grasshopper",
+                "Libraries");
+        }
+
+        if (string.IsNullOrWhiteSpace(settings.TeklaLibrariesPublishSourcePath))
+        {
+            settings.TeklaLibrariesPublishSourcePath = @"\\62.113.36.107\BIM_Models\Tekla\02_ПАПКА ФИРМЫ\02_Grasshopper\Libraries\8";
+        }
+
+        if (string.IsNullOrWhiteSpace(settings.StructuraSpeckleUrl))
+        {
+            settings.StructuraSpeckleUrl = "https://speckle.structura-most.ru";
+        }
+
+        if (string.IsNullOrWhiteSpace(settings.StructuraNextcloudUrl))
+        {
+            settings.StructuraNextcloudUrl = "https://cloud.structura-most.ru";
         }
 
         return settings;

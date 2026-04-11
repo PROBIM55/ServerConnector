@@ -1,0 +1,60 @@
+<Window x:Class="Connector.Desktop.UpdateToastWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Structura Connector"
+        Width="360"
+        Height="176"
+        ResizeMode="NoResize"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ShowInTaskbar="False"
+        ShowActivated="False"
+        Topmost="True">
+    <Border CornerRadius="18"
+            Background="#101822"
+            BorderBrush="#2A3E5C"
+            BorderThickness="1"
+            Padding="18">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <TextBlock x:Name="TitleTextBlock"
+                       Text="Structura Connector"
+                       FontFamily="Segoe UI Variable Display"
+                       FontSize="18"
+                       FontWeight="SemiBold"
+                       Foreground="#F5F9FF" />
+
+            <TextBlock x:Name="MessageTextBlock"
+                       Grid.Row="1"
+                       Margin="0,10,0,10"
+                       TextWrapping="Wrap"
+                       FontFamily="Segoe UI Variable Text"
+                       Foreground="#C7D7EB" />
+
+            <WrapPanel Grid.Row="2" HorizontalAlignment="Right">
+                <Button Content="Закрыть"
+                        MinWidth="86"
+                        Margin="0,0,8,0"
+                        Padding="12,7"
+                        Background="#1D2A3D"
+                        BorderBrush="#314864"
+                        Foreground="#D7E6FA"
+                        Click="CloseButton_Click" />
+                <Button Content="Скачать и установить"
+                        MinWidth="154"
+                        Padding="12,7"
+                        Background="#3A7AFE"
+                        BorderBrush="#6EA0FF"
+                        Foreground="White"
+                        FontWeight="SemiBold"
+                        Click="InstallButton_Click" />
+            </WrapPanel>
+        </Grid>
+    </Border>
+</Window>

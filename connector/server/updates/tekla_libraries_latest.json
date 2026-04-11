@@ -1,0 +1,12 @@
+{
+  "target": "libraries",
+  "version": "2026.04.0",
+  "revision": "r1",
+  "published_at": "2026-04-09T00:00:00Z",
+  "target_path": "%APPDATA%\\Grasshopper\\Libraries",
+  "minimum_connector_version": "1.0.0",
+  "repo_url": "https://github.com/Scccoco/tekla-firm-standard.git",
+  "repo_ref": "main",
+  "repo_subdir": "Libraries",
+  "notes": "Reserved manifest for future Tekla libraries sync"
+}

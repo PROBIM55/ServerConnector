@@ -1,0 +1,78 @@
+<Window x:Class="Connector.Desktop.OperationProgressWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Операция"
+        Width="560"
+        Height="330"
+        MinWidth="520"
+        MinHeight="300"
+        ResizeMode="NoResize"
+        WindowStartupLocation="CenterOwner"
+        Background="#0D121A">
+    <Border Padding="16" Background="#0D121A">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <TextBlock x:Name="TitleTextBlock"
+                       Text="Операция выполняется"
+                       FontFamily="Segoe UI Variable Display"
+                       FontWeight="SemiBold"
+                       FontSize="22"
+                       Foreground="#F4F7FB" />
+
+            <TextBlock x:Name="StepTextBlock"
+                       Grid.Row="1"
+                       Margin="0,10,0,0"
+                       FontFamily="Segoe UI Variable Text"
+                       FontWeight="SemiBold"
+                       FontSize="15"
+                       Foreground="#CFE0F5"
+                       TextWrapping="Wrap"
+                       Text="Подготовка" />
+
+            <TextBlock x:Name="DetailTextBlock"
+                       Grid.Row="2"
+                       Margin="0,8,0,0"
+                       FontFamily="Segoe UI Variable Text"
+                       Foreground="#AFC2DB"
+                       TextWrapping="Wrap"
+                       Text="Пожалуйста, подождите" />
+
+            <TextBlock x:Name="EtaTextBlock"
+                       Grid.Row="3"
+                       Margin="0,8,0,10"
+                       FontFamily="Segoe UI Variable Text"
+                       Foreground="#9DB1CC"
+                       Text="Оценка времени: идет расчет" />
+
+            <ProgressBar x:Name="ProgressBar"
+                         Grid.Row="4"
+                         Height="18"
+                         Minimum="0"
+                         Maximum="100"
+                         Value="0"
+                         Foreground="#6BC2FF"
+                         Background="#1B2B40"
+                         BorderBrush="#2B3E57"
+                         BorderThickness="1" />
+
+            <WrapPanel Grid.Row="5" HorizontalAlignment="Right" Margin="0,14,0,0">
+                <Button x:Name="CloseButton"
+                        Content="Скрыть"
+                        MinWidth="130"
+                        Height="38"
+                        Background="#1A2738"
+                        BorderBrush="#324A66"
+                        Foreground="#E3EEFD"
+                        Click="CloseButton_Click" />
+            </WrapPanel>
+        </Grid>
+    </Border>
+</Window>

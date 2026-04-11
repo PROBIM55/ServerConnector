@@ -41,7 +41,7 @@
     .row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
     .row-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
     label { display:block; margin-bottom: 6px; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .05em; }
-    input, textarea {
+    input, textarea, select {
       width: 100%;
       border: 1px solid var(--stroke);
       background: #0c121b;
@@ -50,7 +50,7 @@
       padding: 10px 12px;
       outline: none;
     }
-    input:focus, textarea:focus { border-color: var(--accent); }
+    input:focus, textarea:focus, select:focus { border-color: var(--accent); }
     .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
     button {
       border: 1px solid var(--stroke);
@@ -108,7 +108,7 @@
     .danger-text { color: var(--danger); }
     .mono { font-family: Consolas, monospace; }
     .table-wrap { overflow: auto; max-height: 620px; border-radius: 12px; }
-    table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 1480px; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 1680px; }
     th, td { text-align: left; padding: 9px 8px; border-bottom: 1px solid #203044; vertical-align: top; }
     th { color: var(--muted); font-weight: 600; position: sticky; top: 0; background: #101823; z-index: 1; }
     tr.selected { background: rgba(118, 228, 208, 0.08); }
@@ -188,6 +188,69 @@
       </div>
     </section>
 
+    <section class="card" id="webAccessCard">
+      <h2>Structura web-доступы (ручной ввод)</h2>
+      <div class="sub" style="margin-bottom:10px;">
+        Администратор может вручную указать доступы для Speckle и Nextcloud. Можно сохранить по <span class="mono">device_id</span> или по <span class="mono">token + ФИО</span>.
+      </div>
+      <div class="row-2">
+        <div>
+          <label>Device ID</label>
+          <input id="webDeviceId" placeholder="pc-designer-01" />
+        </div>
+        <div>
+          <label>Token</label>
+          <input id="webToken" class="mono" placeholder="Вставьте токен пользователя" />
+        </div>
+      </div>
+      <div class="row-2" style="margin-top:10px;">
+        <div>
+          <label>ФИО (для проверки при сохранении по токену)</label>
+          <input id="webIssuedTo" placeholder="Иванов Иван Иванович" />
+        </div>
+        <div>
+          <label>Источник данных</label>
+          <input id="webSourceHint" placeholder="Заполнено вручную" />
+        </div>
+      </div>
+      <div class="row-2" style="margin-top:10px;">
+        <div>
+          <label>Speckle URL</label>
+          <input id="webSpeckleUrl" value="https://speckle.structura-most.ru" />
+        </div>
+        <div>
+          <label>Nextcloud URL</label>
+          <input id="webNextcloudUrl" value="https://cloud.structura-most.ru" />
+        </div>
+      </div>
+      <div class="row-2" style="margin-top:10px;">
+        <div>
+          <label>Speckle login email</label>
+          <input id="webSpeckleLogin" placeholder="user@gpsm.ao" />
+        </div>
+        <div>
+          <label>Speckle password</label>
+          <input id="webSpecklePassword" placeholder="Пароль Speckle" />
+        </div>
+      </div>
+      <div class="row-2" style="margin-top:10px;">
+        <div>
+          <label>Nextcloud login</label>
+          <input id="webNextcloudLogin" placeholder="user.login" />
+        </div>
+        <div>
+          <label>Nextcloud password</label>
+          <input id="webNextcloudPassword" placeholder="Пароль Nextcloud" />
+        </div>
+      </div>
+      <div class="actions">
+        <button class="ghost" onclick="prefillWebAccessFromSelected()">Заполнить из выбранной строки</button>
+        <button class="primary" onclick="saveWebAccessByDevice(this)">Сохранить по device_id</button>
+        <button class="primary" onclick="saveWebAccessByToken(this)">Сохранить по token + ФИО</button>
+        <button class="danger" onclick="clearWebAccessForm()">Очистить форму</button>
+      </div>
+    </section>
+
     <section class="card">
       <h2>Токены и устройства</h2>
       <div class="sub" style="margin-bottom:10px;">Одна строка = одно устройство. Здесь же токен, SMB, роли и основные действия.</div>
@@ -198,6 +261,7 @@
               <th>Устройство / пользователь</th>
               <th>Токен</th>
               <th>SMB</th>
+              <th>Structura web</th>
               <th>Состояние</th>
               <th>Tekla admin</th>
               <th>Tekla runtime</th>
@@ -247,6 +311,20 @@
       <div class="sub" id="teklaManifestInfo">Загрузка manifest...</div>
       <div class="row-2" style="margin-top:10px;">
         <div>
+          <label>Что публикуем</label>
+          <select id="teklaTarget" onchange="loadTeklaManifestInfo()">
+            <option value="firm">Папка фирмы</option>
+            <option value="extensions">Пользовательские приложения</option>
+            <option value="libraries">Grasshopper Libraries</option>
+          </select>
+        </div>
+        <div>
+          <label>Repo Subdir</label>
+          <input id="teklaRepoSubdir" placeholder="XS_FIRM" />
+        </div>
+      </div>
+      <div class="row-2" style="margin-top:10px;">
+        <div>
           <label>Версия</label>
           <input id="teklaVersion" placeholder="2026.03.1" />
         </div>
@@ -275,8 +353,19 @@
           <input id="teklaMinConnector" placeholder="1.0.0" />
         </div>
       </div>
+      <div class="row-2" style="margin-top:10px;">
+        <div>
+          <label>Исходная папка для публикации</label>
+          <input id="teklaPublishSourcePath" placeholder="\\62.113.36.107\BIM_Models\Tekla\02_ПАПКА ФИРМЫ\01_XS_FIRM" />
+        </div>
+        <div>
+          <label>Комментарий commit</label>
+          <input id="teklaPublishComment" placeholder="Что изменилось в стандарте" />
+        </div>
+      </div>
       <div class="actions">
-        <button class="primary" onclick="publishTeklaManifest(this)">Опубликовать версию Tekla</button>
+        <button class="primary" onclick="publishTeklaFromSource(this)">Опубликовать в Git</button>
+        <button class="ghost" onclick="saveTeklaManifest(this)">Сохранить manifest вручную</button>
       </div>
     </section>
 
@@ -318,13 +407,35 @@
     const managedPortsInfoEl = document.getElementById('managedPortsInfo');
     const allowPortsEl = document.getElementById('allowPorts');
     const AUTO_REFRESH_MS = 15000;
+    const TEKLA_TARGETS = {
+      firm: {
+        label: 'Папка фирмы',
+        manifestUrl: '/updates/tekla/firm/latest.json',
+        defaultRepoSubdir: 'XS_FIRM',
+        defaultSourcePath: '\\\\62.113.36.107\\BIM_Models\\Tekla\\02_ПАПКА ФИРМЫ\\01_XS_FIRM'
+      },
+      extensions: {
+        label: 'Пользовательские приложения',
+        manifestUrl: '/updates/tekla/extensions/latest.json',
+        defaultRepoSubdir: 'Extensions',
+        defaultSourcePath: '\\\\62.113.36.107\\BIM_Models\\Tekla\\02_ПАПКА ФИРМЫ\\07_Extensions'
+      },
+      libraries: {
+        label: 'Grasshopper Libraries',
+        manifestUrl: '/updates/tekla/libraries/latest.json',
+        defaultRepoSubdir: 'Libraries',
+        defaultSourcePath: '\\\\62.113.36.107\\BIM_Models\\Tekla\\02_ПАПКА ФИРМЫ\\02_Grasshopper\\Libraries\\8'
+      }
+    };
     let autoRefreshId = null;
     let managedPorts = [];
     let selectedDeviceId = '';
     let tokenItemsCache = [];
+    let webAccessDraftFrom = '';
 
     actorEl.value = localStorage.getItem('connector_admin_actor') || '';
     actorEl.addEventListener('change', () => localStorage.setItem('connector_admin_actor', actorEl.value.trim()));
+    clearWebAccessForm();
 
     function fmt(v) {
       if (!v) return '-';
@@ -361,7 +472,113 @@
       document.getElementById('deviceId').value = deviceId || '';
       document.getElementById('issuedTo').value = issuedTo || '';
       selectionInfoEl.textContent = deviceId ? `Выбрано устройство: ${deviceId}` : 'Токен не выбран';
+      if (deviceId) {
+        const selected = tokenItemsCache.find(x => x.device_id === deviceId);
+        if (selected) fillWebAccessFormFromItem(selected, 'Выбрано из таблицы');
+      }
       renderTokenRows(tokenItemsCache);
+    }
+
+    function webField(id) {
+      return document.getElementById(id);
+    }
+
+    function fillWebAccessFormFromItem(item, source = '') {
+      if (!item) return;
+      webField('webDeviceId').value = item.device_id || '';
+      webField('webToken').value = item.token || '';
+      webField('webIssuedTo').value = item.issued_to || '';
+      webField('webSpeckleUrl').value = item.speckle_url || 'https://speckle.structura-most.ru';
+      webField('webSpeckleLogin').value = item.speckle_login || '';
+      webField('webSpecklePassword').value = item.speckle_password || '';
+      webField('webNextcloudUrl').value = item.nextcloud_url || 'https://cloud.structura-most.ru';
+      webField('webNextcloudLogin').value = item.nextcloud_login || '';
+      webField('webNextcloudPassword').value = item.nextcloud_password || '';
+      webAccessDraftFrom = source || 'Выбрано из таблицы';
+      webField('webSourceHint').value = webAccessDraftFrom;
+    }
+
+    function clearWebAccessForm() {
+      webField('webDeviceId').value = '';
+      webField('webToken').value = '';
+      webField('webIssuedTo').value = '';
+      webField('webSpeckleUrl').value = 'https://speckle.structura-most.ru';
+      webField('webSpeckleLogin').value = '';
+      webField('webSpecklePassword').value = '';
+      webField('webNextcloudUrl').value = 'https://cloud.structura-most.ru';
+      webField('webNextcloudLogin').value = '';
+      webField('webNextcloudPassword').value = '';
+      webAccessDraftFrom = '';
+      webField('webSourceHint').value = 'Заполнено вручную';
+      setActionStatus('Форма web-доступов очищена');
+    }
+
+    function prefillWebAccessFromSelected() {
+      if (!selectedDeviceId) {
+        setOutput('Сначала выберите устройство в таблице токенов.');
+        setActionStatus('Ошибка: устройство не выбрано', 'failed');
+        return;
+      }
+      const item = tokenItemsCache.find(x => x.device_id === selectedDeviceId);
+      if (!item) {
+        setOutput('Не удалось найти выбранное устройство в текущем списке.');
+        setActionStatus('Ошибка: запись не найдена', 'failed');
+        return;
+      }
+      fillWebAccessFormFromItem(item, 'Выбрано из таблицы');
+      setActionStatus(`Форма заполнена из строки ${selectedDeviceId}`, 'done');
+      document.getElementById('webAccessCard').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
+    function buildWebAccessPayloadBase() {
+      return {
+        speckle_url: webField('webSpeckleUrl').value.trim() || 'https://speckle.structura-most.ru',
+        speckle_login: webField('webSpeckleLogin').value.trim(),
+        speckle_password: webField('webSpecklePassword').value,
+        nextcloud_url: webField('webNextcloudUrl').value.trim() || 'https://cloud.structura-most.ru',
+        nextcloud_login: webField('webNextcloudLogin').value.trim(),
+        nextcloud_password: webField('webNextcloudPassword').value
+      };
+    }
+
+    async function saveWebAccessByDevice(button) {
+      const deviceId = webField('webDeviceId').value.trim();
+      if (!deviceId) {
+        setOutput('Укажите device_id в форме web-доступов.');
+        setActionStatus('Ошибка: не указан device_id', 'failed');
+        return;
+      }
+      await runWithButtonState(button, 'Сохранение по device_id...', async () => {
+        const payload = { device_id: deviceId, ...buildWebAccessPayloadBase() };
+        const data = await req('/admin/web-access', {
+          method: 'POST',
+          headers: headers(true),
+          body: JSON.stringify(payload)
+        });
+        setOutput(data);
+        await refreshAll(deviceId);
+      });
+    }
+
+    async function saveWebAccessByToken(button) {
+      const token = webField('webToken').value.trim();
+      if (!token) {
+        setOutput('Укажите token в форме web-доступов.');
+        setActionStatus('Ошибка: не указан token', 'failed');
+        return;
+      }
+
+      const issuedTo = webField('webIssuedTo').value.trim();
+      await runWithButtonState(button, 'Сохранение по token...', async () => {
+        const payload = { token, issued_to: issuedTo || null, ...buildWebAccessPayloadBase() };
+        const data = await req('/admin/web-access/by-token', {
+          method: 'POST',
+          headers: headers(true),
+          body: JSON.stringify(payload)
+        });
+        setOutput(data);
+        await refreshAll(data.device_id || selectedDeviceId);
+      });
     }
 
     function actionLabel(eventType) {
@@ -373,15 +590,32 @@
         client_bootstrap: 'Клиент подключен',
         service_restart_tekla: 'Перезапуск Tekla Server',
         service_restart_revit: 'Перезапуск Revit Server',
-        tekla_manifest_updated: 'Обновлен manifest XS_FIRM',
+        tekla_manifest_updated: 'Обновлен manifest Tekla',
         tekla_firm_publish_started: 'Запущена публикация XS_FIRM',
         tekla_firm_publish_succeeded: 'Публикация XS_FIRM завершена',
         tekla_firm_publish_failed: 'Публикация XS_FIRM завершилась ошибкой',
         tekla_firm_publish_skipped: 'Публикация XS_FIRM не потребовалась',
         tekla_firm_publish_blocked_large_files: 'Публикация XS_FIRM заблокирована большими файлами',
         tekla_firm_publish_rolled_back: 'Локальный commit XS_FIRM откатан',
+        tekla_firm_publish_rollback_failed: 'Откат commit XS_FIRM завершился ошибкой',
+        tekla_extensions_publish_started: 'Запущена публикация Extensions',
+        tekla_extensions_publish_succeeded: 'Публикация Extensions завершена',
+        tekla_extensions_publish_failed: 'Публикация Extensions завершилась ошибкой',
+        tekla_extensions_publish_skipped: 'Публикация Extensions не потребовалась',
+        tekla_extensions_publish_blocked_large_files: 'Публикация Extensions заблокирована большими файлами',
+        tekla_extensions_publish_rolled_back: 'Локальный commit Extensions откатан',
+        tekla_extensions_publish_rollback_failed: 'Откат commit Extensions завершился ошибкой',
+        tekla_libraries_publish_started: 'Запущена публикация Libraries',
+        tekla_libraries_publish_succeeded: 'Публикация Libraries завершена',
+        tekla_libraries_publish_failed: 'Публикация Libraries завершилась ошибкой',
+        tekla_libraries_publish_skipped: 'Публикация Libraries не потребовалась',
+        tekla_libraries_publish_blocked_large_files: 'Публикация Libraries заблокирована большими файлами',
+        tekla_libraries_publish_rolled_back: 'Локальный commit Libraries откатан',
+        tekla_libraries_publish_rollback_failed: 'Откат commit Libraries завершился ошибкой',
         firm_admin_granted: 'Назначен admin_firm',
-        firm_admin_revoked: 'Снят admin_firm'
+        firm_admin_revoked: 'Снят admin_firm',
+        web_access_updated: 'Обновлены web-доступы Structura',
+        web_access_deleted: 'Удалены web-доступы Structura'
       };
       return map[eventType] || eventType || '-';
     }
@@ -473,6 +707,16 @@
             <div>pass: ${safe(t.smb_password)}</div>
             <div>${safe(t.smb_share_unc)}</div>
           </div>`;
+        const webBlock = `
+          <div class="secret-box mono">
+            <div>Speckle: ${safe(t.speckle_login || '-')}</div>
+            <div>pass: ${safe(t.speckle_password || '-')}</div>
+            <div>${safe(t.speckle_url || '-')}</div>
+            <div style="margin-top:6px;">Nextcloud: ${safe(t.nextcloud_login || '-')}</div>
+            <div>pass: ${safe(t.nextcloud_password || '-')}</div>
+            <div>${safe(t.nextcloud_url || '-')}</div>
+            <div class="muted-small">обновлено: ${fmt(t.web_access_updated_at)}</div>
+          </div>`;
 
         const deviceIdValue = (t.device_id || '').trim();
         const deviceTitle = deviceIdValue || '<пустой device_id>';
@@ -490,6 +734,7 @@
             <div class="muted-small">${tokenState}</div>
           </td>
           <td>${smbBlock}</td>
+          <td>${webBlock}</td>
           <td>
             <div>${tokenState}</div>
             <div class="muted-small">connector: ${safe(connectorVersion)}</div>
@@ -524,16 +769,30 @@
         firmBtn.textContent = t.is_firm_admin ? 'Снять admin_firm' : 'Назначить admin_firm';
         firmBtn.onclick = (e) => { e.stopPropagation(); toggleFirmAdmin(firmBtn, deviceIdValue, !t.is_firm_admin); };
 
+        const webBtn = document.createElement('button');
+        webBtn.className = 'primary';
+        webBtn.textContent = 'Заполнить web-форму';
+        webBtn.onclick = (e) => { e.stopPropagation(); editWebAccess(webBtn, t); };
+
+        const webDeleteBtn = document.createElement('button');
+        webDeleteBtn.className = 'danger';
+        webDeleteBtn.textContent = 'Очистить web';
+        webDeleteBtn.onclick = (e) => { e.stopPropagation(); deleteWebAccess(webDeleteBtn, deviceIdValue); };
+
         if (!deviceIdValue) {
           rotateBtn.disabled = true;
           deleteBtn.disabled = true;
           firmBtn.disabled = true;
+          webBtn.disabled = true;
+          webDeleteBtn.disabled = true;
           firmBtn.textContent = 'Нет device_id';
         }
 
         actions.appendChild(rotateBtn);
         actions.appendChild(deleteBtn);
         actions.appendChild(firmBtn);
+        actions.appendChild(webBtn);
+        actions.appendChild(webDeleteBtn);
         tbody.appendChild(tr);
       }
     }
@@ -596,6 +855,32 @@
       });
     }
 
+    async function editWebAccess(button, item) {
+      const deviceId = (item.device_id || '').trim();
+      if (!deviceId) {
+        setOutput('Невозможно выполнить действие: пустой device_id.');
+        setActionStatus('Ошибка: пустой device_id', 'failed');
+        return;
+      }
+      fillWebAccessFormFromItem(item, `Заполнено из строки ${deviceId}`);
+      setActionStatus(`Данные для ${deviceId} перенесены в форму ручного ввода`, 'done');
+      document.getElementById('webAccessCard').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
+    async function deleteWebAccess(button, deviceId) {
+      if (!deviceId) {
+        setOutput('Невозможно выполнить действие: пустой device_id.');
+        setActionStatus('Ошибка: пустой device_id', 'failed');
+        return;
+      }
+      if (!confirm(`Очистить web-доступы Structura для устройства ${deviceId}?`)) return;
+      await runWithButtonState(button, 'Очистка web...', async () => {
+        const data = await req(`/admin/web-access/${encodeURIComponent(deviceId)}`, { method: 'DELETE', headers: headers(false) });
+        setOutput(data);
+        await refreshAll(deviceId);
+      });
+    }
+
     async function loadManagedPorts() {
       const data = await req('/admin/network/managed-ports', { headers: headers(false) });
       managedPorts = (data.managed_ports || []).map(x => Number(x)).filter(Number.isInteger);
@@ -645,29 +930,60 @@
     }
 
     async function loadTeklaManifestInfo() {
-      const data = await req('/updates/tekla/firm/latest.json', { headers: headers(false) });
-      document.getElementById('teklaManifestInfo').textContent = `Версия: ${data.version || '-'} | Ревизия: ${data.revision || '-'} | Min Connector: ${data.minimum_connector_version || '-'} | Путь: ${data.target_path || '-'} | Опубликовано: ${fmt(data.published_at)}`;
+      const target = document.getElementById('teklaTarget').value || 'firm';
+      const meta = TEKLA_TARGETS[target] || TEKLA_TARGETS.firm;
+      const data = await req(meta.manifestUrl, { headers: headers(false) });
+      document.getElementById('teklaManifestInfo').textContent = `${meta.label} | Версия: ${data.version || '-'} | Ревизия: ${data.revision || '-'} | Min Connector: ${data.minimum_connector_version || '-'} | Путь: ${data.target_path || '-'} | Опубликовано: ${fmt(data.published_at)}`;
       document.getElementById('teklaVersion').value = data.version || '';
       document.getElementById('teklaRevision').value = data.revision || '';
       document.getElementById('teklaRepoUrl').value = data.repo_url || '';
       document.getElementById('teklaRepoRef').value = data.repo_ref || '';
+      document.getElementById('teklaRepoSubdir').value = data.repo_subdir || meta.defaultRepoSubdir;
       document.getElementById('teklaTargetPath').value = data.target_path || '';
       document.getElementById('teklaMinConnector').value = data.minimum_connector_version || '';
+      const sourcePathEl = document.getElementById('teklaPublishSourcePath');
+      sourcePathEl.value = localStorage.getItem(`tekla_publish_source_${target}`) || meta.defaultSourcePath;
+      document.getElementById('teklaPublishComment').value = '';
     }
 
-    async function publishTeklaManifest(button) {
-      await runWithButtonState(button, 'Публикация...', async () => {
-        const payload = {
-          version: document.getElementById('teklaVersion').value.trim(),
-          revision: document.getElementById('teklaRevision').value.trim(),
-          published_at: new Date().toISOString(),
-          target_path: document.getElementById('teklaTargetPath').value.trim(),
-          minimum_connector_version: document.getElementById('teklaMinConnector').value.trim(),
-          repo_url: document.getElementById('teklaRepoUrl').value.trim(),
-          repo_ref: document.getElementById('teklaRepoRef').value.trim(),
-          notes: 'Updated via admin UI'
-        };
+    function buildTeklaManifestPayload() {
+      return {
+        target: document.getElementById('teklaTarget').value || 'firm',
+        version: document.getElementById('teklaVersion').value.trim(),
+        revision: document.getElementById('teklaRevision').value.trim(),
+        published_at: new Date().toISOString(),
+        target_path: document.getElementById('teklaTargetPath').value.trim(),
+        minimum_connector_version: document.getElementById('teklaMinConnector').value.trim(),
+        repo_url: document.getElementById('teklaRepoUrl').value.trim(),
+        repo_ref: document.getElementById('teklaRepoRef').value.trim(),
+        repo_subdir: document.getElementById('teklaRepoSubdir').value.trim(),
+        notes: 'Updated via admin UI'
+      };
+    }
+
+    async function saveTeklaManifest(button) {
+      await runWithButtonState(button, 'Сохранение manifest...', async () => {
+        const payload = buildTeklaManifestPayload();
         const data = await req('/admin/tekla/manifest', { method: 'POST', headers: headers(true), body: JSON.stringify(payload) });
+        setOutput(data);
+        await loadTeklaManifestInfo();
+      });
+    }
+
+    async function publishTeklaFromSource(button) {
+      await runWithButtonState(button, 'Публикация в Git...', async () => {
+        const target = document.getElementById('teklaTarget').value || 'firm';
+        const sourcePath = document.getElementById('teklaPublishSourcePath').value.trim();
+        const comment = document.getElementById('teklaPublishComment').value.trim();
+        if (!sourcePath) throw new Error('Укажите исходную папку для публикации.');
+        if (!comment) throw new Error('Укажите комментарий commit.');
+        localStorage.setItem(`tekla_publish_source_${target}`, sourcePath);
+        const payload = {
+          target,
+          source_path: sourcePath,
+          comment
+        };
+        const data = await req('/admin/tekla/manifest/publish', { method: 'POST', headers: headers(true), body: JSON.stringify(payload) });
         setOutput(data);
         await loadTeklaManifestInfo();
       });

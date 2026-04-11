@@ -6,5 +6,6 @@
   "minimum_connector_version": "1.0.0",
   "repo_url": "https://github.com/Scccoco/tekla-firm-standard.git",
   "repo_ref": "main",
+  "repo_subdir": "XS_FIRM",
   "notes": "Initial Tekla firm lightweight manifest"
 }
