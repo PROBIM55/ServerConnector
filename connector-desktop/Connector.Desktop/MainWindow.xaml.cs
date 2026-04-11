@@ -45,6 +45,19 @@ public partial class MainWindow : Window
     {
         new()
         {
+            Version = "1.0.14",
+            PublishedAt = "11.04.2026",
+            Title = "Ключевые изменения версии",
+            Changes = new[]
+            {
+                "Обновлена логика синхронизации папок Tekla. Коннектор теперь в любом случае пытается применить обновления для папки фирмы, пользовательских приложений и Grasshopper Libraries, даже если в этот момент запущены Tekla или Rhino",
+                "Если обновление не удалось применить в одной из папок из-за занятых файлов, коннектор останавливает обновление только для этой папки и продолжает проверку остальных разделов",
+                "Сообщения о проблемах стали понятнее. Теперь коннектор отдельно показывает, что именно помешало обновлению: запущенная Tekla, запущенный Rhino или занятый файл, открытый другой программой",
+                "Ручная синхронизация остается доступной для тех случаев, когда часть файлов не удалось обновить автоматически и их нужно подтянуть после закрытия блокирующей программы"
+            }
+        },
+        new()
+        {
             Version = "1.0.13",
             PublishedAt = "11.04.2026",
             Title = "Ключевые изменения версии",
@@ -427,6 +440,18 @@ public partial class MainWindow : Window
 
     private void UpdateTeklaActionButtonUi()
     {
+        if (_teklaCheckInProgress)
+        {
+            const string inProgressText = "Идет синхронизация Tekla...";
+            TeklaCheckButton.Content = inProgressText;
+            TeklaCheckButton.Style = (Style)FindResource("SyncButton");
+            TeklaCheckButton.IsEnabled = true;
+            ConnectorTeklaSyncButton.Content = inProgressText;
+            ConnectorTeklaSyncButton.Style = (Style)FindResource("SyncButton");
+            ConnectorTeklaSyncButton.IsEnabled = true;
+            return;
+        }
+
         var hasUpdate =
             _teklaStandardService.IsUpdateAvailable(_settings.TeklaStandardInstalledRevision, _settings.TeklaStandardTargetRevision) ||
             _teklaStandardService.IsUpdateAvailable(_settings.TeklaExtensionsInstalledRevision, _settings.TeklaExtensionsTargetRevision) ||
@@ -442,10 +467,10 @@ public partial class MainWindow : Window
                 ? "Обновить Tekla сейчас"
                 : "Проверить и синхронизировать Tekla";
         TeklaCheckButton.Style = (Style)FindResource(hasUpdate || hasError ? "SyncButton" : "SecondaryButton");
-        TeklaCheckButton.IsEnabled = !_teklaCheckInProgress;
+        TeklaCheckButton.IsEnabled = true;
         ConnectorTeklaSyncButton.Content = (string)TeklaCheckButton.Content;
         ConnectorTeklaSyncButton.Style = (Style)FindResource(hasUpdate || hasError ? "SyncButton" : "SecondaryButton");
-        ConnectorTeklaSyncButton.IsEnabled = !_teklaCheckInProgress;
+        ConnectorTeklaSyncButton.IsEnabled = true;
     }
 
     private void UpdateStructuraAccessStatusUi()
@@ -585,10 +610,17 @@ public partial class MainWindow : Window
         }
 
         _lastTeklaSyncErrorNotice = noticeKey;
+        var balloonMessage = string.IsNullOrWhiteSpace(message)
+            ? targetName + ": не удалось синхронизировать. Закройте блокирующую программу и повторите синхронизацию."
+            : message;
+        if (balloonMessage.Length > 240)
+        {
+            balloonMessage = balloonMessage[..237] + "...";
+        }
         _trayIcon.ShowBalloonTip(
             5000,
             "Стандарт Tekla",
-            targetName + ": не удалось синхронизировать. Освободите занятые файлы и нажмите \"Повторить синхронизацию\".",
+            balloonMessage,
             Forms.ToolTipIcon.Warning);
     }
 
@@ -1399,7 +1431,7 @@ public partial class MainWindow : Window
 
     private void ShowReleaseNotes_Click(object sender, RoutedEventArgs e)
     {
-        var window = new ReleaseNotesWindow(ReleaseNotes, "1.0.13")
+        var window = new ReleaseNotesWindow(ReleaseNotes, "1.0.14")
         {
             Owner = this
         };
@@ -1464,15 +1496,13 @@ public partial class MainWindow : Window
         }
 
         _teklaCheckInProgress = true;
-        TeklaCheckButton.IsEnabled = false;
-        ConnectorTeklaSyncButton.IsEnabled = false;
+        UpdateTeklaActionButtonUi();
 
         try
         {
             NormalizeTeklaSettings();
             ApplyAndPersistTeklaPathsOnly();
 
-            var teklaRunning = _teklaStandardService.IsTeklaRunning();
             const int totalSteps = 3;
             var currentStep = 0;
 
@@ -1483,7 +1513,7 @@ public partial class MainWindow : Window
                 currentStep,
                 totalSteps,
                 EstimateOperationEta(currentStep, totalSteps));
-            await CheckAndApplyTeklaTargetAsync(CreateFirmTargetState(), ApplyFirmTargetState, forceRefresh, autoApplyIfPossible, teklaRunning, summaryLines, progressReporter);
+            await CheckAndApplyTeklaTargetAsync(CreateFirmTargetState(), ApplyFirmTargetState, forceRefresh, autoApplyIfPossible, summaryLines, progressReporter);
 
             currentStep++;
             progressReporter?.UpdateStep(
@@ -1492,7 +1522,7 @@ public partial class MainWindow : Window
                 currentStep,
                 totalSteps,
                 EstimateOperationEta(currentStep, totalSteps));
-            await CheckAndApplyTeklaTargetAsync(CreateExtensionsTargetState(), ApplyExtensionsTargetState, forceRefresh, autoApplyIfPossible, teklaRunning, summaryLines, progressReporter);
+            await CheckAndApplyTeklaTargetAsync(CreateExtensionsTargetState(), ApplyExtensionsTargetState, forceRefresh, autoApplyIfPossible, summaryLines, progressReporter);
 
             currentStep++;
             progressReporter?.UpdateStep(
@@ -1501,7 +1531,7 @@ public partial class MainWindow : Window
                 currentStep,
                 totalSteps,
                 EstimateOperationEta(currentStep, totalSteps));
-            await CheckAndApplyTeklaTargetAsync(CreateLibrariesTargetState(), ApplyLibrariesTargetState, forceRefresh, autoApplyIfPossible, teklaRunning, summaryLines, progressReporter);
+            await CheckAndApplyTeklaTargetAsync(CreateLibrariesTargetState(), ApplyLibrariesTargetState, forceRefresh, autoApplyIfPossible, summaryLines, progressReporter);
 
             _settingsService.Save(_settings);
             UpdateTeklaUi();
@@ -1530,8 +1560,6 @@ public partial class MainWindow : Window
         finally
         {
             _teklaCheckInProgress = false;
-            TeklaCheckButton.IsEnabled = true;
-            ConnectorTeklaSyncButton.IsEnabled = true;
             UpdateTeklaUi();
         }
 
@@ -1543,7 +1571,6 @@ public partial class MainWindow : Window
         Action<TeklaManagedTargetState> persist,
         bool forceRefresh,
         bool autoApplyIfPossible,
-        bool teklaRunning,
         List<string> summaryLines,
         OperationProgressWindow? progressReporter = null)
     {
@@ -1595,16 +1622,6 @@ public partial class MainWindow : Window
             target.LastError = string.Empty;
             persist(target);
             summaryLines.Add(target.DisplayName + ": доступна ревизия " + target.TargetRevision);
-            return;
-        }
-
-        if (teklaRunning && target.DelayWhenTeklaRunning)
-        {
-            target.PendingAfterClose = true;
-            target.LastError = string.Empty;
-            persist(target);
-            ShowTeklaPendingBalloon(target.TargetRevision);
-            summaryLines.Add(target.DisplayName + ": обновление отложено до закрытия Tekla");
             return;
         }
 
@@ -1997,7 +2014,7 @@ public partial class MainWindow : Window
 
         if (!string.IsNullOrWhiteSpace(_settings.TeklaStandardLastError))
         {
-            return "Папка фирмы: автоматически обновить не удалось. Освободите занятые файлы и нажмите кнопку синхронизации";
+            return _settings.TeklaStandardLastError;
         }
 
         if (_teklaStandardService.IsUpdateAvailable(_settings.TeklaStandardInstalledRevision, _settings.TeklaStandardTargetRevision))
@@ -2030,7 +2047,7 @@ public partial class MainWindow : Window
 
         if (!string.IsNullOrWhiteSpace(_settings.TeklaExtensionsLastError))
         {
-            return "Пользовательские приложения: автоматически обновить не удалось. Освободите занятые файлы и повторите синхронизацию";
+            return _settings.TeklaExtensionsLastError;
         }
 
         if (_teklaStandardService.IsUpdateAvailable(_settings.TeklaExtensionsInstalledRevision, _settings.TeklaExtensionsTargetRevision))
@@ -2063,7 +2080,7 @@ public partial class MainWindow : Window
 
         if (!string.IsNullOrWhiteSpace(_settings.TeklaLibrariesLastError))
         {
-            return "Grasshopper Libraries: автоматически обновить не удалось. Освободите занятые файлы и повторите синхронизацию";
+            return _settings.TeklaLibrariesLastError;
         }
 
         if (_teklaStandardService.IsUpdateAvailable(_settings.TeklaLibrariesInstalledRevision, _settings.TeklaLibrariesTargetRevision))

@@ -79,6 +79,21 @@ public sealed class TeklaStandardService
         }
     }
 
+    public bool IsRhinoRunning()
+    {
+        try
+        {
+            return Process.GetProcessesByName("Rhino").Length > 0 ||
+                   Process.GetProcessesByName("Rhino7").Length > 0 ||
+                   Process.GetProcessesByName("Rhino8").Length > 0 ||
+                   Process.GetProcessesByName("RhinoWIP").Length > 0;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     public async Task<TeklaStandardManifest?> TryGetManifestAsync(string manifestUrl, CancellationToken ct)
     {
         if (!Uri.TryCreate(manifestUrl, UriKind.Absolute, out _))
@@ -188,6 +203,10 @@ public sealed class TeklaStandardService
                 ? $"{request.DisplayName}: применена ревизия {request.TargetRevision}."
                 : $"{request.DisplayName}: добавлены и обновлены управляемые файлы до ревизии {request.TargetRevision}.";
             return TeklaApplyResult.Success(message, request.TargetRevision.Trim());
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return TeklaApplyResult.Fail(BuildFileAccessErrorMessage(request));
         }
         catch (Exception ex)
         {
@@ -400,6 +419,41 @@ public sealed class TeklaStandardService
     {
         var hresult = ex.HResult & 0xFFFF;
         return hresult is 32 or 33 or 80;
+    }
+
+    private string BuildFileAccessErrorMessage(TeklaManagedSyncRequest request)
+    {
+        var teklaRunning = IsTeklaRunning();
+        var rhinoRunning = IsRhinoRunning();
+        var reason = request.TargetKey.Trim().ToLowerInvariant() switch
+        {
+            "libraries" when rhinoRunning =>
+                "Причина: сейчас запущен Rhino, и он удерживает файлы в Libraries.",
+            "libraries" when teklaRunning && rhinoRunning =>
+                "Причина: сейчас запущены Tekla и Rhino, один из них удерживает файлы в Libraries.",
+            "extensions" when teklaRunning && rhinoRunning =>
+                "Причина: сейчас запущены Tekla и Rhino, один из них удерживает файлы в Extensions.",
+            "extensions" when teklaRunning =>
+                "Причина: сейчас запущена Tekla, и она удерживает файлы в Extensions.",
+            "extensions" when rhinoRunning =>
+                "Причина: сейчас запущен Rhino, и он удерживает файлы в Extensions.",
+            "firm" when teklaRunning && rhinoRunning =>
+                "Причина: сейчас запущены Tekla и Rhino, либо один из файлов открыт вручную для редактирования.",
+            "firm" when teklaRunning =>
+                "Причина: сейчас запущена Tekla, либо один из файлов открыт вручную для редактирования.",
+            "firm" when rhinoRunning =>
+                "Причина: сейчас запущен Rhino, либо один из файлов открыт вручную для редактирования.",
+            _ when teklaRunning && rhinoRunning =>
+                "Причина: сейчас запущены Tekla и Rhino, либо файлы заняты другой программой.",
+            _ when teklaRunning =>
+                "Причина: сейчас запущена Tekla, либо файлы заняты другой программой.",
+            _ when rhinoRunning =>
+                "Причина: сейчас запущен Rhino, либо файлы заняты другой программой.",
+            _ =>
+                "Причина: один или несколько файлов заняты другой программой или открыты для редактирования."
+        };
+
+        return request.DisplayName + ": не удалось завершить обновление. " + reason + " Закройте блокирующую программу и повторите синхронизацию вручную.";
     }
 
     private static void TryDeleteTempFile(string tempPath)
