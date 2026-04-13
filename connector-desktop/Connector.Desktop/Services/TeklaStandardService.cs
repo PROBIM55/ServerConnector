@@ -338,14 +338,7 @@ public sealed class TeklaStandardService
                 continue;
             }
 
-            if (destinationEntry is DirectoryInfo destinationDirectory)
-            {
-                destinationDirectory.Delete(recursive: true);
-            }
-            else
-            {
-                destinationEntry.Delete();
-            }
+            DeleteExtraneousEntry(destinationEntry);
         }
     }
 
@@ -408,6 +401,7 @@ public sealed class TeklaStandardService
     {
         if (File.Exists(targetPath))
         {
+            EnsureWritable(new FileInfo(targetPath));
             File.Copy(tempPath, targetPath, overwrite: true);
             return;
         }
@@ -419,6 +413,39 @@ public sealed class TeklaStandardService
     {
         var hresult = ex.HResult & 0xFFFF;
         return hresult is 32 or 33 or 80;
+    }
+
+    private static void DeleteExtraneousEntry(FileSystemInfo entry)
+    {
+        if (entry is DirectoryInfo directory)
+        {
+            ClearReadOnlyAttributesRecursive(directory);
+            directory.Delete(recursive: true);
+            return;
+        }
+
+        EnsureWritable(entry);
+        entry.Delete();
+    }
+
+    private static void ClearReadOnlyAttributesRecursive(DirectoryInfo root)
+    {
+        foreach (var child in root.EnumerateFileSystemInfos("*", SearchOption.AllDirectories))
+        {
+            EnsureWritable(child);
+        }
+
+        EnsureWritable(root);
+    }
+
+    private static void EnsureWritable(FileSystemInfo info)
+    {
+        if ((info.Attributes & FileAttributes.ReadOnly) == 0)
+        {
+            return;
+        }
+
+        info.Attributes &= ~FileAttributes.ReadOnly;
     }
 
     private string BuildFileAccessErrorMessage(TeklaManagedSyncRequest request)
