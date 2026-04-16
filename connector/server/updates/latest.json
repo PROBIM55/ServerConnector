@@ -1,5 +1,5 @@
 {
-  "version": "1.0.1",
-  "msiUrl": "https://server.structura-most.ru/updates/files/Connector.Desktop.Setup.msi",
-  "notes": "Базовый релиз Structura Connector"
+  "version": "1.0.20",
+  "msiUrl": "https://github.com/PROBIM55/ServerConnector/releases/download/v1.0.20/Connector.Desktop.Setup.msi",
+  "notes": "## Что нового в 1.0.20\n\n- Исправлена установка обновления поверх предыдущей версии\n- Устранена проблема, при которой после неудачного обновления коннектор мог перестать запускаться\n- Повышена надежность установки новой версии"
 }
