@@ -9,6 +9,8 @@ $publishDir = Join-Path $root 'publish'
 $outputDir = Join-Path $root 'artifacts'
 $bundledGitDir = Join-Path $root 'Connector.Desktop\tools\git'
 $ensureGitScript = Join-Path $root 'scripts\ensure_bundled_git.ps1'
+$publishGitDir = Join-Path $publishDir 'tools\git'
+$publishGitBundle = Join-Path $publishDir 'git-bundle.zip'
 
 function Invoke-ExternalCommand {
     param(
@@ -47,6 +49,27 @@ New-Item -ItemType Directory -Path $outputDir -Force | Out-Null
 
 Invoke-ExternalCommand -Description 'dotnet publish' -Command {
     dotnet publish $appProj -c Release -r win-x64 -p:PublishSingleFile=false -p:SelfContained=true -o $publishDir
+}
+
+if (-not (Test-Path $publishGitDir)) {
+    throw "Bundled git was not published to $publishGitDir"
+}
+
+if (Test-Path $publishGitBundle) {
+    Remove-Item -Path $publishGitBundle -Force
+}
+
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+[System.IO.Compression.ZipFile]::CreateFromDirectory(
+    $publishGitDir,
+    $publishGitBundle,
+    [System.IO.Compression.CompressionLevel]::Optimal,
+    $false)
+
+Remove-Item -Path $publishGitDir -Recurse -Force
+$publishToolsDir = Join-Path $publishDir 'tools'
+if ((Test-Path $publishToolsDir) -and -not (Get-ChildItem $publishToolsDir -Force | Select-Object -First 1)) {
+    Remove-Item -Path $publishToolsDir -Force
 }
 
 Invoke-ExternalCommand -Description 'dotnet build' -Command {

@@ -41,28 +41,64 @@ public partial class MainWindow : Window
     private readonly DispatcherTimer _updateTimer = new();
     private readonly DispatcherTimer _teklaSyncTimer = new();
     private readonly Forms.NotifyIcon _trayIcon;
-        private static readonly IReadOnlyList<ReleaseNoteItem> ReleaseNotes = new List<ReleaseNoteItem>
+    private static readonly IReadOnlyList<ReleaseNoteItem> ReleaseNotes = new List<ReleaseNoteItem>
+    {
+        new()
         {
-            new()
+            Version = "1.0.19",
+            PublishedAt = "16.04.2026",
+            Title = "Ключевые изменения версии",
+            Changes = new[]
             {
-                Version = "1.0.16",
-                PublishedAt = "16.04.2026",
-                Title = "Ключевые изменения версии",
-                Changes = new[]
-                {
-                    "Повышена стабильность синхронизации папки фирмы, пользовательских приложений и Grasshopper Libraries",
-                    "Коннектор корректнее восстанавливает локальные данные синхронизации и повторно получает обновления с сервера",
-                    "Улучшена надежность применения обновлений на рабочем компьютере пользователя"
-                }
-            },
-            new()
+                "Коннектор теперь понятнее показывает, какой именно файл не удалось обновить и какой процесс, вероятнее всего, его блокирует",
+                "Сообщения об ошибках синхронизации выводятся не только в журнал, но и в окно приложения",
+                "Проверка обновлений Tekla Sync выполняется чаще, чтобы изменения у пользователей подтягивались быстрее"
+            }
+        },
+        new()
+        {
+            Version = "1.0.18",
+            PublishedAt = "16.04.2026",
+            Title = "Ключевые изменения версии",
+            Changes = new[]
             {
-                Version = "1.0.15",
-                PublishedAt = "13.04.2026",
-                Title = "Ключевые изменения версии",
-                Changes = new[]
-                {
-                    "Исправлена синхронизация папки фирмы после изменения структуры файлов в Git",
+                "Исправлена установка встроенного git в Connector",
+                "Если встроенный git отсутствует после установки, коннектор теперь сам восстанавливает его из локального пакета",
+                "Повышена надежность первой синхронизации на новом рабочем компьютере"
+            }
+        },
+        new()
+        {
+            Version = "1.0.17",
+            PublishedAt = "16.04.2026",
+            Title = "Ключевые изменения версии",
+            Changes = new[]
+            {
+                "Повышена надежность синхронизации папки фирмы, пользовательских приложений и Grasshopper Libraries",
+                "Коннектор корректнее восстанавливает локальные данные синхронизации после сбоев",
+                "Улучшена диагностика ошибок при применении обновлений на рабочем компьютере пользователя"
+            }
+        },
+        new()
+        {
+            Version = "1.0.16",
+            PublishedAt = "16.04.2026",
+            Title = "Ключевые изменения версии",
+            Changes = new[]
+            {
+                "Повышена стабильность синхронизации папки фирмы, пользовательских приложений и Grasshopper Libraries",
+                "Коннектор корректнее восстанавливает локальные данные синхронизации и повторно получает обновления с сервера",
+                "Улучшена надежность применения обновлений на рабочем компьютере пользователя"
+            }
+        },
+        new()
+        {
+            Version = "1.0.15",
+            PublishedAt = "13.04.2026",
+            Title = "Ключевые изменения версии",
+            Changes = new[]
+            {
+                "Исправлена синхронизация папки фирмы после изменения структуры файлов в Git",
                 "Для папки фирмы сохранен строгий режим: лишние файлы удаляются, нужные файлы обновляются по эталону",
                 "Повышена стабильность применения обновлений: корректно обрабатываются файлы и папки с атрибутом ReadOnly"
             }
@@ -117,8 +153,8 @@ public partial class MainWindow : Window
     private bool _teklaBalloonShown;
     private bool _serverConnectionFailed;
     private string _lastTeklaSyncErrorNotice = string.Empty;
-    private static readonly TimeSpan UpdateCheckInterval = TimeSpan.FromMinutes(30);
-    private static readonly TimeSpan TeklaSyncCheckInterval = TimeSpan.FromMinutes(5);
+    private static readonly TimeSpan UpdateCheckInterval = TimeSpan.FromMinutes(10);
+    private static readonly TimeSpan TeklaSyncCheckInterval = TimeSpan.FromMinutes(2);
 
     private sealed class TeklaManagedTargetState
     {
@@ -134,6 +170,7 @@ public partial class MainWindow : Window
         public DateTimeOffset? LastSuccessUtc { get; set; }
         public bool PendingAfterClose { get; set; }
         public string LastError { get; set; } = "";
+        public string LastTechnicalError { get; set; } = "";
         public string RepoUrl { get; set; } = "";
         public string RepoRef { get; set; } = "";
         public string RepoSubdir { get; set; } = "";
@@ -647,6 +684,18 @@ public partial class MainWindow : Window
             "Стандарт Tekla",
             balloonMessage,
             Forms.ToolTipIcon.Warning);
+
+        if (IsVisible && WindowState != WindowState.Minimized)
+        {
+            ThemedDialogs.Show(
+                this,
+                string.IsNullOrWhiteSpace(message)
+                    ? targetName + ": не удалось синхронизировать. Закройте блокирующую программу и повторите синхронизацию."
+                    : message,
+                "Не удалось обновить: " + targetName,
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+        }
     }
 
     private void HideToTray()
@@ -880,6 +929,7 @@ public partial class MainWindow : Window
             TeklaStandardLastSuccessUtc = _settings.TeklaStandardLastSuccessUtc,
             TeklaStandardPendingAfterClose = _settings.TeklaStandardPendingAfterClose,
             TeklaStandardLastError = _settings.TeklaStandardLastError,
+            TeklaStandardLastTechnicalError = _settings.TeklaStandardLastTechnicalError,
             TeklaStandardRepoUrl = _settings.TeklaStandardRepoUrl,
             TeklaStandardRepoRef = _settings.TeklaStandardRepoRef,
             TeklaStandardRepoSubdir = _settings.TeklaStandardRepoSubdir,
@@ -894,6 +944,7 @@ public partial class MainWindow : Window
             TeklaExtensionsLastSuccessUtc = _settings.TeklaExtensionsLastSuccessUtc,
             TeklaExtensionsPendingAfterClose = _settings.TeklaExtensionsPendingAfterClose,
             TeklaExtensionsLastError = _settings.TeklaExtensionsLastError,
+            TeklaExtensionsLastTechnicalError = _settings.TeklaExtensionsLastTechnicalError,
             TeklaExtensionsRepoUrl = _settings.TeklaExtensionsRepoUrl,
             TeklaExtensionsRepoRef = _settings.TeklaExtensionsRepoRef,
             TeklaExtensionsRepoSubdir = _settings.TeklaExtensionsRepoSubdir,
@@ -908,6 +959,7 @@ public partial class MainWindow : Window
             TeklaLibrariesLastSuccessUtc = _settings.TeklaLibrariesLastSuccessUtc,
             TeklaLibrariesPendingAfterClose = _settings.TeklaLibrariesPendingAfterClose,
             TeklaLibrariesLastError = _settings.TeklaLibrariesLastError,
+            TeklaLibrariesLastTechnicalError = _settings.TeklaLibrariesLastTechnicalError,
             TeklaLibrariesRepoUrl = _settings.TeklaLibrariesRepoUrl,
             TeklaLibrariesRepoRef = _settings.TeklaLibrariesRepoRef,
             TeklaLibrariesRepoSubdir = _settings.TeklaLibrariesRepoSubdir,
@@ -1242,6 +1294,7 @@ public partial class MainWindow : Window
             TeklaStandardLastSuccessUtc = _settings.TeklaStandardLastSuccessUtc,
             TeklaStandardPendingAfterClose = _settings.TeklaStandardPendingAfterClose,
             TeklaStandardLastError = _settings.TeklaStandardLastError,
+            TeklaStandardLastTechnicalError = _settings.TeklaStandardLastTechnicalError,
             TeklaStandardRepoUrl = _settings.TeklaStandardRepoUrl,
             TeklaStandardRepoRef = _settings.TeklaStandardRepoRef,
             TeklaStandardRepoSubdir = _settings.TeklaStandardRepoSubdir,
@@ -1262,6 +1315,7 @@ public partial class MainWindow : Window
             TeklaExtensionsLastSuccessUtc = _settings.TeklaExtensionsLastSuccessUtc,
             TeklaExtensionsPendingAfterClose = _settings.TeklaExtensionsPendingAfterClose,
             TeklaExtensionsLastError = _settings.TeklaExtensionsLastError,
+            TeklaExtensionsLastTechnicalError = _settings.TeklaExtensionsLastTechnicalError,
             TeklaExtensionsRepoUrl = _settings.TeklaExtensionsRepoUrl,
             TeklaExtensionsRepoRef = _settings.TeklaExtensionsRepoRef,
             TeklaExtensionsRepoSubdir = _settings.TeklaExtensionsRepoSubdir,
@@ -1282,6 +1336,7 @@ public partial class MainWindow : Window
             TeklaLibrariesLastSuccessUtc = _settings.TeklaLibrariesLastSuccessUtc,
             TeklaLibrariesPendingAfterClose = _settings.TeklaLibrariesPendingAfterClose,
             TeklaLibrariesLastError = _settings.TeklaLibrariesLastError,
+            TeklaLibrariesLastTechnicalError = _settings.TeklaLibrariesLastTechnicalError,
             TeklaLibrariesRepoUrl = _settings.TeklaLibrariesRepoUrl,
             TeklaLibrariesRepoRef = _settings.TeklaLibrariesRepoRef,
             TeklaLibrariesRepoSubdir = _settings.TeklaLibrariesRepoSubdir,
@@ -1456,7 +1511,7 @@ public partial class MainWindow : Window
 
     private void ShowReleaseNotes_Click(object sender, RoutedEventArgs e)
     {
-        var window = new ReleaseNotesWindow(ReleaseNotes, "1.0.16")
+        var window = new ReleaseNotesWindow(ReleaseNotes, "1.0.19")
         {
             Owner = this
         };
@@ -1566,7 +1621,12 @@ public partial class MainWindow : Window
                 var message = summaryLines.Count == 0
                     ? "Проверка Tekla sync завершена"
                     : string.Join(Environment.NewLine, summaryLines);
-                ThemedDialogs.Show(this, message, "Стандарт Tekla", MessageBoxButton.OK, MessageBoxImage.Information);
+                ThemedDialogs.Show(
+                    this,
+                    message,
+                    HasTeklaSyncErrors() ? "Стандарт Tekla: есть ошибки" : "Стандарт Tekla",
+                    MessageBoxButton.OK,
+                    HasTeklaSyncErrors() ? MessageBoxImage.Warning : MessageBoxImage.Information);
             }
         }
         catch (Exception ex)
@@ -1574,9 +1634,13 @@ public partial class MainWindow : Window
             _settings.TeklaStandardLastError = ex.Message;
             _settings.TeklaExtensionsLastError = ex.Message;
             _settings.TeklaLibrariesLastError = ex.Message;
+            _settings.TeklaStandardLastTechnicalError = ex.ToString();
+            _settings.TeklaExtensionsLastTechnicalError = ex.ToString();
+            _settings.TeklaLibrariesLastTechnicalError = ex.ToString();
             _settingsService.Save(_settings);
             summaryLines.Add("Синхронизация завершилась с ошибкой: " + ex.Message);
             AppendLog("Ошибка проверки Tekla sync: " + ex.Message);
+            AppendLog("Технические детали Tekla sync: " + ex);
             if (showDialogs)
             {
                 ThemedDialogs.Show(this, ex.Message, "Стандарт Tekla", MessageBoxButton.OK, MessageBoxImage.Error);
@@ -1612,9 +1676,11 @@ public partial class MainWindow : Window
             target.TargetVersion = string.Empty;
             target.TargetRevision = string.Empty;
             target.LastError = "manifest_not_received";
+            target.LastTechnicalError = "Не удалось получить manifest по адресу: " + target.ManifestUrl;
             target.PendingAfterClose = false;
             persist(target);
             summaryLines.Add(target.DisplayName + ": данные обновления недоступны");
+            AppendLog(target.DisplayName + ": технические детали: " + target.LastTechnicalError);
             return;
         }
 
@@ -1629,6 +1695,7 @@ public partial class MainWindow : Window
         {
             target.PendingAfterClose = false;
             target.LastError = string.Empty;
+            target.LastTechnicalError = string.Empty;
             _lastTeklaSyncErrorNotice = string.Empty;
             persist(target);
             if (target.Key == "firm")
@@ -1645,6 +1712,7 @@ public partial class MainWindow : Window
         {
             target.PendingAfterClose = false;
             target.LastError = string.Empty;
+            target.LastTechnicalError = string.Empty;
             persist(target);
             summaryLines.Add(target.DisplayName + ": доступна ревизия " + target.TargetRevision);
             return;
@@ -1672,6 +1740,7 @@ public partial class MainWindow : Window
             target.LastSuccessUtc = DateTimeOffset.UtcNow;
             target.PendingAfterClose = false;
             target.LastError = string.Empty;
+            target.LastTechnicalError = string.Empty;
             _lastTeklaSyncErrorNotice = string.Empty;
             if (target.Key == "firm")
             {
@@ -1683,13 +1752,18 @@ public partial class MainWindow : Window
         }
 
         target.LastError = applyResult.Message;
+        target.LastTechnicalError = applyResult.TechnicalDetails;
         target.PendingAfterClose = false;
         persist(target);
+        if (!string.IsNullOrWhiteSpace(applyResult.TechnicalDetails))
+        {
+            AppendLog(applyResult.TechnicalDetails);
+        }
         if (autoApplyIfPossible && !string.IsNullOrWhiteSpace(applyResult.Message))
         {
             ShowTeklaSyncFailedBalloon(target.DisplayName, applyResult.Message);
         }
-        summaryLines.Add(target.DisplayName + ": ошибка применения");
+        summaryLines.Add(applyResult.Message);
     }
 
     private async void TeklaUpdateAction_Click(object sender, RoutedEventArgs e)
@@ -1716,9 +1790,17 @@ public partial class MainWindow : Window
                 autoApplyIfPossible: true,
                 progressReporter: progressWindow);
 
-            progressWindow.MarkSucceeded(summaryLines.Count == 0
+            var resultText = summaryLines.Count == 0
                 ? "Синхронизация завершена"
-                : string.Join(Environment.NewLine, summaryLines));
+                : string.Join(Environment.NewLine, summaryLines);
+            if (HasTeklaSyncErrors())
+            {
+                progressWindow.MarkFailed(resultText);
+            }
+            else
+            {
+                progressWindow.MarkSucceeded(resultText);
+            }
         }
         catch (Exception ex)
         {
@@ -1915,6 +1997,7 @@ public partial class MainWindow : Window
             LastSuccessUtc = _settings.TeklaStandardLastSuccessUtc,
             PendingAfterClose = _settings.TeklaStandardPendingAfterClose,
             LastError = _settings.TeklaStandardLastError,
+            LastTechnicalError = _settings.TeklaStandardLastTechnicalError,
             RepoUrl = _settings.TeklaStandardRepoUrl,
             RepoRef = _settings.TeklaStandardRepoRef,
             RepoSubdir = _settings.TeklaStandardRepoSubdir,
@@ -1935,6 +2018,7 @@ public partial class MainWindow : Window
         _settings.TeklaStandardLastSuccessUtc = target.LastSuccessUtc;
         _settings.TeklaStandardPendingAfterClose = target.PendingAfterClose;
         _settings.TeklaStandardLastError = target.LastError;
+        _settings.TeklaStandardLastTechnicalError = target.LastTechnicalError;
         _settings.TeklaStandardRepoUrl = target.RepoUrl;
         _settings.TeklaStandardRepoRef = target.RepoRef;
         _settings.TeklaStandardRepoSubdir = target.RepoSubdir;
@@ -1957,6 +2041,7 @@ public partial class MainWindow : Window
             LastSuccessUtc = _settings.TeklaExtensionsLastSuccessUtc,
             PendingAfterClose = _settings.TeklaExtensionsPendingAfterClose,
             LastError = _settings.TeklaExtensionsLastError,
+            LastTechnicalError = _settings.TeklaExtensionsLastTechnicalError,
             RepoUrl = _settings.TeklaExtensionsRepoUrl,
             RepoRef = _settings.TeklaExtensionsRepoRef,
             RepoSubdir = _settings.TeklaExtensionsRepoSubdir,
@@ -1977,6 +2062,7 @@ public partial class MainWindow : Window
         _settings.TeklaExtensionsLastSuccessUtc = target.LastSuccessUtc;
         _settings.TeklaExtensionsPendingAfterClose = target.PendingAfterClose;
         _settings.TeklaExtensionsLastError = target.LastError;
+        _settings.TeklaExtensionsLastTechnicalError = target.LastTechnicalError;
         _settings.TeklaExtensionsRepoUrl = target.RepoUrl;
         _settings.TeklaExtensionsRepoRef = target.RepoRef;
         _settings.TeklaExtensionsRepoSubdir = target.RepoSubdir;
@@ -1999,6 +2085,7 @@ public partial class MainWindow : Window
             LastSuccessUtc = _settings.TeklaLibrariesLastSuccessUtc,
             PendingAfterClose = _settings.TeklaLibrariesPendingAfterClose,
             LastError = _settings.TeklaLibrariesLastError,
+            LastTechnicalError = _settings.TeklaLibrariesLastTechnicalError,
             RepoUrl = _settings.TeklaLibrariesRepoUrl,
             RepoRef = _settings.TeklaLibrariesRepoRef,
             RepoSubdir = _settings.TeklaLibrariesRepoSubdir,
@@ -2019,6 +2106,7 @@ public partial class MainWindow : Window
         _settings.TeklaLibrariesLastSuccessUtc = target.LastSuccessUtc;
         _settings.TeklaLibrariesPendingAfterClose = target.PendingAfterClose;
         _settings.TeklaLibrariesLastError = target.LastError;
+        _settings.TeklaLibrariesLastTechnicalError = target.LastTechnicalError;
         _settings.TeklaLibrariesRepoUrl = target.RepoUrl;
         _settings.TeklaLibrariesRepoRef = target.RepoRef;
         _settings.TeklaLibrariesRepoSubdir = target.RepoSubdir;
@@ -2135,6 +2223,13 @@ public partial class MainWindow : Window
         }
 
         return string.Empty;
+    }
+
+    private bool HasTeklaSyncErrors()
+    {
+        return !string.IsNullOrWhiteSpace(_settings.TeklaStandardLastError) ||
+               !string.IsNullOrWhiteSpace(_settings.TeklaExtensionsLastError) ||
+               !string.IsNullOrWhiteSpace(_settings.TeklaLibrariesLastError);
     }
 
     private static string GetTeklaTargetDisplayName(string target)

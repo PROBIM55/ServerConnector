@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.IO;
+using System.IO.Compression;
 using System.Net.Http;
 using System.Text.Json;
 
@@ -9,7 +10,10 @@ public sealed class TeklaStandardService
 {
     private const int FileCopyBufferBytes = 1024 * 1024;
     private const int FileCopyMaxAttempts = 3;
+    private const string GitBundleFileName = "git-bundle.zip";
+    private static readonly object GitBootstrapGate = new();
     private readonly HttpClient _http;
+    private readonly string _bundledGitRoot;
     private readonly string _managedSyncRoot;
 
     public TeklaStandardService(HttpClient http)
@@ -18,6 +22,7 @@ public sealed class TeklaStandardService
         var root = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ConnectorAgentDesktop");
         Directory.CreateDirectory(root);
         LogFilePath = Path.Combine(root, "tekla-standard.log");
+        _bundledGitRoot = Path.Combine(root, "bundled-tools", "git");
         _managedSyncRoot = Path.Combine(root, "managed-sync");
         Directory.CreateDirectory(_managedSyncRoot);
     }
@@ -26,14 +31,17 @@ public sealed class TeklaStandardService
 
     public string ResolveGitExecutable()
     {
-        var baseDir = AppContext.BaseDirectory;
-        var candidates = new[]
+        foreach (var candidate in EnumerateGitExecutableCandidates())
         {
-            Path.Combine(baseDir, "tools", "git", "bin", "git.exe"),
-            Path.Combine(baseDir, "tools", "git", "cmd", "git.exe")
-        };
+            if (File.Exists(candidate))
+            {
+                return candidate;
+            }
+        }
 
-        foreach (var candidate in candidates)
+        TryEnsureBundledGitExtracted();
+
+        foreach (var candidate in EnumerateGitExecutableCandidates())
         {
             if (File.Exists(candidate))
             {
@@ -51,7 +59,8 @@ public sealed class TeklaStandardService
 
         if (string.IsNullOrWhiteSpace(gitPath))
         {
-            details = "Встроенный git не найден. Ожидается tools\\git\\bin\\git.exe или tools\\git\\cmd\\git.exe";
+            details = "Встроенный git не найден. Проверены папка приложения и локальный кэш восстановления. " +
+                      "Ожидается архив " + Path.Combine(AppContext.BaseDirectory, GitBundleFileName);
             return false;
         }
 
@@ -180,10 +189,11 @@ public sealed class TeklaStandardService
             return TeklaApplyResult.Fail("В manifest отсутствует repo_ref для обновления через git.");
         }
 
-        var gitExe = ResolveGitExecutable();
-        if (string.IsNullOrWhiteSpace(gitExe))
+        if (!CheckGitAvailability(out var gitExe, out var gitDetails))
         {
-            return TeklaApplyResult.Fail("Встроенный git не найден в каталоге приложения (tools\\git). Обновите Connector.");
+            return TeklaApplyResult.Fail(
+                "Не удалось подготовить встроенный git для синхронизации. Переустановите Connector.",
+                gitDetails);
         }
 
         if (!TryRunGit(gitExe, "--version", Path.GetTempPath(), out var versionOut, out var versionErr))
@@ -192,13 +202,58 @@ public sealed class TeklaStandardService
             return TeklaApplyResult.Fail("Git недоступен: " + reason);
         }
 
+        AppendLog($"{request.DisplayName}: начинаем применение ревизии {request.TargetRevision} в '{request.LocalPath}'.");
+
         try
         {
             Directory.CreateDirectory(request.LocalPath);
-            var worktreePath = EnsureManagedWorktree(gitExe, request);
-            var sourcePath = ResolveManagedSourcePath(worktreePath, request.RepoSubdir);
-            SyncDirectoryContents(sourcePath, request.LocalPath, request.Mode == TeklaManagedSyncMode.Strict);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            var details = BuildTechnicalFailureDetails(request, "prepare-local-path", ex);
+            AppendLog(details);
+            return TeklaApplyResult.Fail(BuildFileAccessErrorMessage(request, ex), details);
+        }
+        catch (Exception ex)
+        {
+            var details = BuildTechnicalFailureDetails(request, "prepare-local-path", ex);
+            AppendLog(details);
+            return TeklaApplyResult.Fail("Не удалось подготовить локальную папку для синхронизации.", details);
+        }
 
+        string worktreePath;
+        try
+        {
+            worktreePath = EnsureManagedWorktree(gitExe, request);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            var details = BuildTechnicalFailureDetails(request, "prepare-staging", ex);
+            AppendLog(details);
+            return TeklaApplyResult.Fail(BuildFileAccessErrorMessage(request, ex), details);
+        }
+        catch (Exception ex)
+        {
+            var details = BuildTechnicalFailureDetails(request, "prepare-staging", ex);
+            AppendLog(details);
+            return TeklaApplyResult.Fail("Не удалось подготовить локальные данные синхронизации.", details);
+        }
+
+        string sourcePath;
+        try
+        {
+            sourcePath = ResolveManagedSourcePath(worktreePath, request.RepoSubdir);
+        }
+        catch (Exception ex)
+        {
+            var details = BuildTechnicalFailureDetails(request, "resolve-source", ex);
+            AppendLog(details);
+            return TeklaApplyResult.Fail("Не удалось найти ожидаемые файлы обновления в локальном кэше.", details);
+        }
+
+        try
+        {
+            SyncDirectoryContents(sourcePath, request.LocalPath, request.Mode == TeklaManagedSyncMode.Strict);
             var message = request.Mode == TeklaManagedSyncMode.Strict
                 ? $"{request.DisplayName}: применена ревизия {request.TargetRevision}."
                 : $"{request.DisplayName}: добавлены и обновлены управляемые файлы до ревизии {request.TargetRevision}.";
@@ -206,11 +261,15 @@ public sealed class TeklaStandardService
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            return TeklaApplyResult.Fail(BuildFileAccessErrorMessage(request));
+            var details = BuildTechnicalFailureDetails(request, "sync-files", ex);
+            AppendLog(details);
+            return TeklaApplyResult.Fail(BuildFileAccessErrorMessage(request, ex), details);
         }
         catch (Exception ex)
         {
-            return TeklaApplyResult.Fail("Не удалось применить обновление: " + ex.Message);
+            var details = BuildTechnicalFailureDetails(request, "sync-files", ex);
+            AppendLog(details);
+            return TeklaApplyResult.Fail("Не удалось применить обновление на локальный компьютер.", details);
         }
     }
 
@@ -229,19 +288,19 @@ public sealed class TeklaStandardService
 
         if (worktreeExists && !Directory.Exists(gitDir))
         {
-            Directory.Delete(worktreePath, recursive: true);
+            DeleteDirectorySafely(worktreePath);
             worktreeExists = false;
         }
 
         if (worktreeExists && !RepositoryLooksHealthy(gitExe, worktreePath))
         {
-            Directory.Delete(worktreePath, recursive: true);
+            DeleteDirectorySafely(worktreePath);
             worktreeExists = false;
         }
 
         if (worktreeExists && !RepositoryOriginMatches(gitExe, worktreePath, request.RepoUrl))
         {
-            Directory.Delete(worktreePath, recursive: true);
+            DeleteDirectorySafely(worktreePath);
             worktreeExists = false;
         }
 
@@ -256,6 +315,10 @@ public sealed class TeklaStandardService
             Directory.CreateDirectory(parent);
             if (!TryRunGit(gitExe, $"clone {QuoteArgument(request.RepoUrl)} {QuoteArgument(worktreePath)}", parent, out var cloneOut, out var cloneErr))
             {
+                if (Directory.Exists(worktreePath))
+                {
+                    DeleteDirectorySafely(worktreePath);
+                }
                 var reason = string.IsNullOrWhiteSpace(cloneErr) ? cloneOut : cloneErr;
                 throw new InvalidOperationException("Не удалось клонировать репозиторий: " + reason);
             }
@@ -392,9 +455,7 @@ public sealed class TeklaStandardService
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
                 TryDeleteTempFile(tempPath);
-                throw new IOException(
-                    $"Не удалось обновить файл '{relativePath}'. Возможно, он открыт в Tekla, Grasshopper или другой программе. Закройте файл и повторите синхронизацию.",
-                    ex);
+                throw BuildManagedFileAccessException(relativePath, targetPath, ex);
             }
             finally
             {
@@ -454,39 +515,209 @@ public sealed class TeklaStandardService
         info.Attributes &= ~FileAttributes.ReadOnly;
     }
 
-    private string BuildFileAccessErrorMessage(TeklaManagedSyncRequest request)
+    private string BuildFileAccessErrorMessage(TeklaManagedSyncRequest request, Exception? exception = null)
     {
+        if (exception is ManagedSyncFileAccessException fileAccessException)
+        {
+            var processPart = fileAccessException.LikelyBlockingProcesses.Count > 0
+                ? " Вероятно, файл удерживает процесс: " + string.Join(", ", fileAccessException.LikelyBlockingProcesses) + "."
+                : " Вероятно, файл удерживает другая запущенная программа.";
+
+            return request.DisplayName +
+                   ": не удалось обновить файл '" + fileAccessException.RelativePath + "'." +
+                   Environment.NewLine +
+                   "Путь: " + fileAccessException.FullPath + "." +
+                   processPart +
+                   " Закройте блокирующую программу и повторите синхронизацию.";
+        }
+
         var teklaRunning = IsTeklaRunning();
         var rhinoRunning = IsRhinoRunning();
         var reason = request.TargetKey.Trim().ToLowerInvariant() switch
         {
             "libraries" when rhinoRunning =>
-                "Причина: сейчас запущен Rhino, и он удерживает файлы в Libraries.",
+                "Вероятная причина: сейчас запущен Rhino, и он может удерживать файлы в Libraries.",
             "libraries" when teklaRunning && rhinoRunning =>
-                "Причина: сейчас запущены Tekla и Rhino, один из них удерживает файлы в Libraries.",
+                "Вероятная причина: сейчас запущены Tekla и Rhino, один из них может удерживать файлы в Libraries.",
             "extensions" when teklaRunning && rhinoRunning =>
-                "Причина: сейчас запущены Tekla и Rhino, один из них удерживает файлы в Extensions.",
+                "Вероятная причина: сейчас запущены Tekla и Rhino, один из них может удерживать файлы в Extensions.",
             "extensions" when teklaRunning =>
-                "Причина: сейчас запущена Tekla, и она удерживает файлы в Extensions.",
+                "Вероятная причина: сейчас запущена Tekla, и она может удерживать файлы в Extensions.",
             "extensions" when rhinoRunning =>
-                "Причина: сейчас запущен Rhino, и он удерживает файлы в Extensions.",
+                "Вероятная причина: сейчас запущен Rhino, и он может удерживать файлы в Extensions.",
             "firm" when teklaRunning && rhinoRunning =>
-                "Причина: сейчас запущены Tekla и Rhino, либо один из файлов открыт вручную для редактирования.",
+                "Вероятная причина: сейчас запущены Tekla и Rhino, либо один из файлов открыт вручную для редактирования.",
             "firm" when teklaRunning =>
-                "Причина: сейчас запущена Tekla, либо один из файлов открыт вручную для редактирования.",
+                "Вероятная причина: сейчас запущена Tekla, либо один из файлов открыт вручную для редактирования.",
             "firm" when rhinoRunning =>
-                "Причина: сейчас запущен Rhino, либо один из файлов открыт вручную для редактирования.",
+                "Вероятная причина: сейчас запущен Rhino, либо один из файлов открыт вручную для редактирования.",
             _ when teklaRunning && rhinoRunning =>
-                "Причина: сейчас запущены Tekla и Rhino, либо файлы заняты другой программой.",
+                "Вероятная причина: сейчас запущены Tekla и Rhino, либо файлы заняты другой программой.",
             _ when teklaRunning =>
-                "Причина: сейчас запущена Tekla, либо файлы заняты другой программой.",
+                "Вероятная причина: сейчас запущена Tekla, либо файлы заняты другой программой.",
             _ when rhinoRunning =>
-                "Причина: сейчас запущен Rhino, либо файлы заняты другой программой.",
+                "Вероятная причина: сейчас запущен Rhino, либо файлы заняты другой программой.",
             _ =>
-                "Причина: один или несколько файлов заняты другой программой или открыты для редактирования."
+                "Вероятная причина: один или несколько файлов заняты другой программой или открыты для редактирования."
         };
 
         return request.DisplayName + ": не удалось завершить обновление. " + reason + " Закройте блокирующую программу и повторите синхронизацию вручную.";
+    }
+
+    private static void DeleteDirectorySafely(string path)
+    {
+        if (!Directory.Exists(path))
+        {
+            return;
+        }
+
+        ClearReadOnlyAttributesRecursive(new DirectoryInfo(path));
+        Directory.Delete(path, recursive: true);
+    }
+
+    private static string BuildTechnicalFailureDetails(TeklaManagedSyncRequest request, string stage, Exception ex)
+    {
+        var fileAccessDetails = ex is ManagedSyncFileAccessException fileAccessException
+            ? $" BlockedFile={fileAccessException.FullPath}; LikelyBlockingProcess={string.Join(", ", fileAccessException.LikelyBlockingProcesses)};"
+            : string.Empty;
+        return $"{request.DisplayName}: техническая ошибка на шаге '{stage}'. " +
+               $"TargetKey={request.TargetKey}; LocalPath={request.LocalPath}; RepoUrl={request.RepoUrl}; RepoRef={request.RepoRef}; RepoSubdir={request.RepoSubdir}; " +
+               $"{fileAccessDetails} {ex.GetType().Name}: {ex.Message}";
+    }
+
+    private static ManagedSyncFileAccessException BuildManagedFileAccessException(string relativePath, string targetPath, Exception innerException)
+    {
+        var likelyProcesses = DetectLikelyBlockingProcesses(relativePath, targetPath);
+        var processHint = likelyProcesses.Count > 0
+            ? " Вероятно, файл удерживает процесс: " + string.Join(", ", likelyProcesses) + "."
+            : string.Empty;
+
+        return new ManagedSyncFileAccessException(
+            relativePath,
+            targetPath,
+            likelyProcesses,
+            "Не удалось обновить файл '" + relativePath + "'." +
+            " Путь: " + targetPath + "." +
+            processHint +
+            " Закройте блокирующую программу и повторите синхронизацию.",
+            innerException);
+    }
+
+    private static IReadOnlyList<string> DetectLikelyBlockingProcesses(string relativePath, string targetPath)
+    {
+        var processes = new List<string>();
+        var extension = Path.GetExtension(targetPath).ToLowerInvariant();
+        var normalizedPath = targetPath.ToLowerInvariant();
+        var relativeLower = relativePath.ToLowerInvariant();
+
+        void AddIfRunning(string processName, string label)
+        {
+            try
+            {
+                if (Process.GetProcessesByName(processName).Length > 0 &&
+                    !processes.Contains(label, StringComparer.OrdinalIgnoreCase))
+                {
+                    processes.Add(label);
+                }
+            }
+            catch
+            {
+                // Ignore process detection failures and keep fallback messaging.
+            }
+        }
+
+        var pointsToLibraries =
+            normalizedPath.Contains(@"\grasshopper\libraries\") ||
+            relativeLower.EndsWith(".gha", StringComparison.OrdinalIgnoreCase) ||
+            relativeLower.EndsWith(".ghpy", StringComparison.OrdinalIgnoreCase);
+        var pointsToExtensions = normalizedPath.Contains(@"\environments\common\extensions\");
+
+        if (pointsToLibraries || extension is ".gha" or ".ghpy")
+        {
+            AddIfRunning("Rhino", "Rhino.exe");
+            AddIfRunning("Rhino7", "Rhino7.exe");
+            AddIfRunning("Rhino8", "Rhino8.exe");
+            AddIfRunning("RhinoWIP", "RhinoWIP.exe");
+        }
+
+        if (pointsToExtensions || normalizedPath.Contains(@"\teklafirm\") || extension is ".dll" or ".inp" or ".uel")
+        {
+            AddIfRunning("TeklaStructures", "TeklaStructures.exe");
+        }
+
+        return processes;
+    }
+
+    private IEnumerable<string> EnumerateGitExecutableCandidates()
+    {
+        var baseDir = AppContext.BaseDirectory;
+        yield return Path.Combine(baseDir, "tools", "git", "bin", "git.exe");
+        yield return Path.Combine(baseDir, "tools", "git", "cmd", "git.exe");
+        yield return Path.Combine(_bundledGitRoot, "bin", "git.exe");
+        yield return Path.Combine(_bundledGitRoot, "cmd", "git.exe");
+    }
+
+    private void TryEnsureBundledGitExtracted()
+    {
+        var bundlePath = Path.Combine(AppContext.BaseDirectory, GitBundleFileName);
+        if (!File.Exists(bundlePath))
+        {
+            return;
+        }
+
+        lock (GitBootstrapGate)
+        {
+            foreach (var candidate in EnumerateGitExecutableCandidates())
+            {
+                if (File.Exists(candidate))
+                {
+                    return;
+                }
+            }
+
+            var parentDir = Path.GetDirectoryName(_bundledGitRoot);
+            if (string.IsNullOrWhiteSpace(parentDir))
+            {
+                return;
+            }
+
+            var tempExtractRoot = Path.Combine(parentDir, "git.extract-" + Guid.NewGuid().ToString("N"));
+            try
+            {
+                Directory.CreateDirectory(parentDir);
+                ZipFile.ExtractToDirectory(bundlePath, tempExtractRoot, overwriteFiles: true);
+
+                var extractedBin = Path.Combine(tempExtractRoot, "bin", "git.exe");
+                var extractedCmd = Path.Combine(tempExtractRoot, "cmd", "git.exe");
+                if (!File.Exists(extractedBin) && !File.Exists(extractedCmd))
+                {
+                    throw new InvalidDataException("Архив встроенного git распакован, но git.exe не найден.");
+                }
+
+                if (Directory.Exists(_bundledGitRoot))
+                {
+                    DeleteDirectorySafely(_bundledGitRoot);
+                }
+
+                Directory.Move(tempExtractRoot, _bundledGitRoot);
+                AppendLog("Встроенный git восстановлен из локального архива.");
+            }
+            catch (Exception ex)
+            {
+                AppendLog("Не удалось восстановить встроенный git из локального архива: " + ex.Message);
+                try
+                {
+                    if (Directory.Exists(tempExtractRoot))
+                    {
+                        DeleteDirectorySafely(tempExtractRoot);
+                    }
+                }
+                catch
+                {
+                    // Best-effort cleanup.
+                }
+            }
+        }
     }
 
     private static void TryDeleteTempFile(string tempPath)
@@ -654,6 +885,7 @@ public sealed class TeklaApplyResult
     public bool IsSuccess { get; init; }
     public string Message { get; init; } = "";
     public string InstalledRevision { get; init; } = "";
+    public string TechnicalDetails { get; init; } = "";
 
     public static TeklaApplyResult Success(string message, string installedRevision) => new()
     {
@@ -662,9 +894,32 @@ public sealed class TeklaApplyResult
         InstalledRevision = installedRevision
     };
 
-    public static TeklaApplyResult Fail(string message) => new()
+    public static TeklaApplyResult Fail(string message, string technicalDetails = "") => new()
     {
         IsSuccess = false,
-        Message = message
+        Message = message,
+        TechnicalDetails = technicalDetails
     };
+}
+
+public sealed class ManagedSyncFileAccessException : IOException
+{
+    public ManagedSyncFileAccessException(
+        string relativePath,
+        string fullPath,
+        IReadOnlyList<string> likelyBlockingProcesses,
+        string message,
+        Exception innerException)
+        : base(message, innerException)
+    {
+        RelativePath = relativePath;
+        FullPath = fullPath;
+        LikelyBlockingProcesses = likelyBlockingProcesses;
+    }
+
+    public string RelativePath { get; }
+
+    public string FullPath { get; }
+
+    public IReadOnlyList<string> LikelyBlockingProcesses { get; }
 }

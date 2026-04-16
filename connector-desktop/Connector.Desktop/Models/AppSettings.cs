@@ -21,6 +21,7 @@ public sealed class AppSettings
     public DateTimeOffset? TeklaStandardLastSuccessUtc { get; set; }
     public bool TeklaStandardPendingAfterClose { get; set; }
     public string TeklaStandardLastError { get; set; } = "";
+    public string TeklaStandardLastTechnicalError { get; set; } = "";
     public string TeklaStandardRepoUrl { get; set; } = "";
     public string TeklaStandardRepoRef { get; set; } = "";
     public string TeklaStandardRepoSubdir { get; set; } = "";
@@ -35,6 +36,7 @@ public sealed class AppSettings
     public DateTimeOffset? TeklaExtensionsLastSuccessUtc { get; set; }
     public bool TeklaExtensionsPendingAfterClose { get; set; }
     public string TeklaExtensionsLastError { get; set; } = "";
+    public string TeklaExtensionsLastTechnicalError { get; set; } = "";
     public string TeklaExtensionsRepoUrl { get; set; } = "";
     public string TeklaExtensionsRepoRef { get; set; } = "";
     public string TeklaExtensionsRepoSubdir { get; set; } = "";
@@ -49,6 +51,7 @@ public sealed class AppSettings
     public DateTimeOffset? TeklaLibrariesLastSuccessUtc { get; set; }
     public bool TeklaLibrariesPendingAfterClose { get; set; }
     public string TeklaLibrariesLastError { get; set; } = "";
+    public string TeklaLibrariesLastTechnicalError { get; set; } = "";
     public string TeklaLibrariesRepoUrl { get; set; } = "";
     public string TeklaLibrariesRepoRef { get; set; } = "";
     public string TeklaLibrariesRepoSubdir { get; set; } = "";
