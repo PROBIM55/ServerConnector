@@ -5,7 +5,7 @@
   "published_at": "2026-04-09T00:00:00Z",
   "target_path": "C:\\TeklaStructures\\2025.0\\Environments\\common\\Extensions",
   "minimum_connector_version": "1.0.0",
-  "repo_url": "https://github.com/Scccoco/tekla-firm-standard.git",
+  "repo_url": "https://github.com/PROBIM55/tekla-firm-standard.git",
   "repo_ref": "main",
   "repo_subdir": "Extensions",
   "notes": "Initial Tekla extensions manifest"

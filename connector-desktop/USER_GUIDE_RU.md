@@ -15,7 +15,7 @@
 
 Источник дистрибутива:
 
-- `https://github.com/Scccoco/ServerConnector/releases`
+- `https://github.com/PROBIM55/ServerConnector/releases`
 
 Файл установки:
 
