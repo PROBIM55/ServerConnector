@@ -45,6 +45,18 @@ public partial class MainWindow : Window
     {
         new()
         {
+            Version = "1.0.20",
+            PublishedAt = "16.04.2026",
+            Title = "Ключевые изменения версии",
+            Changes = new[]
+            {
+                "Исправлен сценарий обновления Connector поверх установленной предыдущей версии",
+                "Устранена проблема, из-за которой после неудачного обновления приложение могло перестать запускаться",
+                "Выпуск предназначен для ручной установки и проверки"
+            }
+        },
+        new()
+        {
             Version = "1.0.19",
             PublishedAt = "16.04.2026",
             Title = "Ключевые изменения версии",
@@ -1511,7 +1523,7 @@ public partial class MainWindow : Window
 
     private void ShowReleaseNotes_Click(object sender, RoutedEventArgs e)
     {
-        var window = new ReleaseNotesWindow(ReleaseNotes, "1.0.19")
+        var window = new ReleaseNotesWindow(ReleaseNotes, "1.0.20")
         {
             Owner = this
         };

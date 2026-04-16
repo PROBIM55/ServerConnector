@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Net.Http;
 using System.Reflection;
+using System.Text;
 using System.Text.Json;
 
 namespace Connector.Desktop.Services;
@@ -73,11 +74,37 @@ public sealed class UpdateService
 
     public static void RunInstaller(string msiPath)
     {
-        var psi = new ProcessStartInfo("msiexec.exe")
+        var currentProcessId = Environment.ProcessId;
+        var escapedMsiPath = msiPath.Replace("'", "''");
+        var launcherScriptPath = Path.Combine(
+            Path.GetTempPath(),
+            "StructuraConnectorInstall_" + Guid.NewGuid().ToString("N") + ".ps1");
+
+        var launcherScript = string.Join(Environment.NewLine, new[]
+        {
+            "$pidToWait = " + currentProcessId,
+            "$msiPath = '" + escapedMsiPath + "'",
+            "$scriptPath = $MyInvocation.MyCommand.Path",
+            "",
+            "try {",
+            "    Wait-Process -Id $pidToWait -Timeout 60 -ErrorAction SilentlyContinue",
+            "} catch {",
+            "}",
+            "",
+            "Start-Sleep -Milliseconds 700",
+            "Start-Process -FilePath 'msiexec.exe' -Verb RunAs -ArgumentList ('/i \"' + $msiPath + '\"')",
+            "Start-Sleep -Seconds 2",
+            "Remove-Item -LiteralPath $scriptPath -Force -ErrorAction SilentlyContinue",
+            ""
+        });
+
+        File.WriteAllText(launcherScriptPath, launcherScript, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+
+        var psi = new ProcessStartInfo("powershell.exe")
         {
             UseShellExecute = true,
-            Verb = "runas",
-            Arguments = $"/i \"{msiPath}\""
+            WindowStyle = ProcessWindowStyle.Hidden,
+            Arguments = $"-NoProfile -ExecutionPolicy Bypass -File \"{launcherScriptPath}\""
         };
         Process.Start(psi);
     }
