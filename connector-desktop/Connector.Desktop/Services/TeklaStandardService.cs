@@ -233,6 +233,12 @@ public sealed class TeklaStandardService
             worktreeExists = false;
         }
 
+        if (worktreeExists && !RepositoryLooksHealthy(gitExe, worktreePath))
+        {
+            Directory.Delete(worktreePath, recursive: true);
+            worktreeExists = false;
+        }
+
         if (worktreeExists && !RepositoryOriginMatches(gitExe, worktreePath, request.RepoUrl))
         {
             Directory.Delete(worktreePath, recursive: true);
@@ -511,6 +517,19 @@ public sealed class TeklaStandardService
             StringComparison.OrdinalIgnoreCase);
     }
 
+    private static bool RepositoryLooksHealthy(string gitExe, string worktreePath)
+    {
+        if (!TryRunGit(gitExe, "rev-parse --is-inside-work-tree", worktreePath, out var stdout, out _))
+        {
+            return false;
+        }
+
+        return string.Equals(
+            (stdout ?? string.Empty).Trim(),
+            "true",
+            StringComparison.OrdinalIgnoreCase);
+    }
+
     private static string NormalizeTargetKey(string value)
     {
         var chars = value
@@ -574,8 +593,11 @@ public sealed class TeklaStandardService
                 return false;
             }
 
-            stdout = process.StandardOutput.ReadToEnd();
-            stderr = process.StandardError.ReadToEnd();
+            var stdoutTask = process.StandardOutput.ReadToEndAsync();
+            var stderrTask = process.StandardError.ReadToEndAsync();
+            Task.WhenAll(stdoutTask, stderrTask).GetAwaiter().GetResult();
+            stdout = stdoutTask.GetAwaiter().GetResult();
+            stderr = stderrTask.GetAwaiter().GetResult();
             process.WaitForExit();
             return process.ExitCode == 0;
         }

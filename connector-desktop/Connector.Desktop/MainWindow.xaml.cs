@@ -41,16 +41,28 @@ public partial class MainWindow : Window
     private readonly DispatcherTimer _updateTimer = new();
     private readonly DispatcherTimer _teklaSyncTimer = new();
     private readonly Forms.NotifyIcon _trayIcon;
-    private static readonly IReadOnlyList<ReleaseNoteItem> ReleaseNotes = new List<ReleaseNoteItem>
-    {
-        new()
+        private static readonly IReadOnlyList<ReleaseNoteItem> ReleaseNotes = new List<ReleaseNoteItem>
         {
-            Version = "1.0.15",
-            PublishedAt = "13.04.2026",
-            Title = "Ключевые изменения версии",
-            Changes = new[]
+            new()
             {
-                "Исправлена синхронизация папки фирмы после изменения структуры файлов в Git",
+                Version = "1.0.16",
+                PublishedAt = "16.04.2026",
+                Title = "Ключевые изменения версии",
+                Changes = new[]
+                {
+                    "Повышена стабильность синхронизации папки фирмы, пользовательских приложений и Grasshopper Libraries",
+                    "Коннектор корректнее восстанавливает локальные данные синхронизации и повторно получает обновления с сервера",
+                    "Улучшена надежность применения обновлений на рабочем компьютере пользователя"
+                }
+            },
+            new()
+            {
+                Version = "1.0.15",
+                PublishedAt = "13.04.2026",
+                Title = "Ключевые изменения версии",
+                Changes = new[]
+                {
+                    "Исправлена синхронизация папки фирмы после изменения структуры файлов в Git",
                 "Для папки фирмы сохранен строгий режим: лишние файлы удаляются, нужные файлы обновляются по эталону",
                 "Повышена стабильность применения обновлений: корректно обрабатываются файлы и папки с атрибутом ReadOnly"
             }
@@ -1444,7 +1456,7 @@ public partial class MainWindow : Window
 
     private void ShowReleaseNotes_Click(object sender, RoutedEventArgs e)
     {
-        var window = new ReleaseNotesWindow(ReleaseNotes, "1.0.15")
+        var window = new ReleaseNotesWindow(ReleaseNotes, "1.0.16")
         {
             Owner = this
         };
