@@ -26,6 +26,31 @@ if (-not (Test-Path $logsDir)) {
     New-Item -ItemType Directory -Path $logsDir -Force | Out-Null
 }
 
+# Загружаем переопределения из C:\Connector\runtime\.env (если файл есть).
+# Формат: KEY=value на строку, пустые строки и `#`-комментарии игнорируются.
+# Используется для секретов и runtime-only-настроек, которых нет в репо
+# (например, CONNECTOR_DB_URL для подключения к PostgreSQL после миграции
+# с SQLite). .env файл создаётся вручную при cutover'е.
+$envFile = Join-Path $runtimeDir '.env'
+if (Test-Path $envFile) {
+    Get-Content $envFile | ForEach-Object {
+        $line = $_.Trim()
+        if ($line -and -not $line.StartsWith('#')) {
+            $eq = $line.IndexOf('=')
+            if ($eq -gt 0) {
+                $key = $line.Substring(0, $eq).Trim()
+                $val = $line.Substring($eq + 1).Trim()
+                # Strip surrounding quotes if present
+                if (($val.StartsWith('"') -and $val.EndsWith('"')) -or
+                    ($val.StartsWith("'") -and $val.EndsWith("'"))) {
+                    $val = $val.Substring(1, $val.Length - 2)
+                }
+                Set-Item -Path "Env:$key" -Value $val
+            }
+        }
+    }
+}
+
 if (-not $env:CONNECTOR_CONFIG_PATH) {
     $env:CONNECTOR_CONFIG_PATH = Join-Path $runtimeDir 'config.json'
 }
@@ -33,7 +58,16 @@ if (-not $env:CONNECTOR_DB_PATH) {
     $env:CONNECTOR_DB_PATH = Join-Path $runtimeDir 'connector.db'
 }
 
-"[$(Get-Date -Format s)] runner start (cfg=$env:CONNECTOR_CONFIG_PATH db=$env:CONNECTOR_DB_PATH)" |
+# Логируем что разрешилось для DB. CONNECTOR_DB_URL имеет приоритет если
+# выставлен (через .env) — иначе app.py фолбэчится на SQLite по
+# CONNECTOR_DB_PATH. URL логируем с маской пароля.
+$dbUrlForLog = if ($env:CONNECTOR_DB_URL) {
+    $env:CONNECTOR_DB_URL -replace '(://[^:/@]+):[^@]+@', '$1:***@'
+} else {
+    "sqlite:$env:CONNECTOR_DB_PATH"
+}
+
+"[$(Get-Date -Format s)] runner start (cfg=$env:CONNECTOR_CONFIG_PATH db=$dbUrlForLog)" |
     Add-Content -Path $runnerLog
 
 # Останавливаем уже запущенные uvicorn app:app, чтобы избежать дубликатов на 8080.
