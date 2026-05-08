@@ -33,6 +33,40 @@ def _runtime_path(env_var: str, default: Path) -> Path:
 
 CONFIG_PATH = _runtime_path("CONNECTOR_CONFIG_PATH", BASE_DIR / "config.json")
 DB_PATH = _runtime_path("CONNECTOR_DB_PATH", BASE_DIR / "connector.db")
+
+
+def _detect_git_sha() -> str:
+    """Read git SHA without depending on the git binary (safer for SYSTEM-run task)."""
+    try:
+        for parent in [BASE_DIR, *BASE_DIR.parents]:
+            git_dir = parent / ".git"
+            if git_dir.is_dir():
+                head = (git_dir / "HEAD").read_text(encoding="utf-8").strip()
+                if head.startswith("ref: "):
+                    ref_path = git_dir / head[5:]
+                    if ref_path.exists():
+                        return ref_path.read_text(encoding="utf-8").strip()
+                    packed = git_dir / "packed-refs"
+                    if packed.exists():
+                        target_ref = head[5:]
+                        for line in packed.read_text(encoding="utf-8").splitlines():
+                            line = line.strip()
+                            if not line or line.startswith("#") or line.startswith("^"):
+                                continue
+                            sha, _, ref = line.partition(" ")
+                            if ref == target_ref:
+                                return sha
+                else:
+                    return head
+                break
+    except Exception:
+        pass
+    return "unknown"
+
+
+_GIT_SHA = _detect_git_sha()
+_GIT_SHA_SHORT = _GIT_SHA[:8] if _GIT_SHA != "unknown" else "unknown"
+_DEPLOYED_AT = datetime.now(timezone.utc).isoformat()
 FW_SCRIPT = BASE_DIR / "firewall_manager.ps1"
 SMB_SCRIPT = BASE_DIR / "smb_user_manager.ps1"
 ADMIN_UI_PATH = BASE_DIR / "admin_ui.html"
@@ -2040,7 +2074,21 @@ def startup() -> None:
 
 @app.get("/health")
 def health() -> dict:
-    return {"ok": True}
+    return {"ok": True, "version": _GIT_SHA_SHORT}
+
+
+@app.get("/admin/version")
+def admin_version(
+    request: Request,
+    x_admin_key: str | None = Header(default=None),
+) -> dict:
+    cfg = load_config()
+    require_admin_access(request, cfg, x_admin_key)
+    return {
+        "git_sha": _GIT_SHA,
+        "git_sha_short": _GIT_SHA_SHORT,
+        "deployed_at": _DEPLOYED_AT,
+    }
 
 
 @app.get("/updates/latest.json")

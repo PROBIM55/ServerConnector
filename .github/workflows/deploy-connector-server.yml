@@ -1,0 +1,32 @@
+name: Deploy Connector Server
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - "connector/server/**"
+      - "scripts/server_deploy_step.ps1"
+      - ".github/workflows/deploy-connector-server.yml"
+  workflow_dispatch:
+
+# Один деплой за раз; не отменять текущий если пришёл новый push.
+concurrency:
+  group: deploy-connector-server
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Pull + migrate + restart
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Run remote deploy via SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          port: ${{ secrets.DEPLOY_PORT }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          command_timeout: 8m
+          script: |
+            powershell -NoProfile -ExecutionPolicy Bypass -File C:\Connector\src\scripts\server_deploy_step.ps1 -CommitSha "${{ github.sha }}"
