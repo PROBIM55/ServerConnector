@@ -1,4 +1,5 @@
 import json
+import os
 import secrets
 import hashlib
 import ipaddress
@@ -23,8 +24,15 @@ from pydantic import BaseModel
 
 
 BASE_DIR = Path(__file__).resolve().parent
-CONFIG_PATH = BASE_DIR / "config.json"
-DB_PATH = BASE_DIR / "connector.db"
+
+
+def _runtime_path(env_var: str, default: Path) -> Path:
+    raw = os.environ.get(env_var, "").strip()
+    return Path(raw).resolve() if raw else default
+
+
+CONFIG_PATH = _runtime_path("CONNECTOR_CONFIG_PATH", BASE_DIR / "config.json")
+DB_PATH = _runtime_path("CONNECTOR_DB_PATH", BASE_DIR / "connector.db")
 FW_SCRIPT = BASE_DIR / "firewall_manager.ps1"
 SMB_SCRIPT = BASE_DIR / "smb_user_manager.ps1"
 ADMIN_UI_PATH = BASE_DIR / "admin_ui.html"
