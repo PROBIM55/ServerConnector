@@ -1,3 +1,9 @@
+# =============================================================================
+# DEPRECATED 2026-05-08 — захардкожен на старую раскладку C:\Connector\server.
+# Заменён scripts/server_deploy_step.ps1, который понимает новую раскладку
+# C:\Connector\src\ + C:\Connector\runtime\. Не использовать.
+# =============================================================================
+
 $ErrorActionPreference = 'Stop'
 
 $serverDir = 'C:\Connector\server'

@@ -70,14 +70,41 @@ Managed firewall ports: `80, 443, 445, 1238, 3389`.
 
 > ⚠️ **Caddy fallback на 8090 пустой.** В `Caddyfile`: `server.structura-most.ru/` (всё, что не матчит специфичные маршруты) → `127.0.0.1:8090`. Сейчас на 8090 никто не слушает (PlatformServerApp не запущен или crashed). Для всех Connector-маршрутов (`/admin*`, `/health`, `/connect/*`, `/heartbeat`, `/updates/*`, `/devices`, `/ops*`) это безопасно — они идут на 8080. Но для не-Connector-путей будет 502. Если увидишь репорт «server.structura-most.ru возвращает 502» — это про Platform, не про Connector.
 
-## 4. Релиз-флоу desktop
+## 4. Релиз-флоу
 
-1. Локально собрать MSI: `powershell -NoProfile -ExecutionPolicy Bypass -File "connector-desktop/build_msi.ps1"`
+### 4a. Desktop клиент (MSI)
+
+Триггер — push семвер-тега `v*` в `master`.
+
+1. Локально собрать MSI (опционально, для проверки): `powershell -NoProfile -ExecutionPolicy Bypass -File "connector-desktop/build_msi.ps1"`
 2. Закоммитить изменения.
 3. `git tag vX.Y.Z`
 4. `git push origin master vX.Y.Z`
-5. GitHub Actions (`.github/workflows/release-connector-desktop.yml`) собирает MSI и публикует Release.
-6. При необходимости обновить server-side кэш: `POST /admin/updates/refresh`.
+5. GitHub Actions (`.github/workflows/release-connector-desktop.yml`) подменяет версию в `Connector.Desktop.csproj` и `Package.wxs`, собирает MSI, публикует GitHub Release с asset'ом, и POST'ит на `/admin/updates/refresh` чтобы сервер сразу подхватил новую версию.
+
+### 4b. Серверный код (`connector/server/`)
+
+Триггер — push в `master` с changes в `connector/server/**`, `scripts/server_deploy_step.ps1` или сам workflow.
+
+1. Локально внести изменения, прогнать `pytest` в `connector/server/` (опционально, CI всё равно прогонит).
+2. **DB schema changes:** добавить нумерованную миграцию в `connector/server/migrations/<NNNN>_<name>.sql`. Никаких `CREATE TABLE`/`ALTER TABLE` напрямую в `app.py`.
+3. `git push origin master`.
+4. GitHub Actions (`.github/workflows/deploy-connector-server.yml`):
+   - Job **`test`**: setup Python 3.11, ставит `requirements-dev.txt`, гоняет `pytest -v`. Без green test'а deploy не пускается.
+   - Job **`deploy`** (нужен test): SSH на `62.113.36.107` под `opwork_admin`, запускает `C:\Connector\src\scripts\server_deploy_step.ps1 -CommitSha $github.sha`. Скрипт делает: `git fetch + reset --hard origin/master`, `pip install -r requirements.txt`, snapshot `connector.db` → `C:\Connector\backup\connector.db.<prevSha>-<ts>`, `python run_migrations.py`, рестарт Scheduled Task `ConnectorApi`, smoke `GET /health` (проверяет 200 + `version` совпадает с deployed SHA).
+   - **Auto-rollback** при провале любого шага: `git reset --hard <prevSha>`, рестарт Task'а.
+5. Concurrency group `deploy-connector-server` гарантирует один деплой за раз.
+
+**Скрипты `scripts/remote_deploy_connector.ps1` / `remote_finish_connector_deploy.ps1` — DEPRECATED.** Они относятся к старой архитектуре копирования из `C:\Users\opwork_admin\connector\server` и могли уничтожить `connector.db`. Не использовать.
+
+**Раскладка сервера** (после Phase 1 переезда 2026-05-08):
+- `C:\Connector\src\` — git checkout `PROBIM55/ServerConnector` ветки `master`. Источник кода.
+- `C:\Connector\runtime\` — БД, config, venv, логи. Переживает деплой.
+- `C:\Connector\backup\` — снапшоты `connector.db` перед каждым деплоем.
+
+### 4c. Tekla firm content
+
+Не идёт через эти flow. См. п. 5 ниже — admin делает publish через desktop UI, сервер сам коммитит/пушит в `PROBIM55/tekla-firm-standard`.
 
 ## 5. Tekla publish — критичные правила
 
@@ -96,7 +123,8 @@ Managed firewall ports: `80, 443, 445, 1238, 3389`.
 |---|---|
 | SSH ключ к VPS | `.secrets/opwork_vps_key` (`opwork_admin@62.113.36.107`) |
 | Admin login/password/API key | `CREDENTIALS.md` |
-| Runtime config (источник правды) | `C:\Connector\server\config.json` на проде |
+| Runtime config (источник правды) | `C:\Connector\runtime\config.json` на проде |
+| Runtime БД | `C:\Connector\runtime\connector.db` на проде |
 | GitHub auth | `gh auth status` (Account `Scccoco`, keyring) |
 | GitHub Actions secrets | repo settings, plaintext недоступны |
 
@@ -136,10 +164,14 @@ Managed firewall ports: `80, 443, 445, 1238, 3389`.
 ## 10. Полезные одноразовые проверки
 
 ```powershell
-# Жив ли сервер
+# Жив ли сервер + какая версия (commit SHA) задеплоена
 curl.exe -sS https://server.structura-most.ru/health
+# → {"ok":true,"version":"<short-sha>"}
 
-# Текущая версия desktop
+# Полная версия (admin)
+curl.exe -sS -H "X-Admin-Key: <key>" https://server.structura-most.ru/admin/version
+
+# Текущая версия desktop MSI
 curl.exe -sS https://server.structura-most.ru/updates/latest.json
 
 # Список токенов (admin)
@@ -150,6 +182,7 @@ ssh -i .secrets\opwork_vps_key opwork_admin@62.113.36.107 "cmd /c echo %USERNAME
 
 # GitHub
 gh repo view PROBIM55/ServerConnector --json name,defaultBranchRef,latestRelease
+gh run list -R PROBIM55/ServerConnector --workflow deploy-connector-server.yml --limit 5
 ```
 
 ## 11. Указатели на восстановленный контекст

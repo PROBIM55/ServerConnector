@@ -1,3 +1,10 @@
+# =============================================================================
+# DEPRECATED 2026-05-08 — экспериментальная попытка запускать Connector как
+# Windows Service. На проде сейчас работает Scheduled Task `ConnectorApi`,
+# созданный через scripts/server_deploy_step.ps1 / runtime_launch.ps1.
+# Не использовать.
+# =============================================================================
+
 $ErrorActionPreference = 'Stop'
 
 $name = 'ConnectorApiSvc'
