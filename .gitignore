@@ -25,3 +25,4 @@ connector/agent/~ConnectorAgentSetup.CAB
 
 # Local odd files
 nul
+.tmp/
