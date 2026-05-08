@@ -33,7 +33,20 @@ $reqsFile   = Join-Path $serverDir 'requirements.txt'
 
 function Invoke-Step([string]$Name, [scriptblock]$Block) {
     Write-Host "==> $Name"
-    & $Block
+
+    # Native-command stderr merged via 2>&1 в PowerShell с $ErrorActionPreference='Stop'
+    # триггерит выкидывание исключения даже при успешном exit code (git fetch пишет
+    # progress в stderr). Поэтому внутри блока временно ослабляем EAP и опираемся
+    # ТОЛЬКО на $LASTEXITCODE для определения провала native-команд.
+    $oldEAP = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        & $Block
+    }
+    finally {
+        $ErrorActionPreference = $oldEAP
+    }
+
     if ($LASTEXITCODE -ne $null -and $LASTEXITCODE -ne 0) {
         throw "Step '$Name' exited with code $LASTEXITCODE"
     }
