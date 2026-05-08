@@ -40,16 +40,20 @@ $monthly  = $weekly + 6 * 30
 # Считаем как один артефакт каждый файл и каждую папку верхнего уровня
 $items = Get-ChildItem -Path $backupDir -Force | Sort-Object LastWriteTime
 
-$keepBy = @{}   # bucketKey -> chosen item (newest in bucket)
-$delete = @()
-$kept   = @()
+$keepDaily    = @()   # все snapshot'ы за последние 30 дней — все сохраняются
+$keepBucketed = @{}   # bucketKey -> newest в bucket (для weekly/monthly)
+$delete       = @()
 
 foreach ($item in $items) {
     $ageDays = [Math]::Floor(($now - $item.LastWriteTime).TotalDays)
 
     if ($ageDays -le $daily) {
-        $bucket = "daily-$($item.LastWriteTime.ToString('yyyy-MM-dd'))"
-    } elseif ($ageDays -le $weekly) {
+        # Daily — без бакетирования, держим всё.
+        $keepDaily += $item
+        continue
+    }
+
+    if ($ageDays -le $weekly) {
         $iso = [Globalization.ISOWeek]::GetWeekOfYear($item.LastWriteTime)
         $bucket = "weekly-$($item.LastWriteTime.Year)-W$('{0:D2}' -f $iso)"
     } elseif ($ageDays -le $monthly) {
@@ -59,15 +63,14 @@ foreach ($item in $items) {
         continue
     }
 
-    # Sorted ascending → каждое следующее присвоение в bucket затирает
-    # предыдущее, и в итоге остаётся самый новый.
-    if ($keepBy.ContainsKey($bucket)) {
-        $delete += $keepBy[$bucket]
+    # Sorted ascending → новейший в bucket затирает предыдущий, тот уходит в delete.
+    if ($keepBucketed.ContainsKey($bucket)) {
+        $delete += $keepBucketed[$bucket]
     }
-    $keepBy[$bucket] = $item
+    $keepBucketed[$bucket] = $item
 }
 
-$kept = $keepBy.Values
+$kept = $keepDaily + @($keepBucketed.Values)
 
 "[$(Get-Date -Format s)] retention scan: total=$($items.Count) keep=$($kept.Count) delete=$($delete.Count) dry_run=$($DryRun.IsPresent)" |
     Add-Content -Path $logFile
