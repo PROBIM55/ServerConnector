@@ -169,8 +169,9 @@ def main() -> int:
     LOG.info("Destination PG: %s", _redact(args.pg_url))
     LOG.info("Mode: %s", "DRY-RUN" if args.dry_run else ("FORCE" if args.force else "STRICT (abort if dest non-empty)"))
 
-    if not args.dry_run:
-        apply_pg_migrations(args.pg_url)
+    # Migrations are idempotent (CREATE TABLE IF NOT EXISTS) — apply even on
+    # dry-run so we can count dest rows. Schema creation is не-destructive.
+    apply_pg_migrations(args.pg_url)
 
     sqlite_conn = sqlite3.connect(f"file:{sqlite_path.as_posix()}?mode=ro", uri=True)
     try:
