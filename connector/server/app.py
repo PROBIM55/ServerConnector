@@ -34,6 +34,23 @@ def _runtime_path(env_var: str, default: Path) -> Path:
 CONFIG_PATH = _runtime_path("CONNECTOR_CONFIG_PATH", BASE_DIR / "config.json")
 DB_PATH = _runtime_path("CONNECTOR_DB_PATH", BASE_DIR / "connector.db")
 
+# DB backend selection: CONNECTOR_DB_URL env override (postgresql://… or
+# sqlite:///…), with sqlite fallback at DB_PATH for legacy/dev. The same URL
+# is consumed by run_migrations.py and tests.
+import db as _db_module  # local module connector/server/db.py
+
+DB_URL = _db_module.get_db_url(DB_PATH)
+
+
+def db_connect():
+    """Open a DB connection (sqlite or psycopg2 wrapper, depending on DB_URL).
+
+    Caller controls lifecycle. Designed as a drop-in replacement for
+    `sqlite3.connect(DB_PATH)` — supports `with` blocks, `.execute(sql, params)`,
+    `.commit()`, and `?` placeholders even on PostgreSQL (translated to %s).
+    """
+    return _db_module.connect(DB_URL)
+
 
 def _detect_git_sha() -> str:
     """Read git SHA without depending on the git binary (safer for SYSTEM-run task)."""
@@ -181,18 +198,19 @@ def load_config() -> dict:
 def init_db() -> None:
     """Apply pending DB migrations.
 
-    Schema принадлежит migrations/ (yoyo-migrations) — никаких CREATE TABLE
-    в коде. На startup идёмпотентно проигрываются pending миграции; CI
-    также гонит их явно через run_migrations.py перед рестартом сервиса
-    (двойная защита, оба прохода no-op если ничего не изменилось).
+    Schema принадлежит migrations/<backend>/ (yoyo-migrations) — никаких
+    CREATE TABLE в коде. На startup идёмпотентно проигрываются pending
+    миграции; CI также гонит их явно через run_migrations.py перед рестартом
+    сервиса (двойная защита, оба прохода no-op если ничего не изменилось).
     """
     from yoyo import get_backend, read_migrations
 
-    migrations_dir = BASE_DIR / "migrations"
+    backend_name = "postgres" if _db_module.is_postgres_url(DB_URL) else "sqlite"
+    migrations_dir = BASE_DIR / "migrations" / backend_name
     if not migrations_dir.is_dir():
         return
 
-    backend = get_backend(f"sqlite:///{DB_PATH.as_posix()}")
+    backend = get_backend(DB_URL)
     migrations = read_migrations(str(migrations_dir))
     with backend.lock():
         pending = backend.to_apply(migrations)
@@ -209,7 +227,7 @@ def hash_token(token: str) -> str:
 
 
 def add_audit(event_type: str, device_id: str | None, actor: str | None, details: str | None) -> None:
-    with sqlite3.connect(DB_PATH) as conn:
+    with db_connect() as conn:
         conn.execute(
             """
             INSERT INTO audit_events(event_type, device_id, actor, details, created_at)
@@ -232,7 +250,7 @@ def check_token(device_id: str, token: str | None, cfg: dict) -> None:
         raise HTTPException(status_code=401, detail="Missing token")
 
     token_hash = hash_token(token)
-    with sqlite3.connect(DB_PATH) as conn:
+    with db_connect() as conn:
         row = conn.execute(
             """
             SELECT device_id FROM device_tokens
@@ -256,7 +274,7 @@ def check_token(device_id: str, token: str | None, cfg: dict) -> None:
 
 
 def upsert_heartbeat(payload: Heartbeat) -> None:
-    with sqlite3.connect(DB_PATH) as conn:
+    with db_connect() as conn:
         conn.execute(
             """
             INSERT INTO devices(device_id, public_ip, hostname, agent_version, updated_at)
@@ -304,7 +322,7 @@ def upsert_tekla_client_state(payload: Heartbeat) -> None:
     last_success_utc = (payload.tekla_last_success_utc or "").strip()
     last_error = (payload.tekla_last_error or "").strip()
 
-    with sqlite3.connect(DB_PATH) as conn:
+    with db_connect() as conn:
         prev = conn.execute(
             """
             SELECT installed_version, target_version, installed_revision, target_revision, pending_after_close, tekla_running,
@@ -573,7 +591,7 @@ def get_admin_roles(username: str, cfg: dict) -> dict:
     system_admin = user == default_admin
     firm_admin = user == default_admin
 
-    with sqlite3.connect(DB_PATH) as conn:
+    with db_connect() as conn:
         row = conn.execute(
             """
             SELECT is_system_admin, is_firm_admin
@@ -598,7 +616,7 @@ def set_firm_admin_role(username: str, is_firm_admin: bool, cfg: dict) -> dict:
     default_admin = normalize_admin_username(str(cfg.get("admin_username", "admin")))
     default_system = user == default_admin
 
-    with sqlite3.connect(DB_PATH) as conn:
+    with db_connect() as conn:
         row = conn.execute(
             "SELECT is_system_admin FROM admin_user_roles WHERE username = ?",
             (user,),
@@ -773,7 +791,7 @@ def provision_smb_access(device_id: str, cfg: dict) -> dict:
 
 
 def save_device_access(device_id: str, smb_access: dict) -> None:
-    with sqlite3.connect(DB_PATH) as conn:
+    with db_connect() as conn:
         conn.execute(
             """
             INSERT INTO device_access(device_id, smb_login, smb_username, smb_password, smb_share_unc, smb_share_path, updated_at)
@@ -799,7 +817,7 @@ def save_device_access(device_id: str, smb_access: dict) -> None:
 
 
 def get_device_access(device_id: str) -> dict | None:
-    with sqlite3.connect(DB_PATH) as conn:
+    with db_connect() as conn:
         row = conn.execute(
             """
             SELECT smb_login, smb_username, smb_password, smb_share_unc, smb_share_path
@@ -847,7 +865,7 @@ def get_device_web_access(device_id: str, cfg: dict | None = None) -> dict:
         "https://cloud.structura-most.ru",
     )
 
-    with sqlite3.connect(DB_PATH) as conn:
+    with db_connect() as conn:
         row = conn.execute(
             """
             SELECT speckle_url, speckle_login, speckle_password,
@@ -904,7 +922,7 @@ def save_device_web_access(payload: DeviceWebAccessUpdateRequest, cfg: dict | No
     )
     now = utc_now()
 
-    with sqlite3.connect(DB_PATH) as conn:
+    with db_connect() as conn:
         conn.execute(
             """
             INSERT INTO device_web_access(
@@ -943,7 +961,7 @@ def save_device_web_access(payload: DeviceWebAccessUpdateRequest, cfg: dict | No
 
 
 def delete_device_web_access(device_id: str) -> bool:
-    with sqlite3.connect(DB_PATH) as conn:
+    with db_connect() as conn:
         cur = conn.execute("DELETE FROM device_web_access WHERE device_id = ?", (device_id,))
         return cur.rowcount > 0
 
@@ -951,7 +969,7 @@ def delete_device_web_access(device_id: str) -> bool:
 def create_device_session(device_id: str, hostname: str | None, public_ip: str) -> str:
     session_id = secrets.token_urlsafe(24)
     now = utc_now()
-    with sqlite3.connect(DB_PATH) as conn:
+    with db_connect() as conn:
         conn.execute(
             """
             INSERT INTO device_sessions(device_id, session_id, hostname, public_ip, created_at, updated_at)
@@ -968,7 +986,7 @@ def create_device_session(device_id: str, hostname: str | None, public_ip: str) 
 
 
 def get_device_session(device_id: str) -> dict | None:
-    with sqlite3.connect(DB_PATH) as conn:
+    with db_connect() as conn:
         row = conn.execute(
             """
             SELECT session_id, hostname, public_ip, created_at, updated_at
@@ -991,7 +1009,7 @@ def get_device_session(device_id: str) -> dict | None:
 
 
 def touch_device_session(device_id: str, hostname: str | None, public_ip: str) -> None:
-    with sqlite3.connect(DB_PATH) as conn:
+    with db_connect() as conn:
         conn.execute(
             """
             UPDATE device_sessions
@@ -1003,7 +1021,7 @@ def touch_device_session(device_id: str, hostname: str | None, public_ip: str) -
 
 
 def delete_device_session(device_id: str) -> None:
-    with sqlite3.connect(DB_PATH) as conn:
+    with db_connect() as conn:
         conn.execute("DELETE FROM device_sessions WHERE device_id = ?", (device_id,))
 
 
@@ -1023,7 +1041,7 @@ def ensure_current_device_session(device_id: str, session_id: str | None) -> Non
 
 def resolve_device_by_token(token: str, cfg: dict) -> tuple[str, str | None, bool]:
     token_hash = hash_token(token)
-    with sqlite3.connect(DB_PATH) as conn:
+    with db_connect() as conn:
         row = conn.execute(
             """
             SELECT device_id, issued_to FROM device_tokens
@@ -1876,7 +1894,7 @@ def load_update_manifest(cfg: dict | None = None) -> dict:
 def create_device_token(device_id: str, issued_to: str | None) -> str:
     raw_token = secrets.token_urlsafe(32)
     token_hash = hash_token(raw_token)
-    with sqlite3.connect(DB_PATH) as conn:
+    with db_connect() as conn:
         conn.execute(
             """
             INSERT INTO device_tokens(device_id, token_hash, token_value, issued_to, created_at, last_used_at, revoked_at)
@@ -1896,7 +1914,7 @@ def create_device_token(device_id: str, issued_to: str | None) -> str:
 
 
 def revoke_device_token(device_id: str) -> bool:
-    with sqlite3.connect(DB_PATH) as conn:
+    with db_connect() as conn:
         row = conn.execute(
             "SELECT device_id FROM device_tokens WHERE device_id = ? AND revoked_at IS NULL",
             (device_id,),
@@ -1909,7 +1927,7 @@ def revoke_device_token(device_id: str) -> bool:
 
 
 def delete_device_token(device_id: str) -> bool:
-    with sqlite3.connect(DB_PATH) as conn:
+    with db_connect() as conn:
         row = conn.execute("SELECT device_id FROM device_tokens WHERE device_id = ?", (device_id,)).fetchone()
         if not row:
             return False
@@ -2350,7 +2368,7 @@ def admin_delete_token(
 def admin_list_tokens(request: Request, x_admin_key: str | None = Header(default=None)) -> dict:
     cfg = load_config()
     require_admin_access(request, cfg, x_admin_key)
-    with sqlite3.connect(DB_PATH) as conn:
+    with db_connect() as conn:
         rows = conn.execute(
             """
             SELECT t.device_id,
@@ -2435,7 +2453,7 @@ def admin_list_tokens(request: Request, x_admin_key: str | None = Header(default
 def admin_devices(request: Request, x_admin_key: str | None = Header(default=None)) -> dict:
     cfg = load_config()
     require_admin_access(request, cfg, x_admin_key)
-    with sqlite3.connect(DB_PATH) as conn:
+    with db_connect() as conn:
         rows = conn.execute(
             """
             SELECT d.device_id, d.public_ip, d.hostname, d.agent_version, d.updated_at,
@@ -2590,7 +2608,7 @@ def admin_list_firm_admins(request: Request, x_admin_key: str | None = Header(de
                 }
             )
 
-    with sqlite3.connect(DB_PATH) as conn:
+    with db_connect() as conn:
         rows = conn.execute(
             """
             SELECT username, is_system_admin, is_firm_admin, created_at, updated_at
@@ -2664,7 +2682,7 @@ def admin_revoke_firm_admin(
 def admin_tekla_clients(request: Request, x_admin_key: str | None = Header(default=None)) -> dict:
     cfg = load_config()
     require_admin_access(request, cfg, x_admin_key)
-    with sqlite3.connect(DB_PATH) as conn:
+    with db_connect() as conn:
         rows = conn.execute(
             """
             SELECT t.device_id,
@@ -2792,7 +2810,7 @@ def admin_audit(request: Request, x_admin_key: str | None = Header(default=None)
     cfg = load_config()
     require_admin_access(request, cfg, x_admin_key)
     safe_limit = max(1, min(limit, 500))
-    with sqlite3.connect(DB_PATH) as conn:
+    with db_connect() as conn:
         rows = conn.execute(
             """
             SELECT id, event_type, device_id, actor, details, created_at
@@ -2858,7 +2876,7 @@ def admin_firm_audit(
         event_types.append("tekla_client_state")
 
     placeholders = ",".join("?" for _ in event_types)
-    with sqlite3.connect(DB_PATH) as conn:
+    with db_connect() as conn:
         rows = conn.execute(
             f"""
             SELECT id, event_type, device_id, actor, details, created_at
@@ -2979,7 +2997,7 @@ def admin_network_reapply_managed_ports(
     auth_user = require_admin_access(request, cfg, x_admin_key)
     ports = get_managed_ports(cfg)
 
-    with sqlite3.connect(DB_PATH) as conn:
+    with db_connect() as conn:
         rows = conn.execute(
             """
             SELECT t.device_id,
@@ -3095,7 +3113,7 @@ def admin_network_revoke_ip(
 
 @app.get("/devices")
 def devices() -> dict:
-    with sqlite3.connect(DB_PATH) as conn:
+    with db_connect() as conn:
         rows = conn.execute(
             "SELECT device_id, public_ip, hostname, agent_version, updated_at FROM devices ORDER BY updated_at DESC"
         ).fetchall()

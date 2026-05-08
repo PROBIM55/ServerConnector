@@ -3,10 +3,16 @@
 Usage (production):
     python run_migrations.py
 
-Reads CONNECTOR_DB_PATH from env (same as app.py); falls back to
-BASE_DIR/connector.db for local dev. Migrations directory is
-``migrations/`` next to this script. Exits 0 on success, non-zero on
-any failure (CI deploy step should treat that as a fatal abort).
+Reads `CONNECTOR_DB_URL` from env (same as app.py); falls back to
+`sqlite:///<CONNECTOR_DB_PATH or BASE_DIR/connector.db>`.
+
+Migrations live in `migrations/<backend>/` (postgres or sqlite). The runner
+picks the directory based on the URL scheme so each backend has its own
+baseline schema (PG uses BIGSERIAL, SQLite uses INTEGER PRIMARY KEY
+AUTOINCREMENT).
+
+Exits 0 on success, non-zero on any failure (CI deploy step treats that as a
+fatal abort and triggers rollback).
 """
 
 from __future__ import annotations
@@ -20,16 +26,29 @@ from yoyo import get_backend, read_migrations
 
 
 LOG = logging.getLogger("run_migrations")
+BASE_DIR = Path(__file__).resolve().parent
 
 
-def _resolve_db_path() -> Path:
-    base_dir = Path(__file__).resolve().parent
-    raw = os.environ.get("CONNECTOR_DB_PATH", "").strip()
-    return Path(raw).resolve() if raw else base_dir / "connector.db"
+def _resolve_db_url() -> str:
+    raw = os.environ.get("CONNECTOR_DB_URL", "").strip()
+    if raw:
+        return raw
+    raw_path = os.environ.get("CONNECTOR_DB_PATH", "").strip()
+    if raw_path:
+        return f"sqlite:///{Path(raw_path).resolve().as_posix()}"
+    return f"sqlite:///{(BASE_DIR / 'connector.db').as_posix()}"
 
 
-def _resolve_migrations_dir() -> Path:
-    return Path(__file__).resolve().parent / "migrations"
+def _backend_name_from_url(url: str) -> str:
+    if url.startswith("postgresql://") or url.startswith("postgres://"):
+        return "postgres"
+    if url.startswith("sqlite:///"):
+        return "sqlite"
+    raise ValueError(f"Unsupported DB URL scheme: {url[:32]}...")
+
+
+def _resolve_migrations_dir(url: str) -> Path:
+    return BASE_DIR / "migrations" / _backend_name_from_url(url)
 
 
 def main() -> int:
@@ -38,20 +57,17 @@ def main() -> int:
         format="%(asctime)s %(levelname)s %(name)s %(message)s",
     )
 
-    db_path = _resolve_db_path()
-    migrations_dir = _resolve_migrations_dir()
+    url = _resolve_db_url()
+    migrations_dir = _resolve_migrations_dir(url)
 
     if not migrations_dir.is_dir():
         LOG.error("Migrations directory not found: %s", migrations_dir)
         return 2
 
-    LOG.info("DB path:         %s", db_path)
+    LOG.info("DB URL:          %s", _redact_url(url))
     LOG.info("Migrations dir:  %s", migrations_dir)
 
-    if not db_path.parent.exists():
-        db_path.parent.mkdir(parents=True, exist_ok=True)
-
-    backend = get_backend(f"sqlite:///{db_path.as_posix()}")
+    backend = get_backend(url)
     migrations = read_migrations(str(migrations_dir))
 
     with backend.lock():
@@ -65,6 +81,13 @@ def main() -> int:
         LOG.info("Applied %d migration(s).", len(pending))
 
     return 0
+
+
+def _redact_url(url: str) -> str:
+    """Strip password from postgres URL for logging."""
+    import re
+
+    return re.sub(r"://([^:/@]+):([^@]+)@", r"://\1:***@", url)
 
 
 if __name__ == "__main__":
