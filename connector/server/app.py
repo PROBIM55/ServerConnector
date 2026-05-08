@@ -179,127 +179,25 @@ def load_config() -> dict:
 
 
 def init_db() -> None:
-    with sqlite3.connect(DB_PATH) as conn:
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS devices (
-                device_id TEXT PRIMARY KEY,
-                public_ip TEXT NOT NULL,
-                hostname TEXT,
-                agent_version TEXT,
-                updated_at TEXT NOT NULL
-            )
-            """
-        )
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS device_tokens (
-                device_id TEXT PRIMARY KEY,
-                token_hash TEXT NOT NULL,
-                issued_to TEXT,
-                created_at TEXT NOT NULL,
-                last_used_at TEXT,
-                revoked_at TEXT
-            )
-            """
-        )
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS audit_events (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                event_type TEXT NOT NULL,
-                device_id TEXT,
-                actor TEXT,
-                details TEXT,
-                created_at TEXT NOT NULL
-            )
-            """
-        )
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS device_access (
-                device_id TEXT PRIMARY KEY,
-                smb_login TEXT NOT NULL,
-                smb_username TEXT NOT NULL,
-                smb_password TEXT NOT NULL,
-                smb_share_unc TEXT NOT NULL,
-                smb_share_path TEXT,
-                updated_at TEXT NOT NULL
-            )
-            """
-        )
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS tekla_client_state (
-                device_id TEXT PRIMARY KEY,
-                installed_version TEXT,
-                target_version TEXT,
-                installed_revision TEXT,
-                target_revision TEXT,
-                pending_after_close INTEGER,
-                tekla_running INTEGER,
-                last_check_utc TEXT,
-                last_success_utc TEXT,
-                last_error TEXT,
-                updated_at TEXT NOT NULL
-            )
-            """
-        )
+    """Apply pending DB migrations.
 
-        columns = {
-            row[1]
-            for row in conn.execute("PRAGMA table_info(tekla_client_state)").fetchall()
-        }
-        if "installed_version" not in columns:
-            conn.execute("ALTER TABLE tekla_client_state ADD COLUMN installed_version TEXT")
-        if "target_version" not in columns:
-            conn.execute("ALTER TABLE tekla_client_state ADD COLUMN target_version TEXT")
-        if "last_error" not in columns:
-            conn.execute("ALTER TABLE tekla_client_state ADD COLUMN last_error TEXT")
+    Schema принадлежит migrations/ (yoyo-migrations) — никаких CREATE TABLE
+    в коде. На startup идёмпотентно проигрываются pending миграции; CI
+    также гонит их явно через run_migrations.py перед рестартом сервиса
+    (двойная защита, оба прохода no-op если ничего не изменилось).
+    """
+    from yoyo import get_backend, read_migrations
 
-        token_columns = {
-            row[1]
-            for row in conn.execute("PRAGMA table_info(device_tokens)").fetchall()
-        }
-        if "token_value" not in token_columns:
-            conn.execute("ALTER TABLE device_tokens ADD COLUMN token_value TEXT")
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS device_sessions (
-                device_id TEXT PRIMARY KEY,
-                session_id TEXT NOT NULL,
-                hostname TEXT,
-                public_ip TEXT,
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL
-            )
-            """
-        )
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS admin_user_roles (
-                username TEXT PRIMARY KEY,
-                is_system_admin INTEGER NOT NULL DEFAULT 0,
-                is_firm_admin INTEGER NOT NULL DEFAULT 0,
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL
-            )
-            """
-        )
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS device_web_access (
-                device_id TEXT PRIMARY KEY,
-                speckle_url TEXT,
-                speckle_login TEXT,
-                speckle_password TEXT,
-                nextcloud_url TEXT,
-                nextcloud_login TEXT,
-                nextcloud_password TEXT,
-                updated_at TEXT NOT NULL
-            )
-            """
-        )
+    migrations_dir = BASE_DIR / "migrations"
+    if not migrations_dir.is_dir():
+        return
+
+    backend = get_backend(f"sqlite:///{DB_PATH.as_posix()}")
+    migrations = read_migrations(str(migrations_dir))
+    with backend.lock():
+        pending = backend.to_apply(migrations)
+        if pending:
+            backend.apply_migrations(pending)
 
 
 def utc_now() -> str:
