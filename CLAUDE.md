@@ -99,8 +99,10 @@ Managed firewall ports: `80, 443, 445, 1238, 3389`.
 
 **Раскладка сервера** (после Phase 1 переезда 2026-05-08):
 - `C:\Connector\src\` — git checkout `PROBIM55/ServerConnector` ветки `master`. Источник кода.
-- `C:\Connector\runtime\` — БД, config, venv, логи. Переживает деплой.
-- `C:\Connector\backup\` — снапшоты `connector.db` перед каждым деплоем.
+- `C:\Connector\runtime\` — БД, config, venv, логи, **`.env`** для секретов (`CONNECTOR_DB_URL`). Переживает деплой.
+- `C:\Connector\backup\` — снапшоты `connector.db` перед каждым деплоем + один `connector.db.pre-pg-cutover-*` (legacy SQLite после миграции на PG).
+
+**БД** (после миграции 2026-05-09): PostgreSQL `connector_prod` на `127.0.0.1:5432` (тот же экземпляр PG, что у FamilyBudget и Platform — у каждого своя БД и user). User `connector_user`, OWNER только `connector_prod`. Connection string в `C:\Connector\runtime\.env` через `CONNECTOR_DB_URL`. Старая SQLite `C:\Connector\runtime\connector.db` остаётся как safety-net на 2-3 недели — не используется. **Откат на SQLite:** удалить/переименовать `C:\Connector\runtime\.env`, рестартовать `ConnectorApi` — фолбэк сработает автоматически (но live-данные за время на PG останутся в `connector_prod`, не в SQLite).
 
 ### 4c. Tekla firm content
 
