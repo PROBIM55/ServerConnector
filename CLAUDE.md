@@ -56,6 +56,7 @@ Managed firewall ports: `80, 443, 445, 1238, 3389`.
 
 - свой uvicorn-процесс на `127.0.0.1:8080` (Scheduled Task `ConnectorApi`, не Windows-служба);
 - Scheduled Task `ConnectorBackupRetention` (daily 04:00 SYSTEM) — чистит `C:\Connector\backup\` по политике 30 дней daily + 12 недель weekly + 6 месяцев monthly (`scripts/server_backup_retention.ps1`);
+- Scheduled Task `ConnectorYandexBackup` (daily 03:00 SYSTEM) — backup `C:\BIM_Models` (≈9.2 GiB / 25k файлов) на Yandex.Disk через rclone в `Structura/BIM_Backup/` с versioning через `--backup-dir archive/<date>/`, retention 90 дней. Скрипт `scripts/backup_bim_to_yandex.ps1`, конфиг `runtime/rclone.conf`, лог `runtime/logs/backup_yandex.log`. Полный runbook в `doc/YANDEX_BACKUP_RU.md`;
 - локальные Windows-пользователи `bim_*` — создаёт/удаляет `smb_user_manager.ps1`, пароли отдаются через bootstrap;
 - SMB-права на share `BIM_Models` — те же `bim_*` users;
 - Windows Firewall allowlist managed-портов (80/443/445/1238/3389) — `firewall_manager.ps1`, allowlist по `public_ip` клиентов;
@@ -132,6 +133,7 @@ Managed firewall ports: `80, 443, 445, 1238, 3389`.
 | Admin login/password/API key | `CREDENTIALS.md` |
 | Runtime config (источник правды) | `C:\Connector\runtime\config.json` на проде |
 | Runtime env (CONNECTOR_DB_URL = PG connection string) | `C:\Connector\runtime\.env` на проде, читается `runtime_launch.ps1` |
+| Yandex.Disk OAuth-токен | `C:\Connector\runtime\rclone.conf` на проде (gitignored через расположение в runtime\) |
 | Runtime БД | PostgreSQL `connector_prod` (legacy SQLite `C:\Connector\runtime\connector.db` остаётся как safety-net) |
 | GitHub auth | `gh auth status` (Account `Scccoco`, keyring) |
 | GitHub Actions secrets | repo settings, plaintext недоступны (`DEPLOY_HOST/USER/PORT/SSH_KEY` существуют, см. § 4b) |
