@@ -64,4 +64,12 @@ public sealed class AppSettings
     public string StructuraNextcloudPasswordCipherBase64 { get; set; } = "";
     public bool IsSystemAdmin { get; set; }
     public bool IsFirmAdmin { get; set; }
+    public string IssuedTo { get; set; } = "";
+
+    // Model Sharing (self-hosted): per-PC provisioning of the Tekla client.
+    public string ModelSharingTeklaBin { get; set; } = "";
+    public string ModelSharingServerHost { get; set; } = "62.113.36.107";
+    public int ModelSharingServerPort { get; set; } = 9990;
+    public string ModelSharingIdentityEmail { get; set; } = "";
+    public DateTimeOffset? ModelSharingLastAppliedUtc { get; set; }
 }

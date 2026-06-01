@@ -711,6 +711,55 @@
                             </Border>
                         </ScrollViewer>
                     </TabItem>
+
+                    <TabItem Header="Model Sharing">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                            <Border Style="{StaticResource CardStyle}" Margin="12,10,12,12">
+                                <StackPanel>
+                                    <TextBlock Text="Model Sharing" FontSize="19" FontWeight="SemiBold" />
+                                    <TextBlock Text="Совместная работа над моделями Tekla через собственный сервер фирмы. Connector один раз подготовит Tekla на этом компьютере: включит режим Model Sharing и направит его на сервер. Вход в Trimble не требуется — пользователь определяется по токену устройства."
+                                               Margin="0,6,0,14"
+                                               Foreground="#A9BBD3"
+                                               TextWrapping="Wrap" />
+                                    <TextBlock x:Name="ModelSharingStatusTextBlock"
+                                               Text="Статус: проверка ещё не выполнялась"
+                                               Margin="0,0,0,6"
+                                               Foreground="#A9BBD3"
+                                               TextWrapping="Wrap" />
+                                    <TextBlock x:Name="ModelSharingIdentityTextBlock"
+                                               Text=""
+                                               Margin="0,0,0,12"
+                                               Foreground="#92A5C3"
+                                               TextWrapping="Wrap" />
+
+                                    <Border Padding="12" BorderBrush="#2A3E5C" BorderThickness="1" CornerRadius="12" Margin="0,0,0,12">
+                                        <StackPanel>
+                                            <TextBlock Text="Папка bin Tekla Structures" FontWeight="SemiBold" />
+                                            <TextBlock Text="Папка, где находится Features\SharingUIFeature.dll. Обычно определяется автоматически — меняйте только если установлено несколько версий Tekla."
+                                                       Foreground="#A9BBD3"
+                                                       Margin="0,4,0,8"
+                                                       TextWrapping="Wrap" />
+                                            <TextBox x:Name="ModelSharingTeklaBinTextBox" Margin="0,0,0,8" />
+                                            <WrapPanel>
+                                                <Button x:Name="ModelSharingBrowseButton" Style="{StaticResource SecondaryButton}" Content="Выбрать папку" Click="ModelSharingBrowse_Click" />
+                                            </WrapPanel>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <Border Padding="10" BorderBrush="#5A4A2A" BorderThickness="1" CornerRadius="10" Margin="0,0,0,12">
+                                        <TextBlock Text="Перед настройкой закройте Tekla Structures — иначе файл будет занят. После обновления Tekla (Service Pack) настройку нужно запустить повторно."
+                                                   Foreground="#D8C28A"
+                                                   TextWrapping="Wrap" />
+                                    </Border>
+
+                                    <WrapPanel>
+                                        <Button x:Name="ModelSharingSetupButton" Style="{StaticResource PrimaryButton}" Content="Настроить Model Sharing на этом ПК" Click="ModelSharingSetup_Click" />
+                                        <Button x:Name="ModelSharingOpenLogButton" Style="{StaticResource SecondaryButton}" Content="Открыть лог" Click="ModelSharingOpenLog_Click" />
+                                    </WrapPanel>
+                                </StackPanel>
+                            </Border>
+                        </ScrollViewer>
+                    </TabItem>
                 </TabControl>
             </Grid>
 

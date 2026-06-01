@@ -37,12 +37,26 @@ public partial class MainWindow : Window
     private readonly HeartbeatClient _heartbeatClient = new(new HttpClient { Timeout = TimeSpan.FromSeconds(110) });
     private readonly UpdateService _updateService = new(new HttpClient { Timeout = TimeSpan.FromSeconds(40) });
     private readonly TeklaStandardService _teklaStandardService = new(new HttpClient { Timeout = TimeSpan.FromSeconds(25) });
+    private readonly ModelSharingProvisioningService _modelSharingService = new();
     private readonly DispatcherTimer _timer = new();
     private readonly DispatcherTimer _updateTimer = new();
     private readonly DispatcherTimer _teklaSyncTimer = new();
     private readonly Forms.NotifyIcon _trayIcon;
     private static readonly IReadOnlyList<ReleaseNoteItem> ReleaseNotes = new List<ReleaseNoteItem>
     {
+        new()
+        {
+            Version = "1.0.21",
+            PublishedAt = "01.06.2026",
+            Title = "Ключевые изменения версии",
+            Changes = new[]
+            {
+                "Добавлен раздел Model Sharing: одной кнопкой Connector готовит Tekla на этом компьютере к совместной работе над моделями через сервер фирмы",
+                "Настройка выполняется локально, без входа в Trimble; пользователь определяется по токену устройства",
+                "Connector сам определяет папку Tekla и сохраняет резервную копию исходного файла; настройку можно повторить после обновления Tekla",
+                "Выпуск предназначен для ручной установки и проверки"
+            }
+        },
         new()
         {
             Version = "1.0.20",
@@ -205,6 +219,7 @@ public partial class MainWindow : Window
         UpdateRunStateUi();
         UpdateActionButtonUi();
         UpdateTeklaUi();
+        UpdateModelSharingUi();
         UpdateHeaderStatusUi();
     }
 
@@ -983,7 +998,13 @@ public partial class MainWindow : Window
             StructuraNextcloudLogin = _settings.StructuraNextcloudLogin,
             StructuraNextcloudPasswordCipherBase64 = _settings.StructuraNextcloudPasswordCipherBase64,
             IsSystemAdmin = _settings.IsSystemAdmin,
-            IsFirmAdmin = _settings.IsFirmAdmin
+            IsFirmAdmin = _settings.IsFirmAdmin,
+            IssuedTo = _settings.IssuedTo,
+            ModelSharingTeklaBin = _settings.ModelSharingTeklaBin,
+            ModelSharingServerHost = string.IsNullOrWhiteSpace(_settings.ModelSharingServerHost) ? "62.113.36.107" : _settings.ModelSharingServerHost,
+            ModelSharingServerPort = _settings.ModelSharingServerPort > 0 ? _settings.ModelSharingServerPort : 9990,
+            ModelSharingIdentityEmail = _settings.ModelSharingIdentityEmail,
+            ModelSharingLastAppliedUtc = _settings.ModelSharingLastAppliedUtc
         };
     }
 
@@ -1227,6 +1248,208 @@ public partial class MainWindow : Window
         AppendLog("Открыта страница " + label + ": " + uri);
     }
 
+    private (string Email, string Name) ResolveModelSharingIdentity()
+    {
+        var deviceId = (_settings.DeviceId ?? string.Empty).Trim();
+        var issuedTo = (_settings.IssuedTo ?? string.Empty).Trim();
+
+        // Email = stable, unique key the coordinator maps to a user. Prefer the device id (server-assigned,
+        // unique per PC) shaped as an email; fall back to issued_to if it is already an email, then to host.
+        string email;
+        if (issuedTo.Contains('@'))
+        {
+            email = issuedTo.ToLowerInvariant();
+        }
+        else if (!string.IsNullOrWhiteSpace(deviceId))
+        {
+            var sanitized = new string(deviceId.ToLowerInvariant()
+                .Select(ch => char.IsLetterOrDigit(ch) || ch == '-' || ch == '.' ? ch : '-')
+                .ToArray());
+            email = sanitized + "@structura-most.ru";
+        }
+        else
+        {
+            email = (Environment.UserName + "-" + Environment.MachineName).ToLowerInvariant() + "@structura-most.ru";
+        }
+
+        var name = !string.IsNullOrWhiteSpace(issuedTo)
+            ? issuedTo
+            : (!string.IsNullOrWhiteSpace(deviceId) ? deviceId : Environment.MachineName);
+        return (email, name);
+    }
+
+    private string ResolveModelSharingTeklaBin()
+    {
+        var configured = (ModelSharingTeklaBinTextBox.Text ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(configured))
+        {
+            configured = _settings.ModelSharingTeklaBin;
+        }
+        return _modelSharingService.ResolveTeklaBin(configured, _settings.TeklaExtensionsLocalPath);
+    }
+
+    private void UpdateModelSharingUi()
+    {
+        var teklaBin = ResolveModelSharingTeklaBin();
+        if (string.IsNullOrWhiteSpace(ModelSharingTeklaBinTextBox.Text))
+        {
+            ModelSharingTeklaBinTextBox.Text = teklaBin;
+        }
+
+        var (email, name) = ResolveModelSharingIdentity();
+        var hasDevice = !string.IsNullOrWhiteSpace(_settings.DeviceId);
+        var serverHost = string.IsNullOrWhiteSpace(_settings.ModelSharingServerHost) ? "62.113.36.107" : _settings.ModelSharingServerHost;
+        var serverPort = _settings.ModelSharingServerPort > 0 ? _settings.ModelSharingServerPort : 9990;
+        ModelSharingIdentityTextBlock.Text = hasDevice
+            ? $"Пользователь: {name} ({email}). Сервер: {serverHost}:{serverPort}."
+            : "Пользователь будет определён после подключения по токену устройства на вкладке \"Коннектор\".";
+
+        var status = _modelSharingService.GetStatus(teklaBin);
+        string text;
+        System.Windows.Media.Brush brush;
+        if (!status.FeatureDllExists)
+        {
+            text = "Статус: SharingUIFeature.dll не найден в указанной папке bin Tekla.";
+            brush = System.Windows.Media.Brushes.Orange;
+        }
+        else if (status.Provisioned)
+        {
+            var applied = status.AppliedUtc?.ToLocalTime().ToString("dd.MM.yyyy HH:mm") ?? "-";
+            text = $"Статус: настроено ({status.IdentityEmail}, сервер {status.ServerHost}:{status.ServerPort}). Применено: {applied}.";
+            brush = System.Windows.Media.Brushes.MediumSpringGreen;
+        }
+        else if (status.NeedsReapply)
+        {
+            text = "Статус: ранее настраивалось, но файл заменён обновлением Tekla — запустите настройку повторно.";
+            brush = System.Windows.Media.Brushes.Orange;
+        }
+        else
+        {
+            text = "Статус: не настроено на этом компьютере.";
+            brush = System.Windows.Media.Brushes.Gainsboro;
+        }
+        ModelSharingStatusTextBlock.Text = text;
+        ModelSharingStatusTextBlock.Foreground = brush;
+        ModelSharingSetupButton.IsEnabled = hasDevice && status.FeatureDllExists;
+    }
+
+    private void ModelSharingBrowse_Click(object sender, RoutedEventArgs e)
+    {
+        using var dialog = new Forms.FolderBrowserDialog
+        {
+            Description = "Выберите папку bin Tekla Structures",
+            SelectedPath = (ModelSharingTeklaBinTextBox.Text ?? string.Empty).Trim()
+        };
+        if (dialog.ShowDialog() == Forms.DialogResult.OK)
+        {
+            ModelSharingTeklaBinTextBox.Text = dialog.SelectedPath;
+            UpdateModelSharingUi();
+        }
+    }
+
+    private void ModelSharingOpenLog_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            if (!File.Exists(_modelSharingService.LogFilePath))
+            {
+                File.WriteAllText(_modelSharingService.LogFilePath, string.Empty);
+            }
+            Process.Start(new ProcessStartInfo { FileName = _modelSharingService.LogFilePath, UseShellExecute = true });
+        }
+        catch (Exception ex)
+        {
+            AppendLog("Не удалось открыть лог Model Sharing: " + ex.Message);
+        }
+    }
+
+    private async void ModelSharingSetup_Click(object sender, RoutedEventArgs e)
+    {
+        OperationProgressWindow? progressWindow = null;
+        try
+        {
+            if (string.IsNullOrWhiteSpace(_settings.DeviceId))
+            {
+                throw new InvalidOperationException("Сначала подключитесь по токену устройства на вкладке \"Коннектор\".");
+            }
+
+            var teklaBin = ResolveModelSharingTeklaBin();
+            var dll = System.IO.Path.Combine(teklaBin, "Features", "SharingUIFeature.dll");
+            if (!File.Exists(dll))
+            {
+                throw new InvalidOperationException("Не найден файл " + dll + ". Укажите правильную папку bin Tekla.");
+            }
+
+            if (_modelSharingService.IsTeklaRunning())
+            {
+                ThemedDialogs.Show(this,
+                    "Сейчас запущена Tekla Structures. Закройте её и повторите настройку Model Sharing.",
+                    "Model Sharing", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            var (email, name) = ResolveModelSharingIdentity();
+            var serverHost = string.IsNullOrWhiteSpace(_settings.ModelSharingServerHost) ? "62.113.36.107" : _settings.ModelSharingServerHost;
+            var serverPort = _settings.ModelSharingServerPort > 0 ? _settings.ModelSharingServerPort : 9990;
+
+            var confirm = ThemedDialogs.Show(this,
+                $"Подготовить Tekla к Model Sharing на этом компьютере?\n\nПользователь: {name} ({email})\nСервер: {serverHost}:{serverPort}\nПапка: {teklaBin}\n\nTekla должна быть закрыта.",
+                "Model Sharing", MessageBoxButton.YesNo, MessageBoxImage.Question);
+            if (confirm != MessageBoxResult.Yes)
+            {
+                return;
+            }
+
+            var request = new ModelSharingProvisionRequest
+            {
+                TeklaBin = teklaBin,
+                ServerHost = serverHost,
+                ServerPort = serverPort,
+                IdentityEmail = email,
+                IdentityName = name
+            };
+
+            progressWindow = new OperationProgressWindow("Model Sharing", "Готовим Tekla к совместной работе");
+            progressWindow.Owner = this;
+            progressWindow.Show();
+            progressWindow.UpdateStep("Настраиваем Tekla", "Патчим клиент и записываем адрес сервера", 1, 2, TimeSpan.FromSeconds(8));
+            ModelSharingSetupButton.IsEnabled = false;
+
+            var result = await Task.Run(() => _modelSharingService.Provision(request));
+
+            if (result.IsSuccess)
+            {
+                _settings.ModelSharingTeklaBin = teklaBin;
+                _settings.ModelSharingServerHost = serverHost;
+                _settings.ModelSharingServerPort = serverPort;
+                _settings.ModelSharingIdentityEmail = email;
+                _settings.ModelSharingLastAppliedUtc = DateTimeOffset.UtcNow;
+                _settingsService.Save(_settings);
+                progressWindow.UpdateStep("Готово", "Tekla настроена", 2, 2, TimeSpan.Zero);
+                progressWindow.MarkSucceeded(result.Message);
+                AppendLog("Model Sharing настроен: " + email + " -> " + serverHost + ":" + serverPort);
+                ThemedDialogs.Show(this, result.Message, "Model Sharing", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            else
+            {
+                progressWindow.MarkFailed(result.Message);
+                AppendLog("Model Sharing не настроен: " + result.Message +
+                          (string.IsNullOrWhiteSpace(result.TechnicalDetails) ? string.Empty : " | " + result.TechnicalDetails));
+                ThemedDialogs.Show(this, result.Message, "Model Sharing", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }
+        catch (Exception ex)
+        {
+            progressWindow?.MarkFailed(ex.Message);
+            AppendLog("Ошибка настройки Model Sharing: " + ex.Message);
+            ThemedDialogs.Show(this, ex.Message, "Model Sharing", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        finally
+        {
+            UpdateModelSharingUi();
+        }
+    }
+
     private async void ConnectByToken_Click(object sender, RoutedEventArgs e)
     {
         try
@@ -1370,7 +1593,13 @@ public partial class MainWindow : Window
                 ? string.Empty
                 : SettingsService.EncryptToken(bootstrap.WebAccess.Nextcloud.Password),
             IsSystemAdmin = bootstrap.IsSystemAdmin,
-            IsFirmAdmin = bootstrap.IsFirmAdmin
+            IsFirmAdmin = bootstrap.IsFirmAdmin,
+            IssuedTo = string.IsNullOrWhiteSpace(bootstrap.IssuedTo) ? _settings.IssuedTo : bootstrap.IssuedTo,
+            ModelSharingTeklaBin = _settings.ModelSharingTeklaBin,
+            ModelSharingServerHost = string.IsNullOrWhiteSpace(_settings.ModelSharingServerHost) ? "62.113.36.107" : _settings.ModelSharingServerHost,
+            ModelSharingServerPort = _settings.ModelSharingServerPort > 0 ? _settings.ModelSharingServerPort : 9990,
+            ModelSharingIdentityEmail = _settings.ModelSharingIdentityEmail,
+            ModelSharingLastAppliedUtc = _settings.ModelSharingLastAppliedUtc
         };
         _settingsService.Save(_settings);
         _autoStartService.SetEnabled(true);
@@ -1385,6 +1614,7 @@ public partial class MainWindow : Window
         SmbPasswordBox.Password = string.Empty;
         SmbSharePathTextBox.Text = _settings.SmbSharePath;
         UpdateTeklaUi();
+        UpdateModelSharingUi();
         AppendLog("Настройки сохранены.");
 
         var smbConnected = true;
