@@ -46,6 +46,17 @@ public partial class MainWindow : Window
     {
         new()
         {
+            Version = "1.0.22",
+            PublishedAt = "02.06.2026",
+            Title = "Ключевые изменения версии",
+            Changes = new[]
+            {
+                "Подключение больше не прерывается, если недоступна общая SMB-папка (например, провайдер закрывает порт 445): коннектор продолжает работать, heartbeat и Model Sharing включаются",
+                "Сообщение о неподключённой SMB-папке стало понятнее (возможные причины и что это не влияет на Model Sharing)"
+            }
+        },
+        new()
+        {
             Version = "1.0.21",
             PublishedAt = "01.06.2026",
             Title = "Ключевые изменения версии",
@@ -1628,6 +1639,14 @@ public partial class MainWindow : Window
             AppendLog("SMB подключение не переключено автоматически (конфликт 1219). Текущая сессия SMB оставлена без изменений.");
             AppendLog("Детали SMB конфликта: " + ex.Message);
         }
+        catch (Exception ex)
+        {
+            // SMB (общая файловая папка) не критична для подключения: heartbeat и Model Sharing
+            // работают и без неё. Частая причина — закрытый порт 445 (провайдер/сеть). Не валим коннект.
+            smbConnected = false;
+            AppendLog("SMB файловая папка не подключена: " + ex.Message);
+            AppendLog("Это не мешает работе коннектора (heartbeat) и Model Sharing. Частая причина — закрытый порт 445 в сети/у провайдера; для доступа к общей папке нужен VPN.");
+        }
 
         _timer.Stop();
         _timer.Start();
@@ -1642,7 +1661,7 @@ public partial class MainWindow : Window
             ThemedDialogs.Show(this, 
                 smbConnected
                     ? "Подключение выполнено. SMB доступ открыт, автоотправка heartbeat включена."
-                    : "Подключение выполнено. Автоотправка heartbeat включена, но SMB не переключен из-за активной сессии Windows (1219).",
+                    : "Подключение выполнено. Автоотправка heartbeat включена. Общая SMB-папка не подключена (возможна активная сессия Windows 1219 или закрытый порт 445 в сети) — на работу коннектора и Model Sharing это не влияет.",
                 "Structura Connector",
                 MessageBoxButton.OK,
                 MessageBoxImage.Information);
