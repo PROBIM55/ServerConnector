@@ -49,7 +49,7 @@ public partial class MainWindow : Window
     {
         new()
         {
-            Version = "1.0.23",
+            Version = "1.0.24",
             PublishedAt = "03.06.2026",
             Title = "Ключевые изменения версии",
             Changes = new[]
