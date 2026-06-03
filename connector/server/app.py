@@ -1923,6 +1923,22 @@ def _deprovision_vpn_best_effort(device_id: str) -> None:
         pass
 
 
+def _deprovision_smb_best_effort(device_id: str, action: str) -> None:
+    """Disable (revoke) or Remove (delete) the device's SMB OS account + share access and drop its
+    live sessions, so revoking the token actually cuts off file-share access. Best-effort."""
+    try:
+        cfg = load_config()
+        username = build_smb_username(device_id, cfg)
+        share_name = str(cfg.get("smb_share_name", DEFAULT_SMB_SHARE_NAME)).strip() or DEFAULT_SMB_SHARE_NAME
+        cmd = [
+            "powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(SMB_SCRIPT),
+            "-UserName", username, "-ShareName", share_name, "-Action", action,
+        ]
+        subprocess.run(cmd, capture_output=True, text=True, timeout=90)
+    except Exception:
+        pass
+
+
 def revoke_device_token(device_id: str) -> bool:
     with db_connect() as conn:
         row = conn.execute(
@@ -1934,6 +1950,7 @@ def revoke_device_token(device_id: str) -> bool:
         conn.execute("UPDATE device_tokens SET revoked_at = ? WHERE device_id = ?", (utc_now(), device_id))
         conn.execute("DELETE FROM device_sessions WHERE device_id = ?", (device_id,))
     _deprovision_vpn_best_effort(device_id)
+    _deprovision_smb_best_effort(device_id, "Disable")  # reversible: re-issuing the token re-provisions
     return True
 
 
@@ -1947,6 +1964,7 @@ def delete_device_token(device_id: str) -> bool:
         conn.execute("DELETE FROM device_web_access WHERE device_id = ?", (device_id,))
         conn.execute("DELETE FROM device_sessions WHERE device_id = ?", (device_id,))
     _deprovision_vpn_best_effort(device_id)
+    _deprovision_smb_best_effort(device_id, "Remove")  # permanent: delete the OS account + share access
     return True
 
 
