@@ -280,9 +280,23 @@ def deprovision_device_vpn(device_id: str, cfg: dict, conn_factory) -> bool:
         return False
 
 
+def is_enabled_for_device(cfg: dict, device_id: str) -> bool:
+    """Global enable AND (optional) per-device allowlist for staged rollout.
+
+    If vpn.device_allowlist is a non-empty list, only those device_ids get VPN (canary);
+    remove/empty the list to enable for everyone.
+    """
+    if not is_enabled(cfg):
+        return False
+    allow = get_vpn_cfg(cfg).get("device_allowlist")
+    if isinstance(allow, list) and len(allow) > 0:
+        return device_id in allow
+    return True
+
+
 def vpn_bundle_for_bootstrap(device_id: str, cfg: dict, conn_factory) -> dict:
     """Shape returned in the bootstrap response. Never raises into the caller's happy path."""
-    if not is_enabled(cfg):
+    if not is_enabled_for_device(cfg, device_id):
         return {"enabled": False}
     vcfg = get_vpn_cfg(cfg)
     rec = get_or_create_device_vpn(device_id, cfg, conn_factory)
