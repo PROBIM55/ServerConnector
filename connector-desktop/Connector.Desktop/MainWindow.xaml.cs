@@ -40,6 +40,8 @@ public partial class MainWindow : Window
     private readonly ModelSharingProvisioningService _modelSharingService = new();
     private readonly VpnProvisioningService _vpnService = new();
     private string _lastVpnConfig = string.Empty;   // last config delivered by bootstrap (kept in memory, not persisted)
+    private string _lastSmbLogin = string.Empty;    // SMB creds from bootstrap, for mounting the share over VPN
+    private string _lastSmbPassword = string.Empty;
     private const string VpnTunnel = "structura-vpn";
     private readonly DispatcherTimer _timer = new();
     private readonly DispatcherTimer _updateTimer = new();
@@ -49,7 +51,7 @@ public partial class MainWindow : Window
     {
         new()
         {
-            Version = "1.0.24",
+            Version = "1.0.25",
             PublishedAt = "03.06.2026",
             Title = "Ключевые изменения версии",
             Changes = new[]
@@ -1615,7 +1617,7 @@ public partial class MainWindow : Window
         }
     }
 
-    private void VpnOpenFolder_Click(object sender, RoutedEventArgs e)
+    private async void VpnOpenFolder_Click(object sender, RoutedEventArgs e)
     {
         var unc = string.IsNullOrWhiteSpace(_settings.VpnSmbUnc)
             ? (string.IsNullOrWhiteSpace(_settings.VpnServerIp) ? "" : $@"\\{_settings.VpnServerIp}\BIM_Models")
@@ -1626,11 +1628,28 @@ public partial class MainWindow : Window
         }
         try
         {
-            Process.Start(new ProcessStartInfo { FileName = "explorer.exe", Arguments = unc, UseShellExecute = true });
+            // The share over VPN is a different host (tunnel IP), so it needs the SMB login mounted
+            // explicitly — otherwise Windows uses the wrong identity and access is denied.
+            if (!string.IsNullOrWhiteSpace(_lastSmbLogin) && !string.IsNullOrWhiteSpace(_lastSmbPassword))
+            {
+                await ConnectSmbInternalAsync(_lastSmbLogin, _lastSmbPassword, unc, openExplorer: true);
+                AppendLog("VPN: общая папка подключена (" + unc + ").");
+            }
+            else
+            {
+                // no creds in memory (e.g. before first token connect): fall back to plain open
+                Process.Start(new ProcessStartInfo { FileName = "explorer.exe", Arguments = unc, UseShellExecute = true });
+                AppendLog("VPN: открыта папка без явного логина; при запросе введите SMB-логин или переподключитесь по токену.");
+            }
         }
         catch (Exception ex)
         {
             AppendLog("VPN open folder error: " + ex.Message);
+            try { Process.Start(new ProcessStartInfo { FileName = "explorer.exe", Arguments = unc, UseShellExecute = true }); } catch { }
+            ThemedDialogs.Show(this,
+                "Не удалось автоматически подключить общую папку через VPN: " + ex.Message +
+                "\n\nЕсли откроется окно проводника с запросом — введите SMB-логин и пароль из вкладки «Коннектор».",
+                "VPN — общая папка", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
     }
 
@@ -1813,6 +1832,10 @@ public partial class MainWindow : Window
         SmbLoginTextBox.Text = bootstrap.SmbAccess.Login;
         SmbPasswordBox.Password = string.Empty;
         SmbSharePathTextBox.Text = _settings.SmbSharePath;
+        // SMB creds (kept in memory) so we can mount the share over VPN with the right login.
+        _lastSmbLogin = bootstrap.SmbAccess.Login;
+        _lastSmbPassword = bootstrap.SmbAccess.Password;
+
         // VPN bundle from bootstrap (optional; gated by server). Config is persisted ENCRYPTED
         // (DPAPI) so "Включить VPN" works after a restart; kept in memory for immediate use.
         _settings.VpnEnabled = bootstrap.Vpn.Enabled && !string.IsNullOrWhiteSpace(bootstrap.Vpn.Config);
