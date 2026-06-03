@@ -38,6 +38,9 @@ public partial class MainWindow : Window
     private readonly UpdateService _updateService = new(new HttpClient { Timeout = TimeSpan.FromSeconds(40) });
     private readonly TeklaStandardService _teklaStandardService = new(new HttpClient { Timeout = TimeSpan.FromSeconds(25) });
     private readonly ModelSharingProvisioningService _modelSharingService = new();
+    private readonly VpnProvisioningService _vpnService = new();
+    private string _lastVpnConfig = string.Empty;   // last config delivered by bootstrap (kept in memory, not persisted)
+    private const string VpnTunnel = "structura-vpn";
     private readonly DispatcherTimer _timer = new();
     private readonly DispatcherTimer _updateTimer = new();
     private readonly DispatcherTimer _teklaSyncTimer = new();
@@ -231,6 +234,7 @@ public partial class MainWindow : Window
         UpdateActionButtonUi();
         UpdateTeklaUi();
         UpdateModelSharingUi();
+        UpdateVpnUi();
         UpdateHeaderStatusUi();
     }
 
@@ -882,6 +886,12 @@ public partial class MainWindow : Window
         var token = SettingsService.DecryptToken(_settings.TokenCipherBase64);
         TokenPasswordBox.Password = token;
 
+        // restore the VPN config (decrypt) so "Включить VPN" works after a restart without re-connecting
+        if (!string.IsNullOrWhiteSpace(_settings.VpnConfigCipherBase64))
+        {
+            _lastVpnConfig = SettingsService.DecryptToken(_settings.VpnConfigCipherBase64);
+        }
+
         SmbPasswordBox.Password = string.Empty;
 
         _timer.Interval = TimeSpan.FromSeconds(_settings.HeartbeatSeconds);
@@ -1015,7 +1025,14 @@ public partial class MainWindow : Window
             ModelSharingServerHost = string.IsNullOrWhiteSpace(_settings.ModelSharingServerHost) ? "62.113.36.107" : _settings.ModelSharingServerHost,
             ModelSharingServerPort = _settings.ModelSharingServerPort > 0 ? _settings.ModelSharingServerPort : 9990,
             ModelSharingIdentityEmail = _settings.ModelSharingIdentityEmail,
-            ModelSharingLastAppliedUtc = _settings.ModelSharingLastAppliedUtc
+            ModelSharingLastAppliedUtc = _settings.ModelSharingLastAppliedUtc,
+            VpnEnabled = _settings.VpnEnabled,
+            VpnTunnelName = _settings.VpnTunnelName,
+            VpnAddress = _settings.VpnAddress,
+            VpnSmbUnc = _settings.VpnSmbUnc,
+            VpnServerIp = _settings.VpnServerIp,
+            VpnConfigReceivedUtc = _settings.VpnConfigReceivedUtc,
+            VpnConfigCipherBase64 = _settings.VpnConfigCipherBase64
         };
     }
 
@@ -1461,6 +1478,165 @@ public partial class MainWindow : Window
         }
     }
 
+    // ===== VPN-доступ к общей папке (AmneziaWG) =====
+
+    private void UpdateVpnUi()
+    {
+        // The client tunnel name is always the local constant (the server-side name may differ).
+        var tunnel = VpnTunnel;
+        var unc = string.IsNullOrWhiteSpace(_settings.VpnSmbUnc)
+            ? (string.IsNullOrWhiteSpace(_settings.VpnServerIp) ? "" : $@"\\{_settings.VpnServerIp}\BIM_Models")
+            : _settings.VpnSmbUnc;
+        VpnShareUncTextBlock.Text = string.IsNullOrWhiteSpace(unc) ? "-" : unc;
+
+        if (!_settings.VpnEnabled)
+        {
+            // VPN turned off by the server — but if a tunnel is still installed from before, the user
+            // must retain a way to remove it (otherwise it keeps routing across reboots).
+            var stillInstalled = _vpnService.BundledClientPresent && _vpnService.IsTunnelInstalled(tunnel);
+            if (stillInstalled)
+            {
+                VpnStatusTextBlock.Text = "VPN отключён администратором, но туннель ещё установлен на этом ПК. Нажмите «Отключить VPN», чтобы удалить его.";
+                VpnStatusTextBlock.Foreground = System.Windows.Media.Brushes.Orange;
+                VpnEnableButton.IsEnabled = false;
+                VpnDisableButton.IsEnabled = true;
+                VpnOpenFolderButton.IsEnabled = false;
+            }
+            else
+            {
+                VpnStatusTextBlock.Text = "VPN-доступ к общей папке не настроен администратором (или не требуется в вашей сети).";
+                VpnStatusTextBlock.Foreground = System.Windows.Media.Brushes.DarkGray;
+                VpnEnableButton.IsEnabled = false;
+                VpnDisableButton.IsEnabled = false;
+                VpnOpenFolderButton.IsEnabled = false;
+            }
+            return;
+        }
+
+        if (!_vpnService.BundledClientPresent)
+        {
+            VpnStatusTextBlock.Text = "Встроенный VPN-клиент отсутствует в этой сборке коннектора. Обновите коннектор.";
+            VpnStatusTextBlock.Foreground = System.Windows.Media.Brushes.Orange;
+            VpnEnableButton.IsEnabled = false;
+            VpnDisableButton.IsEnabled = false;
+            VpnOpenFolderButton.IsEnabled = false;
+            return;
+        }
+
+        var running = _vpnService.IsTunnelRunning(tunnel);
+        if (running)
+        {
+            VpnStatusTextBlock.Text = "VPN включён. Общая папка доступна из любой сети: " + (string.IsNullOrWhiteSpace(unc) ? "(адрес не задан)" : unc);
+            VpnStatusTextBlock.Foreground = System.Windows.Media.Brushes.MediumSpringGreen;
+            VpnEnableButton.Content = "Переподключить VPN";
+            VpnEnableButton.IsEnabled = true;
+            VpnDisableButton.IsEnabled = true;
+            VpnOpenFolderButton.IsEnabled = !string.IsNullOrWhiteSpace(unc);
+        }
+        else
+        {
+            VpnStatusTextBlock.Text = "VPN-доступ настроен, но не включён. Нажмите «Включить VPN» (потребуется однократное подтверждение прав администратора).";
+            VpnStatusTextBlock.Foreground = System.Windows.Media.Brushes.Orange;
+            VpnEnableButton.Content = "Включить VPN";
+            VpnEnableButton.IsEnabled = true;
+            VpnDisableButton.IsEnabled = _vpnService.IsTunnelInstalled(tunnel);
+            VpnOpenFolderButton.IsEnabled = false;
+        }
+    }
+
+    private async void VpnEnable_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            if (!_settings.VpnEnabled)
+            {
+                ThemedDialogs.Show(this, "VPN-доступ не включён администратором.", "VPN", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+            if (string.IsNullOrWhiteSpace(_lastVpnConfig))
+            {
+                ThemedDialogs.Show(this,
+                    "Нет конфигурации VPN. Нажмите «Подключиться по токену» на вкладке «Коннектор», затем повторите.",
+                    "VPN", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            var tunnel = VpnTunnel;
+            VpnEnableButton.IsEnabled = false;
+            VpnStatusTextBlock.Text = "Включаем VPN... подтвердите запрос прав администратора (UAC).";
+            var result = await Task.Run(() => _vpnService.Enable(_lastVpnConfig, tunnel));
+            AppendLog("VPN enable: " + (result.IsSuccess ? "ok" : "fail") + " — " + result.Message);
+            ThemedDialogs.Show(this, result.Message, "VPN",
+                MessageBoxButton.OK, result.IsSuccess ? MessageBoxImage.Information : MessageBoxImage.Warning);
+        }
+        catch (Exception ex)
+        {
+            AppendLog("VPN enable error: " + ex.Message);
+            ThemedDialogs.Show(this, ex.Message, "VPN", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        finally
+        {
+            UpdateVpnUi();
+        }
+    }
+
+    private async void VpnDisable_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var tunnel = VpnTunnel;
+            VpnDisableButton.IsEnabled = false;
+            var result = await Task.Run(() => _vpnService.Disable(tunnel));
+            AppendLog("VPN disable: " + (result.IsSuccess ? "ok" : "fail") + " — " + result.Message);
+            ThemedDialogs.Show(this, result.Message, "VPN",
+                MessageBoxButton.OK, result.IsSuccess ? MessageBoxImage.Information : MessageBoxImage.Warning);
+        }
+        catch (Exception ex)
+        {
+            AppendLog("VPN disable error: " + ex.Message);
+            ThemedDialogs.Show(this, ex.Message, "VPN", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        finally
+        {
+            UpdateVpnUi();
+        }
+    }
+
+    private void VpnOpenFolder_Click(object sender, RoutedEventArgs e)
+    {
+        var unc = string.IsNullOrWhiteSpace(_settings.VpnSmbUnc)
+            ? (string.IsNullOrWhiteSpace(_settings.VpnServerIp) ? "" : $@"\\{_settings.VpnServerIp}\BIM_Models")
+            : _settings.VpnSmbUnc;
+        if (string.IsNullOrWhiteSpace(unc))
+        {
+            return;
+        }
+        try
+        {
+            Process.Start(new ProcessStartInfo { FileName = "explorer.exe", Arguments = unc, UseShellExecute = true });
+        }
+        catch (Exception ex)
+        {
+            AppendLog("VPN open folder error: " + ex.Message);
+        }
+    }
+
+    private void VpnOpenLog_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            if (!File.Exists(_vpnService.LogFilePath))
+            {
+                File.WriteAllText(_vpnService.LogFilePath, string.Empty);
+            }
+            Process.Start(new ProcessStartInfo { FileName = _vpnService.LogFilePath, UseShellExecute = true });
+        }
+        catch (Exception ex)
+        {
+            AppendLog("VPN open log error: " + ex.Message);
+        }
+    }
+
     private async void ConnectByToken_Click(object sender, RoutedEventArgs e)
     {
         try
@@ -1624,8 +1800,25 @@ public partial class MainWindow : Window
         SmbLoginTextBox.Text = bootstrap.SmbAccess.Login;
         SmbPasswordBox.Password = string.Empty;
         SmbSharePathTextBox.Text = _settings.SmbSharePath;
+        // VPN bundle from bootstrap (optional; gated by server). Config is persisted ENCRYPTED
+        // (DPAPI) so "Включить VPN" works after a restart; kept in memory for immediate use.
+        _settings.VpnEnabled = bootstrap.Vpn.Enabled && !string.IsNullOrWhiteSpace(bootstrap.Vpn.Config);
+        if (_settings.VpnEnabled)
+        {
+            _lastVpnConfig = bootstrap.Vpn.Config;
+            _settings.VpnTunnelName = bootstrap.Vpn.TunnelName;   // server-side tunnel name (informational)
+            _settings.VpnAddress = bootstrap.Vpn.Address;
+            _settings.VpnSmbUnc = bootstrap.Vpn.SmbUnc;
+            _settings.VpnServerIp = bootstrap.Vpn.ServerVpnIp;
+            _settings.VpnConfigReceivedUtc = DateTimeOffset.UtcNow;
+            _settings.VpnConfigCipherBase64 = SettingsService.EncryptToken(bootstrap.Vpn.Config);
+            _settingsService.Save(_settings);
+            AppendLog("Получена конфигурация VPN для доступа к общей папке.");
+        }
+
         UpdateTeklaUi();
         UpdateModelSharingUi();
+        UpdateVpnUi();
         AppendLog("Настройки сохранены.");
 
         var smbConnected = true;

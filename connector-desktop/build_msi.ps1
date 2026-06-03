@@ -11,6 +11,8 @@ $bundledGitDir = Join-Path $root 'Connector.Desktop\tools\git'
 $ensureGitScript = Join-Path $root 'scripts\ensure_bundled_git.ps1'
 $publishGitDir = Join-Path $publishDir 'tools\git'
 $publishGitBundle = Join-Path $publishDir 'git-bundle.zip'
+$bundledAwgDir = Join-Path $root 'Connector.Desktop\tools\awg'
+$ensureAwgScript = Join-Path $root 'scripts\ensure_bundled_amneziawg.ps1'
 
 function Invoke-ExternalCommand {
     param(
@@ -46,6 +48,11 @@ New-Item -ItemType Directory -Path $publishDir -Force | Out-Null
 New-Item -ItemType Directory -Path $outputDir -Force | Out-Null
 
 & $ensureGitScript -TargetDir $bundledGitDir
+# AmneziaWG bundling must not hard-fail an unrelated release if GitHub is unreachable or the
+# asset name changes; the connector degrades gracefully when the VPN client is absent
+# (VpnProvisioningService.BundledClientPresent) and the csproj globs tools\awg so a missing
+# dir still produces a valid MSI.
+try { & $ensureAwgScript -TargetDir $bundledAwgDir } catch { Write-Warning "AmneziaWG bundle skipped: $_" }
 
 Invoke-ExternalCommand -Description 'dotnet publish' -Command {
     dotnet publish $appProj -c Release -r win-x64 -p:PublishSingleFile=false -p:SelfContained=true -o $publishDir

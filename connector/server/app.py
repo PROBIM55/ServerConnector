@@ -1913,6 +1913,16 @@ def create_device_token(device_id: str, issued_to: str | None) -> str:
     return raw_token
 
 
+def _deprovision_vpn_best_effort(device_id: str) -> None:
+    """Remove a device's VPN peer when its token is revoked/deleted, so it can't keep dialing in.
+    Best-effort: never raise (revocation must succeed regardless)."""
+    try:
+        import vpn as _vpn_module
+        _vpn_module.deprovision_device_vpn(device_id, load_config(), db_connect)
+    except Exception:
+        pass
+
+
 def revoke_device_token(device_id: str) -> bool:
     with db_connect() as conn:
         row = conn.execute(
@@ -1923,7 +1933,8 @@ def revoke_device_token(device_id: str) -> bool:
             return False
         conn.execute("UPDATE device_tokens SET revoked_at = ? WHERE device_id = ?", (utc_now(), device_id))
         conn.execute("DELETE FROM device_sessions WHERE device_id = ?", (device_id,))
-        return True
+    _deprovision_vpn_best_effort(device_id)
+    return True
 
 
 def delete_device_token(device_id: str) -> bool:
@@ -1935,6 +1946,7 @@ def delete_device_token(device_id: str) -> bool:
         conn.execute("DELETE FROM device_access WHERE device_id = ?", (device_id,))
         conn.execute("DELETE FROM device_web_access WHERE device_id = ?", (device_id,))
         conn.execute("DELETE FROM device_sessions WHERE device_id = ?", (device_id,))
+    _deprovision_vpn_best_effort(device_id)
     return True
 
 
@@ -2079,6 +2091,19 @@ def connect_bootstrap(
 
     roles = get_admin_roles(device_id, cfg)
 
+    # VPN bundle is fully optional and behind cfg["vpn"]["enabled"]. Any failure here must
+    # NOT break bootstrap (SMB/heartbeat are primary), so it is isolated in try/except.
+    try:
+        import vpn as _vpn_module
+        vpn_bundle = _vpn_module.vpn_bundle_for_bootstrap(device_id, cfg, db_connect)
+    except Exception as exc:  # noqa: BLE001 - VPN must never block bootstrap
+        # Do not leak raw internals (paths/SQL/awg stderr) to the client; log server-side instead.
+        try:
+            add_audit(event_type="vpn_bootstrap_failed", device_id=device_id, actor=device_id, details=str(exc)[:500])
+        except Exception:
+            pass
+        vpn_bundle = {"enabled": False, "error": "vpn_unavailable"}
+
     return {
         "ok": True,
         "session_id": session_id,
@@ -2091,6 +2116,7 @@ def connect_bootstrap(
         "is_firm_admin": roles["is_firm_admin"],
         "smb_access": smb_access,
         "web_access": get_device_web_access(device_id, cfg),
+        "vpn": vpn_bundle,
     }
 
 

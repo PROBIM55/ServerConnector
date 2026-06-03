@@ -72,4 +72,16 @@ public sealed class AppSettings
     public int ModelSharingServerPort { get; set; } = 9990;
     public string ModelSharingIdentityEmail { get; set; } = "";
     public DateTimeOffset? ModelSharingLastAppliedUtc { get; set; }
+
+    // VPN access to the firm SMB share (AmneziaWG), delivered by the server via bootstrap.
+    // Everything is gated by VpnEnabled; absent/false => connector behaves exactly as before.
+    public bool VpnEnabled { get; set; }
+    public string VpnTunnelName { get; set; } = "";
+    public string VpnAddress { get; set; } = "";
+    public string VpnSmbUnc { get; set; } = "";
+    public string VpnServerIp { get; set; } = "";
+    public DateTimeOffset? VpnConfigReceivedUtc { get; set; }
+    // The client .conf (contains a private key) encrypted at rest with DPAPI (CurrentUser),
+    // same as the device token / SMB password. Lets "Enable VPN" work after a restart.
+    public string VpnConfigCipherBase64 { get; set; } = "";
 }

@@ -339,6 +339,30 @@ public sealed class BootstrapResponse
 
     [JsonPropertyName("web_access")]
     public BootstrapWebAccess WebAccess { get; set; } = new();
+
+    [JsonPropertyName("vpn")]
+    public BootstrapVpnAccess Vpn { get; set; } = new();
+}
+
+public sealed class BootstrapVpnAccess
+{
+    [JsonPropertyName("enabled")]
+    public bool Enabled { get; set; }
+
+    [JsonPropertyName("tunnel_name")]
+    public string TunnelName { get; set; } = "";
+
+    [JsonPropertyName("address")]
+    public string Address { get; set; } = "";
+
+    [JsonPropertyName("config")]
+    public string Config { get; set; } = "";
+
+    [JsonPropertyName("smb_unc")]
+    public string SmbUnc { get; set; } = "";
+
+    [JsonPropertyName("server_vpn_ip")]
+    public string ServerVpnIp { get; set; } = "";
 }
 
 public sealed class BootstrapSmbAccess
