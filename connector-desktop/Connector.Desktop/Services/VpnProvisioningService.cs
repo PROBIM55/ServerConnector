@@ -59,7 +59,7 @@ public sealed class VpnProvisioningService
         try
         {
             using var sc = new ServiceController(ServiceName(tunnel));
-            return sc.Status == ServiceControllerStatus.Running || sc.Status == ServiceControllerStatus.StartPending;
+            return sc.Status == ServiceControllerStatus.Running;   // StartPending is NOT "up" (it may crash right after)
         }
         catch
         {
@@ -84,6 +84,8 @@ public sealed class VpnProvisioningService
         {
             // tunnel name must match the file name (AmneziaWG derives it from the .conf filename)
             File.WriteAllText(confPath, configContent.Replace("\r\n", "\n"), new UTF8Encoding(false));
+            HardenConfAcl(confPath);   // the tunnel service re-reads this file on every start, so it must
+                                       // stay on disk; lock it down (SYSTEM + Administrators + owner) instead.
         }
         catch (Exception ex)
         {
@@ -115,20 +117,25 @@ public sealed class VpnProvisioningService
         }
 
         // /installtunnelservice runs elevated with UseShellExecute, so we can't read its stdout;
-        // verify by service state instead.
-        var running = WaitUntil(() => IsTunnelRunning(tunnel), TimeSpan.FromSeconds(12));
-        // The tunnel service has copied the config into its own protected store; do not leave the
-        // plaintext private key lying in LocalAppData.
+        // verify by service state instead. The .conf MUST remain on disk — the tunnel service
+        // re-reads it on every (re)start; deleting it makes the tunnel fail with
+        // "Unable to load configuration ... cannot find the file".
+        var running = WaitUntil(() => IsTunnelRunning(tunnel), TimeSpan.FromSeconds(15));
         if (running)
         {
-            TryDeleteConf(confPath);
-            AppendLog("tunnel running");
+            // make sure it actually STAYS up (it can crash a second after StartPending)
+            Thread.Sleep(2500);
+            running = IsTunnelRunning(tunnel);
+        }
+        if (running)
+        {
+            AppendLog("tunnel running and stable");
             return VpnResult.Success("VPN-доступ к общей папке включён.");
         }
 
         var hint = string.IsNullOrWhiteSpace(elevErr) ? "" : " " + elevErr;
-        AppendLog("tunnel did not reach RUNNING." + hint);
-        return VpnResult.Fail("VPN установлен, но туннель не поднялся. Проверьте лог VPN." + hint);
+        AppendLog("tunnel did not stay RUNNING." + hint);
+        return VpnResult.Fail("VPN установлен, но туннель не удержался. Проверьте лог VPN (кнопка «Открыть лог»)." + hint);
     }
 
     public VpnResult Disable(string tunnel)
@@ -163,6 +170,35 @@ public sealed class VpnProvisioningService
         {
             AppendLog("conf cleanup skipped: " + ex.Message);
         }
+    }
+
+    // The .conf holds a private key and must stay on disk (the tunnel service re-reads it), so lock it
+    // down: remove inheritance, grant only SYSTEM + Administrators + the current user. Uses icacls
+    // (no extra NuGet); the current user owns the file in their own LocalAppData, so no admin needed.
+    private void HardenConfAcl(string path)
+    {
+        try
+        {
+            RunQuiet("icacls.exe", "\"" + path + "\" /inheritance:r");
+            RunQuiet("icacls.exe", "\"" + path + "\" /grant:r \"*S-1-5-18:F\" \"*S-1-5-32-544:F\" \"" + Environment.UserName + ":F\"");
+        }
+        catch (Exception ex)
+        {
+            AppendLog("conf ACL harden skipped: " + ex.Message);
+        }
+    }
+
+    private static void RunQuiet(string file, string arguments)
+    {
+        var psi = new ProcessStartInfo(file, arguments)
+        {
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+        };
+        using var p = Process.Start(psi);
+        p?.WaitForExit();
     }
 
     public void AppendLog(string message)
