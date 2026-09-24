@@ -75,6 +75,27 @@
         "resolved": "13.0.1",
         "contentHash": "ppPFpBcvxdsfUonNcvITKqLl3bqxWbDCZIzDWHzjpdAHRFfZe0Dw9HmA0+za13IdyrgJwpkDTDA9fHaxOrt20A=="
       },
+      "SharpGLTF.Core": {
+        "type": "Transitive",
+        "resolved": "1.0.7",
+        "contentHash": "dZHCUl2jH1ViiLbAwyYbVfZnFqsF1e/9OhZAfLBoggOpqnsbgKQghldK3LnobmtNRp6GNZMyaNkPceqERkqmsQ=="
+      },
+      "SharpGLTF.Runtime": {
+        "type": "Transitive",
+        "resolved": "1.0.7",
+        "contentHash": "nHLEn7HlVq4KEc/2LSXtjMiWqabIirgS42kPogH6UQ+GhXUGQEOd/UjYb3xYI+ijfM9T7Q098Y9SqwbWfqs3NA==",
+        "dependencies": {
+          "SharpGLTF.Core": "1.0.7"
+        }
+      },
+      "SharpGLTF.Toolkit": {
+        "type": "Transitive",
+        "resolved": "1.0.7",
+        "contentHash": "v4N6KzbQ6gnBdTN970191BYD1Nyo2lGOhli/Ivnt36GehKQvE8m7ROqg0sP3ixSQWNj1vj34+S7HoSNDaPzvXQ==",
+        "dependencies": {
+          "SharpGLTF.Runtime": "1.0.7"
+        }
+      },
       "Silk.NET.Assimp": {
         "type": "Transitive",
         "resolved": "2.23.0",
@@ -190,6 +211,7 @@
       "connector.agrconversion": {
         "type": "Project",
         "dependencies": {
+          "SharpGLTF.Toolkit": "[1.0.7, 1.0.7]",
           "Silk.NET.Assimp": "[2.23.0, 2.23.0]"
         }
       }

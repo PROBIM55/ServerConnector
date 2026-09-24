@@ -1,7 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- Конвертация моделей АГР (пакет цифрового двойника Москвы): чтение пакета и разбор частей.
-       WIC (System.Windows.Media.Imaging) — через UseWPF; FBX — через Assimp. -->
+  <!-- Конвертация моделей АГР (пакет цифрового двойника Москвы): чтение пакета и разбор частей, запись
+       промежуточного glTF части. WIC (System.Windows.Media.Imaging) — через UseWPF; FBX — через Assimp;
+       glTF — через SharpGLTF. -->
   <PropertyGroup>
     <TargetFramework>net8.0-windows</TargetFramework>
     <UseWPF>true</UseWPF>
@@ -19,6 +20,9 @@
     <!-- Точная версия (решение владельца 24.09.2026): в MSI попадает ровно проверенная сборка.
          Транзитивно: Silk.NET.Core/Maths 2.23.0, Ultz.Native.Assimp 6.0.2 (Assimp64.dll, runtimes/win-x64/native). -->
     <PackageReference Include="Silk.NET.Assimp" Version="[2.23.0]" />
+    <!-- Запись glTF (C1b), точная версия, проверенная в спайке S2. Транзитивно: SharpGLTF.Core и SharpGLTF.Runtime
+         той же версии. -->
+    <PackageReference Include="SharpGLTF.Toolkit" Version="[1.0.7]" />
   </ItemGroup>
 
   <ItemGroup>
