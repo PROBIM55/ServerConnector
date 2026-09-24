@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Конвертация моделей АГР (пакет цифрового двойника Москвы): чтение пакета и разбор частей.
+       WIC (System.Windows.Media.Imaging) — через UseWPF; FBX — через Assimp. -->
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <RootNamespace>Connector.AgrConversion</RootNamespace>
+    <AssemblyName>Connector.AgrConversion</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <!-- Решение Р9: точные версии зависимостей и lock-файл (packages.lock.json в Git вместе с кодом). -->
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Точная версия (решение владельца 24.09.2026): в MSI попадает ровно проверенная сборка.
+         Транзитивно: Silk.NET.Core/Maths 2.23.0, Ultz.Native.Assimp 6.0.2 (Assimp64.dll, runtimes/win-x64/native). -->
+    <PackageReference Include="Silk.NET.Assimp" Version="[2.23.0]" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- В проектах WPF System.IO не подключается неявно (конфликт Path с System.Windows.Shapes). -->
+    <Using Include="System.IO" />
+  </ItemGroup>
+
+</Project>

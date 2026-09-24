@@ -1,0 +1,37 @@
+{
+ "type": "FeatureCollection",
+ "name": "SM_TestPart_001",
+ "features": [
+  {
+   "type": "Feature",
+   "properties": {
+    "name": "SM_TestPart_001",
+    "h_relief": 145.25,
+    "h_otn": 3.5,
+    "imageBase64": "iVBORw0KGgoAAAANSUhEUgAAAAMAAAACCAIAAAASFvFNAAAAG0lEQVR42gXBIQEAAACDMPQ1mv4xvwGNJLCZdgmwAS2bjPUXAAAAAElFTkSuQmCC"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     12345.678,
+     23456.789
+    ]
+   },
+   "Glasses": [
+    {
+     "M_TestPart_001_MainGlass_1": {
+      "color_RGB": {
+       "Red": 175,
+       "Green": 186,
+       "Blue": 187
+      },
+      "transparency": 1,
+      "refraction": 1.5,
+      "roughness": 0.859,
+      "metallicity": 0.82
+     }
+    }
+   ]
+  }
+ ]
+}
