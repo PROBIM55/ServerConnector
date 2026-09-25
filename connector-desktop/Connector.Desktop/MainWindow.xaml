@@ -190,6 +190,24 @@
                         <!-- hosted from ShellViewModel (VPN domain -> VPN module) -->
                         <ContentControl x:Name="VpnHost" />
                     </TabItem>
+
+                    <!-- ДОМЕН Конвертер (C2b): подвкладки «Конвертация | История» по образцу TeklaTabs, модули — из
+                         ShellViewModel.Converter. -->
+                    <TabItem Header="Конвертер">
+                        <TabControl x:Name="ConverterTabs" Margin="0,0,0,4">
+                            <TabControl.ItemContainerStyle>
+                                <Style TargetType="TabItem" BasedOn="{StaticResource {x:Type TabItem}}">
+                                    <Setter Property="Header" Value="{Binding Title}" />
+                                </Style>
+                            </TabControl.ItemContainerStyle>
+                            <TabControl.ContentTemplate>
+                                <DataTemplate>
+                                    <ContentControl Content="{Binding View}" />
+                                </DataTemplate>
+                            </TabControl.ContentTemplate>
+                        </TabControl>
+                    </TabItem>
+                    <!-- /ДОМЕН Конвертер -->
                 </TabControl>
             </Grid>
 

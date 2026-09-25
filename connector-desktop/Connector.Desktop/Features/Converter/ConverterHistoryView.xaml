@@ -1,0 +1,96 @@
+<UserControl x:Class="Connector.Desktop.Features.Converter.ConverterHistoryView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:conv="clr-namespace:Connector.Desktop.Features.Converter"
+             Background="Transparent">
+    <!-- «Конвертер» → «История» (C2b, макет C2 кадр 5). DataContext — ConverterViewModel. «Убрать из истории» убирает
+         только запись: файлы результатов остаются. -->
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="Vis" />
+        <Style x:Key="Cell" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="#F4F7FB" />
+            <Setter Property="FontFamily" Value="Segoe UI Variable Text" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Margin" Value="8,0" />
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        </Style>
+        <Style x:Key="HeadCell" TargetType="TextBlock" BasedOn="{StaticResource Cell}">
+            <Setter Property="Foreground" Value="#92A5C3" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+        <Style x:Key="TableRow" TargetType="Border">
+            <Setter Property="BorderBrush" Value="{StaticResource ConverterTableRowDivider}" />
+            <Setter Property="BorderThickness" Value="0,1,0,0" />
+            <Setter Property="MinHeight" Value="31" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding RelativeSource={RelativeSource PreviousData}}" Value="{x:Null}">
+                    <Setter Property="BorderThickness" Value="0" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+    </UserControl.Resources>
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <Border Style="{StaticResource CardStyle}" Margin="12,10,12,12" VerticalAlignment="Top">
+            <StackPanel>
+                <TextBlock Text="История запусков" FontSize="19" FontWeight="SemiBold" />
+                <TextBlock Margin="0,6,0,14" Foreground="#A9BBD3" TextWrapping="Wrap"
+                           Text="Запуски сохраняются между сеансами Коннектора. «Убрать из истории» убирает только запись: файлы результатов остаются в папке. Папка по умолчанию — Документы\Structura\Конвертер." />
+                <TextBlock Text="Запусков ещё не было." Foreground="#A9A9A9" Margin="0,0,0,4"
+                           Visibility="{Binding HistoryEmpty, Converter={StaticResource Vis}}" />
+                <Border Background="{StaticResource ConverterTableBackground}" BorderBrush="{StaticResource ConverterTableBorder}"
+                        BorderThickness="1" CornerRadius="12" SnapsToDevicePixels="True">
+                    <StackPanel>
+                        <Border Background="{StaticResource ConverterTableHeaderBackground}" BorderBrush="{StaticResource ConverterTableBorder}"
+                                BorderThickness="0,0,0,1" CornerRadius="11,11,0,0" Height="28">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="116" />
+                                    <ColumnDefinition Width="60" />
+                                    <ColumnDefinition Width="196" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="300" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Style="{StaticResource HeadCell}" Text="Дата" />
+                                <TextBlock Grid.Column="1" Style="{StaticResource HeadCell}" Text="Частей" />
+                                <TextBlock Grid.Column="2" Style="{StaticResource HeadCell}" Text="Итог" />
+                                <TextBlock Grid.Column="3" Style="{StaticResource HeadCell}" Text="Папка результатов" />
+                            </Grid>
+                        </Border>
+                        <ItemsControl ItemsSource="{Binding History}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate DataType="{x:Type conv:ConverterHistoryItemViewModel}">
+                                    <Border Style="{StaticResource TableRow}">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="116" />
+                                                <ColumnDefinition Width="60" />
+                                                <ColumnDefinition Width="196" />
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="300" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Grid.Column="0" Style="{StaticResource Cell}" Text="{Binding DateText}" />
+                                            <TextBlock Grid.Column="1" Style="{StaticResource Cell}" Text="{Binding PartsText}" />
+                                            <TextBlock Grid.Column="2" Style="{StaticResource Cell}">
+                                                <Run Text="{Binding SummaryDoneText, Mode=OneWay}" Foreground="{Binding SummaryDoneColor, Mode=OneWay}" /><Run Text="{Binding SummarySeparator, Mode=OneWay}" /><Run Text="{Binding SummaryErrorText, Mode=OneWay}" Foreground="#FFA500" />
+                                            </TextBlock>
+                                            <TextBlock Grid.Column="3" Style="{StaticResource Cell}" Text="{Binding FolderText}" />
+                                            <StackPanel Grid.Column="4" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,8,0">
+                                                <Button Style="{StaticResource ConverterRowButton}" Content="Открыть папку" Command="{Binding OpenFolderCommand}" />
+                                                <Button Style="{StaticResource ConverterRowButton}" Content="Отчёт" Command="{Binding ReportCommand}" />
+                                                <Button Style="{StaticResource ConverterRowButton}" Content="Убрать из истории" Command="{Binding RemoveCommand}" />
+                                            </StackPanel>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </Border>
+                <TextBlock Margin="0,10,0,0" Foreground="#92A5C3" TextWrapping="Wrap"
+                           Text="«Отчёт» у запуска открывает список частей с итогом по каждой; у каждой части свой отчёт." />
+            </StackPanel>
+        </Border>
+    </ScrollViewer>
+</UserControl>

@@ -163,6 +163,8 @@ public class ConverterServiceQueueTests
         Assert.True(result, "отмена строки в окне старта потерялась");
         WaitUntil(() => target!.IsFinished, "отмены второй строки");
         Assert.Equal(AgrRowState.Cancelled, target!.State);
+        // Первая строка уже «в работе», но её поток мог ещё не войти в конвертер (ревью C2b: без ожидания — нестабильно).
+        WaitUntil(() => e.Fake.Current == 1, "первой строки в конвертере");
         Assert.Equal(1, e.Fake.Current);
         e.Fake.Release.Set();
         Idle(s);
@@ -182,6 +184,31 @@ public class ConverterServiceQueueTests
         Idle(s);
         Assert.All(s.Rows, r => Assert.Equal(AgrRowState.Cancelled, r.State));
         Assert.False(Directory.Exists(folder), "после «Отменить всё» осталась пустая папка с датой");
+    }
+
+    /// <summary>C2b (ревью C2a, п. 2): запуск отменён целиком — папки нет; «Новая конвертация» в ту же минуту — своя папка.</summary>
+    [Fact]
+    public void RunFolder_CancelledRunSameMinute_NewRunOwnFolder_HistoryDistinct()
+    {
+        using var e = new Env(time: new FixedTime());
+        var s = e.Service;
+        s.Add(new[] { e.Zip("SM_M_1") });
+        string first = s.CurrentRun!.Folder;
+        WaitUntil(() => e.Fake.Current == 1, "идущей строки");
+        Assert.Equal(1, s.CancelAll());
+        Idle(s);
+        WaitUntil(() => s.History.Runs.FirstOrDefault()?.FinishedAt != null, "записи отменённого запуска");
+        Assert.False(Directory.Exists(first));
+
+        Assert.True(s.NewRun());
+        s.Add(new[] { e.Zip("SM_M_2") });
+        string second = s.CurrentRun!.Folder;
+        Assert.Equal(first + "_2", second);
+        e.Fake.Release.Set();
+        Idle(s);
+        WaitUntil(() => s.History.Runs.Count == 2 && s.History.Runs.All(r => r.FinishedAt != null), "двух законченных записей");
+        Assert.Equal(2, s.History.Runs.Select(r => r.Folder).Distinct(StringComparer.OrdinalIgnoreCase).Count());
+        Assert.True(File.Exists(Path.Combine(second, "SM_M_2.glb.zip")));
     }
 
     [Fact]

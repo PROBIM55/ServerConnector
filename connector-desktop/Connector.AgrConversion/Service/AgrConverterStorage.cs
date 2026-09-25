@@ -47,6 +47,13 @@ public sealed class AgrHistoryRun
     public Guid Id { get; set; }
     public DateTimeOffset StartedAt { get; set; }
     public DateTimeOffset? FinishedAt { get; set; }
+
+    /// <summary>
+    /// Коннектор закрыли или он упал посреди запуска (ревью C2b): запись без <see cref="FinishedAt"/> закрывается при
+    /// следующем чтении истории. Время окончания неизвестно; части, не дошедшие до итога, в записи не числятся.
+    /// </summary>
+    public bool Interrupted { get; set; }
+
     public string Folder { get; set; } = "";
     public int Total { get; set; }
     public int Done { get; set; }
@@ -156,6 +163,7 @@ public sealed class AgrConverterHistory
     {
         List<AgrHistoryRun> loaded = new();
         string? problem = null;
+        int interrupted = 0;
         try
         {
             if (File.Exists(Path))
@@ -172,7 +180,18 @@ public sealed class AgrConverterHistory
                 else
                 {
                     loaded = (model.Runs ?? new()).Where(r => r != null && r.Id != Guid.Empty).Select(r => r!).ToList();
-                    foreach (var r in loaded) r.Parts ??= new();
+                    foreach (var r in loaded)
+                    {
+                        r.Parts ??= new();
+                        // Читается при старте службы: своих запусков у неё ещё нет, значит незаконченный — из прошлого
+                        // сеанса, который закрыли или который упал. Иначе запись висела бы «Идёт» и не убиралась.
+                        if (r.FinishedAt == null && !r.Interrupted)
+                        {
+                            r.Interrupted = true;
+                            r.Summary = "Прервано — " + AgrConverterText.Summary(r.Total, r.Done, r.Failed, r.Cancelled);
+                            interrupted++;
+                        }
+                    }
                 }
             }
         }
@@ -199,7 +218,10 @@ public sealed class AgrConverterHistory
         {
             _runs.Clear();
             _runs.AddRange(loaded);
+            if (interrupted > 0) SaveLocked();
         }
+        if (interrupted > 0)
+            _log?.Invoke($"история: незаконченных запусков прошлого сеанса — {interrupted}; отмечены «Прервано»");
         RaiseChanged();
     }
 

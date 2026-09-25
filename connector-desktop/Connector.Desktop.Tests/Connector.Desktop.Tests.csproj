@@ -6,6 +6,8 @@
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
+    <!-- C2b: вид-модель «Конвертера» и ConverterDispatch (Dispatcher) — WPF без окна. -->
+    <UseWPF>true</UseWPF>
   </PropertyGroup>
 
   <ItemGroup>
@@ -26,6 +28,19 @@
              Link="Services\TcpConnectivityProbe.cs" />
     <Compile Include="..\Connector.Desktop\Services\VpnConfigComparer.cs"
              Link="Services\VpnConfigComparer.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- C2b: вид-модель вкладки «Конвертер» без окна и без полезной нагрузки приложения. -->
+    <ProjectReference Include="..\Connector.AgrConversion\Connector.AgrConversion.csproj" />
+    <Compile Include="..\Connector.Desktop\Mvvm\ObservableObject.cs" Link="Mvvm\ObservableObject.cs" />
+    <Compile Include="..\Connector.Desktop\Mvvm\RelayCommand.cs" Link="Mvvm\RelayCommand.cs" />
+    <Compile Include="..\Connector.Desktop\Features\Converter\ConverterText.cs" Link="Converter\ConverterText.cs" />
+    <Compile Include="..\Connector.Desktop\Features\Converter\ConverterRowViewModel.cs" Link="Converter\ConverterRowViewModel.cs" />
+    <Compile Include="..\Connector.Desktop\Features\Converter\ConverterReportViewModel.cs" Link="Converter\ConverterReportViewModel.cs" />
+    <Compile Include="..\Connector.Desktop\Features\Converter\ConverterViewModel.cs" Link="Converter\ConverterViewModel.cs" />
+    <Using Include="System.IO" />
+    <Using Include="System.Net.Http" />
   </ItemGroup>
 
 </Project>

@@ -56,11 +56,18 @@ public static class AgrConverterPaths
     }
 
     /// <summary>Первая свободная папка запуска (при занятом имени — <c>_2</c>, <c>_3</c>); на диске не создаётся.</summary>
-    public static string FreeRunFolder(string root, DateTimeOffset localTime)
+    public static string FreeRunFolder(string root, DateTimeOffset localTime) => FreeRunFolder(root, localTime, null);
+
+    /// <summary>
+    /// <see cref="FreeRunFolder(string, DateTimeOffset)"/>, где занятым считается и путь, для которого
+    /// <paramref name="taken"/> вернул true: запуск, отменённый целиком, папку на диске не создаёт, но в истории она
+    /// записана (C2b: «Новая конвертация» в ту же минуту не должна получить тот же путь).
+    /// </summary>
+    public static string FreeRunFolder(string root, DateTimeOffset localTime, Func<string, bool>? taken)
     {
         string baseName = RunFolderName(localTime);
         string path = Path.Combine(root, baseName);
-        for (int i = 2; Directory.Exists(path) || File.Exists(path); i++)
+        for (int i = 2; Directory.Exists(path) || File.Exists(path) || taken?.Invoke(path) == true; i++)
         {
             path = Path.Combine(root, $"{baseName}_{i}");
         }

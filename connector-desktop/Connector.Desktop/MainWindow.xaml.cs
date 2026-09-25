@@ -424,6 +424,13 @@ public partial class MainWindow : Window, IShellHost, IConnectorHost
 
         // Атрибуты: placeholder domain (no shell glue yet — pure roadmap view).
         AttributesHost.Content = _shell.Attributes.Module("Атрибуты")?.View;
+
+        // Конвертер (C2b): подвкладки «Конвертация | История»; строки «Конвертер: …» — в общий журнал окна.
+        ConverterTabs.ItemsSource = _shell.Converter.Modules;
+        if (_shell.Converter.Module("Конвертация") is Features.Converter.ConverterModule converter)
+        {
+            converter.Log = AppendLog;
+        }
     }
 
     private void SyncFeatureModules()
@@ -706,6 +713,8 @@ public partial class MainWindow : Window, IShellHost, IConnectorHost
         _updateTimer.Stop();
         _trayIcon.Visible = false;
         _trayIcon.Dispose();
+        // Конвертер: отменить идущие части и убрать их временные папки.
+        (_shell.Converter.Module("Конвертация") as IDisposable)?.Dispose();
     }
 
     private async void UpdateTimer_Tick(object? sender, EventArgs e)

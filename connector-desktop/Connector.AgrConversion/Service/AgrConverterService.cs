@@ -305,6 +305,29 @@ public sealed class AgrConverterService : IDisposable
         CancelAll();
     }
 
+    /// <summary>
+    /// Закрытие окна (ревью C2b): отменить все части и дождаться, пока идущие запишут итог в историю, но не дольше
+    /// <paramref name="wait"/>. Не успели (конвертер не отпустил отмену) — запись останется без
+    /// <see cref="AgrHistoryRun.FinishedAt"/> и при следующем старте закроется как «Прервано». Потоки частей поток окна
+    /// не ждут (журнал окна — через BeginInvoke), поэтому ожидание из него не заклинивает.
+    /// </summary>
+    /// <returns>true — все части остановились и записаны.</returns>
+    public bool Shutdown(TimeSpan wait)
+    {
+        Dispose();
+        Task[] tasks;
+        lock (_gate) tasks = _active.Values.ToArray();
+        if (tasks.Length == 0) return true;
+        try
+        {
+            return Task.WhenAll(tasks).Wait(wait);
+        }
+        catch (AggregateException)
+        {
+            return true; // задача части завершилась (сбоем) — ждать больше нечего
+        }
+    }
+
     // ---- очередь ----
 
     double CurrentSecondsPerMb()
@@ -321,7 +344,11 @@ public sealed class AgrConverterService : IDisposable
         string folder;
         try
         {
-            folder = AgrConverterPaths.FreeRunFolder(root, now);
+            // Папки запусков из истории — тоже заняты: у запуска, отменённого целиком, папки на диске нет, и новый
+            // запуск в ту же минуту иначе получил бы тот же путь (две записи истории с одной папкой, ревью C2a).
+            // Порядок замков: служба → история (история замок службы не берёт).
+            var used = new HashSet<string>(History.Runs.Select(r => r.Folder), StringComparer.OrdinalIgnoreCase);
+            folder = AgrConverterPaths.FreeRunFolder(root, now, used.Contains);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
         {

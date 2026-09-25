@@ -1,5 +1,6 @@
 using Connector.Desktop.Features.Attributes;
 using Connector.Desktop.Features.Connector;
+using Connector.Desktop.Features.Converter;
 using Connector.Desktop.Features.Structura;
 using Connector.Desktop.Features.Tekla.ModelSharing;
 using Connector.Desktop.Features.Tekla.Patching;
@@ -22,6 +23,7 @@ public sealed class ShellViewModel
     public FeatureDomain Structura { get; }
     public FeatureDomain Vpn { get; }
     public FeatureDomain Attributes { get; }
+    public FeatureDomain Converter { get; }
 
     public IReadOnlyList<FeatureDomain> Domains { get; }
 
@@ -58,6 +60,14 @@ public sealed class ShellViewModel
             new AttributesModule(),
         });
 
-        Domains = new[] { Connector, Tekla, Structura, Vpn, Attributes };
+        // «Конвертер» (C2b): модели АГР → .glb.zip для Студии, локально (Р9). Две подвкладки над одной вид-моделью.
+        var converter = new ConverterModule();
+        Converter = new FeatureDomain("Конвертер", new IFeatureModule[]
+        {
+            converter,
+            converter.History,
+        });
+
+        Domains = new[] { Connector, Tekla, Structura, Vpn, Attributes, Converter };
     }
 }

@@ -1,0 +1,299 @@
+<UserControl x:Class="Connector.Desktop.Features.Converter.ConverterView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:conv="clr-namespace:Connector.Desktop.Features.Converter"
+             Background="Transparent"
+             AllowDrop="True">
+    <!-- Вкладка «Конвертер» → «Конвертация» (C2b, макет C2 кадры 1–3). DataContext — ConverterViewModel из ConverterModule.
+         Перетаскивание принимается на всю вкладку. Тексты внутри шаблонов строк — со своим стилем Cell: неявный стиль
+         TextBlock окна в шаблоны не проходит. -->
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="Vis" />
+
+        <Style x:Key="Cell" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="#F4F7FB" />
+            <Setter Property="FontFamily" Value="Segoe UI Variable Text" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Margin" Value="8,0" />
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        </Style>
+        <Style x:Key="HeadCell" TargetType="TextBlock" BasedOn="{StaticResource Cell}">
+            <Setter Property="Foreground" Value="#92A5C3" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+
+        <Style x:Key="Table" TargetType="Border">
+            <Setter Property="Background" Value="{StaticResource ConverterTableBackground}" />
+            <Setter Property="BorderBrush" Value="{StaticResource ConverterTableBorder}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="12" />
+            <Setter Property="Margin" Value="0,8,0,0" />
+            <Setter Property="SnapsToDevicePixels" Value="True" />
+        </Style>
+        <Style x:Key="TableHead" TargetType="Border">
+            <Setter Property="Background" Value="{StaticResource ConverterTableHeaderBackground}" />
+            <Setter Property="BorderBrush" Value="{StaticResource ConverterTableBorder}" />
+            <Setter Property="BorderThickness" Value="0,0,0,1" />
+            <Setter Property="CornerRadius" Value="11,11,0,0" />
+            <Setter Property="Height" Value="28" />
+        </Style>
+        <!-- Строка: разделитель сверху у всех, кроме первой; строка с ошибкой — тёмно-красный фон и полоса слева. -->
+        <Style x:Key="TableRow" TargetType="Border">
+            <Setter Property="BorderBrush" Value="{StaticResource ConverterTableRowDivider}" />
+            <Setter Property="BorderThickness" Value="0,1,0,0" />
+            <Setter Property="MinHeight" Value="31" />
+            <Setter Property="Background" Value="Transparent" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding RelativeSource={RelativeSource PreviousData}}" Value="{x:Null}">
+                    <Setter Property="BorderThickness" Value="0" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsError}" Value="True">
+                    <Setter Property="Background" Value="#231419" />
+                    <Setter Property="Padding" Value="0,5" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="Dot" TargetType="Ellipse">
+            <Setter Property="Width" Value="8" />
+            <Setter Property="Height" Value="8" />
+            <Setter Property="Margin" Value="0,0,3,0" />
+            <Setter Property="Fill" Value="#2A3E5C" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding}" Value="on">
+                    <Setter Property="Fill" Value="#6BC2FF" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding}" Value="cur">
+                    <Setter Property="Fill" Value="#D7E7FF" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="MiniBar" TargetType="ProgressBar">
+            <Setter Property="Width" Value="56" />
+            <Setter Property="Height" Value="8" />
+            <Setter Property="Minimum" Value="0" />
+            <Setter Property="Maximum" Value="100" />
+            <Setter Property="Foreground" Value="#6BC2FF" />
+            <Setter Property="Background" Value="#1B2B40" />
+            <Setter Property="BorderBrush" Value="#2B3E57" />
+            <Setter Property="Margin" Value="8,0,0,0" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+
+        <!-- Кадр 2: строка идущего запуска. -->
+        <DataTemplate x:Key="RunningRow" DataType="{x:Type conv:ConverterRowViewModel}">
+            <Border Style="{StaticResource TableRow}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="196" />
+                        <ColumnDefinition Width="72" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="128" />
+                        <ColumnDefinition Width="66" />
+                        <ColumnDefinition Width="74" />
+                        <ColumnDefinition Width="84" />
+                    </Grid.ColumnDefinitions>
+                    <Rectangle Width="3" HorizontalAlignment="Left" Fill="#5E313B" Margin="0,-5"
+                               Visibility="{Binding IsError, Converter={StaticResource Vis}}" />
+                    <TextBlock Grid.Column="0" Style="{StaticResource Cell}" Text="{Binding Name}" Foreground="{Binding CellColor}" />
+                    <TextBlock Grid.Column="1" Style="{StaticResource Cell}" Text="{Binding SourceSizeText}" Foreground="{Binding CellColor}" />
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" Margin="8,0" VerticalAlignment="Center"
+                                Visibility="{Binding IsNotError, Converter={StaticResource Vis}}">
+                        <ItemsControl ItemsSource="{Binding Dots}" Margin="0,0,5,0" VerticalAlignment="Center"
+                                      Visibility="{Binding ShowDots, Converter={StaticResource Vis}}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <StackPanel Orientation="Horizontal" />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Ellipse Style="{StaticResource Dot}" />
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <TextBlock Style="{StaticResource Cell}" Margin="0" Text="{Binding StageLabel}" Foreground="{Binding StageColor}" />
+                    </StackPanel>
+                    <TextBlock Grid.Column="2" Grid.ColumnSpan="2" Style="{StaticResource Cell}" Text="{Binding ErrorLong}"
+                               Foreground="#FFA500" TextWrapping="Wrap" TextTrimming="None"
+                               Visibility="{Binding IsError, Converter={StaticResource Vis}}" />
+                    <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center"
+                                Visibility="{Binding ShowBar, Converter={StaticResource Vis}}">
+                        <ProgressBar Style="{StaticResource MiniBar}" Value="{Binding PercentValue, Mode=OneWay}" />
+                        <TextBlock Style="{StaticResource Cell}" Text="{Binding PercentText}" />
+                    </StackPanel>
+                    <TextBlock Grid.Column="3" Style="{StaticResource Cell}" Text="—" Foreground="{Binding CellColor}"
+                               Visibility="{Binding ShowDash, Converter={StaticResource Vis}}" />
+                    <TextBlock Grid.Column="4" Style="{StaticResource Cell}" Text="{Binding ElapsedText}" Foreground="{Binding CellColor}" />
+                    <TextBlock Grid.Column="5" Style="{StaticResource Cell}" Text="{Binding RemainingText}" Foreground="{Binding CellColor}" />
+                    <Button Grid.Column="6" Style="{StaticResource ConverterRowButton}" Content="Отменить" HorizontalAlignment="Right"
+                            Margin="0,0,8,0" Command="{Binding CancelCommand}"
+                            Visibility="{Binding CanCancel, Converter={StaticResource Vis}}" />
+                </Grid>
+            </Border>
+        </DataTemplate>
+
+        <!-- Кадр 3: строка законченного запуска. -->
+        <DataTemplate x:Key="FinishedRow" DataType="{x:Type conv:ConverterRowViewModel}">
+            <Border Style="{StaticResource TableRow}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="200" />
+                        <ColumnDefinition Width="76" />
+                        <ColumnDefinition Width="56" />
+                        <ColumnDefinition Width="78" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Rectangle Width="3" HorizontalAlignment="Left" Fill="#5E313B" Margin="0,-5"
+                               Visibility="{Binding IsError, Converter={StaticResource Vis}}" />
+                    <TextBlock Grid.Column="0" Style="{StaticResource Cell}" Text="{Binding Name}" Foreground="{Binding CellColor}" />
+                    <TextBlock Grid.Column="1" Style="{StaticResource Cell}" Text="{Binding SourceSizeText}" Foreground="{Binding CellColor}" />
+                    <TextBlock Grid.Column="2" Style="{StaticResource Cell}" Text="{Binding ElapsedText}" Foreground="{Binding CellColor}" />
+                    <TextBlock Grid.Column="3" Style="{StaticResource Cell}" Text="{Binding ResultText}" Foreground="#00FA9A"
+                               Visibility="{Binding ShowResultActions, Converter={StaticResource Vis}}" />
+                    <StackPanel Grid.Column="4" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,8,0"
+                                Visibility="{Binding ShowResultActions, Converter={StaticResource Vis}}">
+                        <Button Style="{StaticResource ConverterRowButton}" Content="Открыть папку" Command="{Binding OpenFolderCommand}" />
+                        <Button Style="{StaticResource ConverterRowButton}" Content="Отчёт" Command="{Binding ReportCommand}" />
+                        <Button Style="{StaticResource ConverterRowButton}" Content="Скопировать путь" Command="{Binding CopyPathCommand}" />
+                    </StackPanel>
+                    <DockPanel Grid.Column="3" Grid.ColumnSpan="2" Margin="0,0,8,0"
+                               Visibility="{Binding ShowOutcome, Converter={StaticResource Vis}}">
+                        <Button DockPanel.Dock="Right" Style="{StaticResource ConverterRowButton}" Content="Отчёт"
+                                VerticalAlignment="Center" Command="{Binding ReportCommand}" />
+                        <TextBlock Style="{StaticResource Cell}" Text="{Binding OutcomeText}" Foreground="{Binding OutcomeColor}"
+                                   TextWrapping="Wrap" TextTrimming="None" />
+                    </DockPanel>
+                </Grid>
+            </Border>
+        </DataTemplate>
+    </UserControl.Resources>
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <Border Style="{StaticResource CardStyle}" Margin="12,10,12,12" VerticalAlignment="Top">
+            <StackPanel>
+                <TextBlock Text="Модели АГР (FBX) → GLB для Студии" FontSize="19" FontWeight="SemiBold" />
+
+                <!-- Кадр 1: запуска нет. -->
+                <StackPanel Visibility="{Binding IsIntake, Converter={StaticResource Vis}}">
+                    <TextBlock Margin="0,6,0,14" Foreground="#A9BBD3" TextWrapping="Wrap"
+                               Text="Готовит модели АГР для Студии: на каждую часть получается один файл .glb.zip (пакет GLB для Студии, 20–50 МБ). В Студию вы загружаете его сами через браузер: Коннектор к Structura не подключается." />
+                    <Grid>
+                        <Rectangle RadiusX="14" RadiusY="14" StrokeThickness="1.5" StrokeDashArray="4 3"
+                                   Stroke="{StaticResource ConverterDropZoneBorder}" Fill="{StaticResource ConverterTableBackground}"
+                                   SnapsToDevicePixels="True" />
+                        <StackPanel Margin="16,14,16,8">
+                            <TextBlock Text="Перетащите сюда zip частей или папку" FontSize="16" FontWeight="SemiBold" />
+                            <TextBlock Margin="0,6,0,0" Foreground="#A9BBD3" TextWrapping="Wrap"
+                                       Text="•  zip частей в том виде, как пришли. Можно все сразу: SM_ProektiruemyjProezd_001.zip … SM_ProektiruemyjProezd_Ground.zip." />
+                            <TextBlock Margin="0,2,0,0" Foreground="#A9BBD3" TextWrapping="Wrap"
+                                       Text="•  Или папку с распакованными частями. Распаковывать самому не нужно." />
+                            <WrapPanel Margin="0,12,0,0">
+                                <Button Style="{StaticResource PrimaryButton}" Content="Добавить zip…" Command="{Binding AddZipsCommand}" />
+                                <Button Style="{StaticResource SecondaryButton}" Content="Добавить папку…" Command="{Binding AddFolderCommand}" />
+                            </WrapPanel>
+                            <TextBlock Margin="0,0,0,6" Foreground="#92A5C3" TextWrapping="Wrap" Text="{Binding ParallelHint}" />
+                        </StackPanel>
+                    </Grid>
+                    <Border Margin="0,14,0,0" Padding="10" BorderBrush="#2A3E5C" BorderThickness="1" CornerRadius="10">
+                        <StackPanel>
+                            <TextBlock Text="Папка результатов:" Foreground="#92A5C3" />
+                            <DockPanel Margin="0,4,0,0">
+                                <Button DockPanel.Dock="Right" Style="{StaticResource SecondaryButton}" Margin="0" Content="Изменить"
+                                        Command="{Binding ChangeOutputRootCommand}" />
+                                <TextBlock Text="{Binding OutputRootText}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                            </DockPanel>
+                            <TextBlock Margin="0,2,0,0" Foreground="#92A5C3" TextWrapping="Wrap"
+                                       Text="На каждый запуск создаётся своя подпапка с датой и временем, прежние результаты не затираются." />
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
+                <!-- Кадр 2: идёт конвертация. -->
+                <StackPanel Margin="0,10,0,0" Visibility="{Binding IsRunning, Converter={StaticResource Vis}}">
+                    <TextBlock Text="{Binding ProgressTitle}" FontFamily="Segoe UI Variable Text" FontSize="15" FontWeight="SemiBold"
+                               Foreground="#CFE0F5" TextWrapping="Wrap" />
+                    <DockPanel Margin="0,8,0,0">
+                        <Button DockPanel.Dock="Right" Style="{StaticResource DangerButton}" Margin="16,0,0,0" Content="Отменить всё"
+                                Command="{Binding CancelAllCommand}" />
+                        <TextBlock DockPanel.Dock="Right" Text="{Binding OverallMeta}" Foreground="#9DB1CC" VerticalAlignment="Center" />
+                        <ProgressBar Height="18" Minimum="0" Maximum="100" Value="{Binding OverallPercent, Mode=OneWay}" Margin="0,0,12,0"
+                                     Foreground="#6BC2FF" Background="#1B2B40" BorderBrush="#2B3E57" />
+                    </DockPanel>
+                    <TextBlock Margin="0,8,0,0" Foreground="#92A5C3" Text="{x:Static conv:ConverterText.StagesLegend}" />
+                    <Border Style="{StaticResource Table}">
+                        <StackPanel>
+                            <Border Style="{StaticResource TableHead}">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="196" />
+                                        <ColumnDefinition Width="72" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="128" />
+                                        <ColumnDefinition Width="66" />
+                                        <ColumnDefinition Width="74" />
+                                        <ColumnDefinition Width="84" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Style="{StaticResource HeadCell}" Text="Часть" />
+                                    <TextBlock Grid.Column="1" Style="{StaticResource HeadCell}" Text="Архив" />
+                                    <TextBlock Grid.Column="2" Style="{StaticResource HeadCell}" Text="Этап" />
+                                    <TextBlock Grid.Column="3" Style="{StaticResource HeadCell}" Text="Прогресс" />
+                                    <TextBlock Grid.Column="4" Style="{StaticResource HeadCell}" Text="Прошло" />
+                                    <TextBlock Grid.Column="5" Style="{StaticResource HeadCell}" Text="Осталось" />
+                                </Grid>
+                            </Border>
+                            <ItemsControl ItemsSource="{Binding Rows}" ItemTemplate="{StaticResource RunningRow}" />
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
+                <!-- Кадр 3: запуск закончен. -->
+                <StackPanel Margin="0,10,0,0" Visibility="{Binding IsFinished, Converter={StaticResource Vis}}">
+                    <DockPanel>
+                        <Button DockPanel.Dock="Right" Style="{StaticResource SecondaryButton}" Margin="0" Content="Новая конвертация"
+                                Command="{Binding NewRunCommand}" />
+                        <Button DockPanel.Dock="Right" Style="{StaticResource SecondaryButton}" Margin="0,0,8,0" Content="Открыть папку результатов"
+                                Command="{Binding OpenResultsCommand}" />
+                        <TextBlock FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis">
+                            <Run Text="{Binding SummaryDoneText, Mode=OneWay}" Foreground="{Binding SummaryDoneColor, Mode=OneWay}" /><Run Text="{Binding SummarySeparator, Mode=OneWay}" /><Run Text="{Binding SummaryErrorText, Mode=OneWay}" Foreground="#FFA500" />
+                        </TextBlock>
+                    </DockPanel>
+                    <TextBlock Margin="0,4,0,0" Foreground="#9DB1CC" TextWrapping="Wrap" Text="{Binding FinishedMeta}" />
+                    <Border Margin="0,14,0,0" Padding="12,10" BorderBrush="#2A3E5C" BorderThickness="1" CornerRadius="10">
+                        <DockPanel>
+                            <Button DockPanel.Dock="Right" Style="{StaticResource PrimaryButton}" Margin="16,0,0,0" Content="Открыть Студию"
+                                    VerticalAlignment="Center" Command="{Binding OpenStudioCommand}" />
+                            <StackPanel VerticalAlignment="Center">
+                                <TextBlock Text="Как загрузить в Студию" FontWeight="SemiBold" />
+                                <TextBlock Margin="0,2,0,0" Foreground="#A9BBD3" TextWrapping="Wrap" Text="{Binding StudioHint}" />
+                            </StackPanel>
+                        </DockPanel>
+                    </Border>
+                    <TextBlock Margin="0,12,0,0" Foreground="#92A5C3" TextWrapping="Wrap" Text="{Binding ResultNote}" />
+                    <Border Style="{StaticResource Table}">
+                        <StackPanel>
+                            <Border Style="{StaticResource TableHead}">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="200" />
+                                        <ColumnDefinition Width="76" />
+                                        <ColumnDefinition Width="56" />
+                                        <ColumnDefinition Width="78" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Style="{StaticResource HeadCell}" Text="Часть" />
+                                    <TextBlock Grid.Column="1" Style="{StaticResource HeadCell}" Text="Исходник" />
+                                    <TextBlock Grid.Column="2" Style="{StaticResource HeadCell}" Text="Время" />
+                                    <TextBlock Grid.Column="3" Style="{StaticResource HeadCell}" Text="Результат" />
+                                </Grid>
+                            </Border>
+                            <ItemsControl ItemsSource="{Binding Rows}" ItemTemplate="{StaticResource FinishedRow}" />
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </StackPanel>
+        </Border>
+    </ScrollViewer>
+</UserControl>
