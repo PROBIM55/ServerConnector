@@ -118,7 +118,7 @@ public class GltfReferenceTests
     {
         var errors = new List<string>();
         var keys = a.Materials.Keys.Union(r.Materials.Keys).OrderBy(k => k.Mat, StringComparer.Ordinal).ThenBy(k => k.Tile).ToList();
-        long missR = 0, missA = 0, totalR = 0, mirrorHit = 0, mirrorTotal = 0, uvMissR = 0;
+        long missR = 0, missA = 0, totalR = 0, mirrorHit = 0, mirrorTotal = 0, uvMissR = 0, uvMissA = 0;
         double maxDev = 0;
         foreach (var k in keys)
         {
@@ -158,7 +158,9 @@ public class GltfReferenceTests
             }
             foreach (var p in pa)
             {
+                // сверка в обе стороны (ревью C1b): записанная вершина ищется в эталоне и по позиции, и по UV
                 if (gridR.Nearest(p) > PositionTolM) missA++;
+                else if (gridR.Nearest(p, UvTol) > PositionTolM) uvMissA++;
                 mirrorTotal++;
                 if (gridR.Nearest(new[] { p[0], p[1], -p[2], p[3], p[4] }) <= PositionTolM) mirrorHit++;
             }
@@ -167,6 +169,7 @@ public class GltfReferenceTests
         if (missR > 0) errors.Add($"вершин эталона без пары: {missR} из {totalR}");
         if (missA > 0) errors.Add($"записанных вершин без пары в эталоне: {missA} из {mirrorTotal}");
         if (uvMissR > 0) errors.Add($"вершин эталона без пары с той же UV (±{UvTol}): {uvMissR} из {totalR}");
+        if (uvMissA > 0) errors.Add($"записанных вершин без пары в эталоне с той же UV (±{UvTol}): {uvMissA} из {mirrorTotal}");
         if (mirrorFrac >= 0.5) errors.Add($"зеркальная ось совпала у {mirrorFrac:P1} вершин — сверка нечувствительна");
 
         var tilesA = a.Triangles.GroupBy(kv => kv.Key.Tile).ToDictionary(g => g.Key, g => g.Sum(kv => kv.Value));

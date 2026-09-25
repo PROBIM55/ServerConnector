@@ -159,10 +159,14 @@ public sealed class AgrGltfWriter
             BinPath = Path.Combine(outDir, stem + ".bin"),
         };
 
-        var textures = new Dictionary<string, AgrTextureInfo>(StringComparer.Ordinal);
+        // Ключ текстуры — путь внутри части (ревью C1b): одноимённые файлы из разных подпапок — разные картинки.
+        var textures = new Dictionary<string, AgrTextureInfo>(StringComparer.OrdinalIgnoreCase);
         foreach (var t in _part.Textures)
         {
-            textures.TryAdd(t.File, t);
+            if (!textures.TryAdd(TextureKey(t.RelativePath), t))
+            {
+                throw new InvalidDataException($"{_part.Name}: картинка {t.RelativePath} встречается дважды");
+            }
         }
 
         var model = ModelRoot.CreateModel();
@@ -268,7 +272,10 @@ public sealed class AgrGltfWriter
             {
                 return null;
             }
-            var t = textures[file];
+            if (!tile.MapPaths.TryGetValue(kind, out var rel) || !textures.TryGetValue(TextureKey(rel), out var t))
+            {
+                throw new InvalidDataException($"{_part.Name}: нет пути картинки {kind} ({file}) тайла {tile.Material}|{tile.Tile}");
+            }
             if (!t.Analyzed)
             {
                 throw new InvalidOperationException(
@@ -283,7 +290,8 @@ public sealed class AgrGltfWriter
 
         Vector4 baseColor;
         Image? baseImage = null;
-        if (d != null && !d.Uniform)
+        // Однотонная по цвету Diffuse с непостоянной альфой остаётся картинкой: константа потеряла бы альфу (ревью C1b).
+        if (d != null && (!d.Uniform || d.Alpha is { NonTrivial: true }))
         {
             baseColor = Vector4.One;
             baseImage = images.Use(d);
@@ -425,6 +433,9 @@ public sealed class AgrGltfWriter
         return fallback;
     }
 
+    /// <summary>Предел длины «папка .gltf + относительная ссылка» для картинки без копии (MAX_PATH 260 с запасом).</summary>
+    const int MaxLinkedPath = 240;
+
     AgrGltfImage PlaceImage(AgrTextureInfo tex, string outDir)
     {
         string source = Path.GetFullPath(Path.Combine(_partDirectory, tex.RelativePath));
@@ -434,8 +445,10 @@ public sealed class AgrGltfWriter
         }
         if (_sameVolume(source, outDir))
         {
+            // gltfpack склеивает папку .gltf и uri без нормализации «..»: путь длиннее MAX_PATH (260) Windows не откроет,
+            // и gltfpack молча пропустит картинку («error reading source file»). Длинная ссылка — копия рядом с .gltf.
             string rel = Path.GetRelativePath(outDir, source);
-            if (!Path.IsPathRooted(rel))
+            if (!Path.IsPathRooted(rel) && outDir.Length + 1 + rel.Length <= MaxLinkedPath)
             {
                 return new AgrGltfImage
                 {
@@ -443,12 +456,23 @@ public sealed class AgrGltfWriter
                 };
             }
         }
-        string target = Path.Combine(outDir, tex.File);
-        long bytes = string.Equals(source, Path.GetFullPath(target), StringComparison.OrdinalIgnoreCase)
+        // Копия — по пути внутри части (подпапки сохраняются): одноимённые картинки не затирают друг друга.
+        string rel2 = TextureKey(tex.RelativePath);
+        string target = Path.GetFullPath(Path.Combine(outDir, rel2));
+        if (!target.StartsWith(outDir.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidDataException($"{_part.Name}: путь картинки {tex.RelativePath} выходит за папку вывода");
+        }
+        Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+        long bytes = string.Equals(source, target, StringComparison.OrdinalIgnoreCase)
             ? new FileInfo(source).Length
             : CopyStreamed(source, target);
-        return new AgrGltfImage { File = tex.File, Source = source, Uri = EncodeRelativeUri(tex.File), Copied = true, Bytes = bytes };
+        return new AgrGltfImage { File = tex.File, Source = source, Uri = EncodeRelativeUri(rel2), Copied = true, Bytes = bytes };
     }
+
+    /// <summary>Ключ картинки: путь внутри части через «/», без «./».</summary>
+    static string TextureKey(string relativePath) =>
+        string.Join("/", relativePath.Split('\\', '/').Where(s => s.Length > 0 && s != "."));
 
     /// <summary>Потоковая копия с буфером 1 МБ: картинка целиком в память не читается.</summary>
     static long CopyStreamed(string source, string target)
@@ -599,7 +623,7 @@ public sealed class AgrGltfWriter
     {
         readonly ModelRoot _model;
         readonly MemoryImage _placeholder;
-        readonly Dictionary<string, Image> _byFile = new(StringComparer.Ordinal);
+        readonly Dictionary<string, Image> _byFile = new(StringComparer.OrdinalIgnoreCase);
 
         public ImageSet(ModelRoot model, byte[] placeholderPng)
         {
@@ -611,15 +635,16 @@ public sealed class AgrGltfWriter
 
         public Image Use(AgrTextureInfo tex)
         {
-            if (_byFile.TryGetValue(tex.File, out var img))
+            string key = TextureKey(tex.RelativePath);
+            if (_byFile.TryGetValue(key, out var img))
             {
                 return img;
             }
-            img = _model.CreateImage(tex.File);
+            img = _model.CreateImage(key);
             img.Content = _placeholder;
             string token = string.Create(CultureInfo.InvariantCulture, $"agr-image-{Entries.Count:0000}.png");
             img.AlternateWriteFileName = token;
-            _byFile[tex.File] = img;
+            _byFile[key] = img;
             Entries.Add((token, tex));
             return img;
         }

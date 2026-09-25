@@ -148,7 +148,7 @@ public class GltfWriterTests
         Assert.Equal(9729, (int?)samplers[0]!["magFilter"]);
         Assert.Equal(9987, (int?)samplers[0]!["minFilter"]);
         var textures = g["textures"]!.AsArray();
-        Assert.Equal(4, textures.Count);
+        Assert.Equal(5, textures.Count);
         Assert.All(textures, t => Assert.Equal(0, (int?)t!["sampler"]));
 
         var model = LoadStrict(res.GltfPath);
@@ -170,7 +170,7 @@ public class GltfWriterTests
         Assert.Equal(new[] { $"{GlassMat}_1001", $"{MainMat}_1001", $"{MainMat}_1002", $"{MainMat}_1011" },
                      mats.Keys.OrderBy(k => k, StringComparer.Ordinal).ToArray());
         Assert.All(mats.Values, m => Assert.True((bool)m["doubleSided"]!));
-        Assert.Equal(4, g["images"]!.AsArray().Count);
+        Assert.Equal(5, g["images"]!.AsArray().Count);
 
         // 1001: все три карты настоящие
         var m1 = mats[$"{MainMat}_1001"];
@@ -193,13 +193,11 @@ public class GltfWriterTests
         Assert.Equal(101 / 255f, Pbr(m2, "roughnessFactor", 1f), 5);
         Assert.Equal(0f, Pbr(m2, "metallicFactor", 1f));
 
-        // 1011: однотонная Diffuse (200; 50; 25) с альфой 0 в верхней половине → константа цвета, альфа не переносится
-        // (как S1a-1) → OPAQUE; ERM-заглушка (0; 128; 0); тайл целиком из заглушек — без картинок
+        // 1011: однотонная Diffuse (200; 50; 25) с альфой 0 в верхней половине — по ревью C1b остаётся картинкой (константа
+        // потеряла бы альфу) → MASK; ERM-заглушка (0; 128; 0)
         var m3 = mats[$"{MainMat}_1011"];
-        Assert.Null(m3["alphaMode"]);
-        Assert.Null(TextureFile(g, m3, "baseColorTexture"));
-        Assert.Equal(new[] { Lin(200), Lin(50), Lin(25), 1f },
-                     m3["pbrMetallicRoughness"]!["baseColorFactor"]!.AsArray().Select(x => (float)x!).ToArray());
+        Assert.Equal("MASK", (string?)m3["alphaMode"]);
+        Assert.Equal("T_TestPart_001_Diffuse_1.1011.png", TextureFile(g, m3, "baseColorTexture"));
         Assert.Equal("stub", (string?)m3["extras"]!["agr"]!["class"]);
         Assert.Equal(128 / 255f, Pbr(m3, "roughnessFactor", 1f), 5);
         Assert.Equal(0f, Pbr(m3, "metallicFactor", 1f));
@@ -290,7 +288,7 @@ public class GltfWriterTests
         var res = new AgrGltfWriter(part, src).Write(outDir);
 
         var uris = Json(res.GltfPath)["images"]!.AsArray().Select(i => (string)i!["uri"]!).ToList();
-        Assert.Equal(4, uris.Count);
+        Assert.Equal(5, uris.Count);
         foreach (var uri in uris)
         {
             Assert.StartsWith("../%D0%B8%D1%81%D1%85", uri, StringComparison.Ordinal);
@@ -308,7 +306,7 @@ public class GltfWriterTests
 
         // SharpGLTF (строгая проверка) находит картинки по закодированным URI: байты = исходник
         var model = LoadStrict(res.GltfPath);
-        Assert.Equal(4, model.LogicalImages.Count);
+        Assert.Equal(5, model.LogicalImages.Count);
         foreach (var img in model.LogicalImages)
         {
             var info = res.Images.Single(i => i.File == img.Name);
@@ -324,6 +322,61 @@ public class GltfWriterTests
         string stem = AgrGltfWriter.FileStem("ч асть #1%");
         Assert.Matches("^[A-Za-z0-9._-]+$", stem);
         Assert.NotEqual(AgrGltfWriter.FileStem("a b"), AgrGltfWriter.FileStem("a_b"));
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void SameFileNameInSubfolders_KeptApart(bool sameVolume)
+    {
+        // Одноимённые картинки в разных подпапках: ключ — путь внутри части, копии и ссылки не перетирают друг друга.
+        using var tmp = new TempDir("c1c1-samename");
+        string src = Path.Combine(tmp.Path, "s");
+        TestPaths.CopyDirectory(TestPaths.FixtureDir, src);
+        var part = ReadFixture(src);
+        var d1 = part.Textures.Single(t => t.Kind == "Diffuse" && t.Tile == 1001);
+        var d2 = part.Textures.Single(t => t.Kind == "Diffuse" && t.Tile == 1002);
+        Assert.NotEqual(File.ReadAllBytes(Path.Combine(src, d1.RelativePath)), File.ReadAllBytes(Path.Combine(src, d2.RelativePath)));
+        var moved = new Dictionary<string, string>();
+        foreach (var (d, sub) in new[] { (d1, "a"), (d2, "b") })
+        {
+            string rel = Path.Combine(sub, "Same.png");
+            Directory.CreateDirectory(Path.Combine(src, sub));
+            File.Move(Path.Combine(src, d.RelativePath), Path.Combine(src, rel));
+            var clone = new AgrTextureInfo
+            {
+                File = "Same.png", RelativePath = rel, Stem = d.Stem, Kind = d.Kind, KindRaw = d.KindRaw, Set = d.Set, Tile = d.Tile,
+            };
+            foreach (var pi in typeof(AgrTextureInfo).GetProperties().Where(x => x.CanWrite && x.Name is not ("File" or "RelativePath")))
+            {
+                pi.SetValue(clone, pi.GetValue(d));
+            }
+            part.Textures[part.Textures.IndexOf(d)] = clone;
+            moved[d.RelativePath] = rel;
+        }
+        foreach (var ti in part.Tiles)
+        {
+            if (ti.MapPaths.TryGetValue("Diffuse", out var old) && moved.TryGetValue(old, out var rel))
+            {
+                ti.MapPaths["Diffuse"] = rel;
+                ti.MapFiles["Diffuse"] = "Same.png";
+            }
+        }
+        var options = new AgrGltfWriteOptions { SameVolume = (_, _) => sameVolume };
+        string outDir = Path.Combine(tmp.Path, "o");
+        var res = new AgrGltfWriter(part, src, options).Write(outDir);
+        var same = res.Images.Where(i => i.File == "Same.png").ToList();
+        Assert.Equal(2, same.Count);
+        Assert.Equal(2, same.Select(i => i.Uri).Distinct().Count());
+        Assert.Equal(sameVolume ? new[] { "../s/a/Same.png", "../s/b/Same.png" } : new[] { "a/Same.png", "b/Same.png" },
+                     same.Select(i => i.Uri).OrderBy(u => u, StringComparer.Ordinal).ToArray());
+        foreach (var i in same)
+        {
+            Assert.Equal(!sameVolume, i.Copied);
+            Assert.Equal(File.ReadAllBytes(i.Source), File.ReadAllBytes(Path.GetFullPath(Path.Combine(outDir, Uri.UnescapeDataString(i.Uri)))));
+        }
+        var uris = Json(res.GltfPath)["images"]!.AsArray().Select(i => (string)i!["uri"]!).ToList();
+        Assert.Equal(res.Images.Count, uris.Distinct().Count());
     }
 
     [Fact]
@@ -342,8 +395,8 @@ public class GltfWriterTests
         };
         string outDir = Path.Combine(tmp.Path, "другой том #2");
         var res = new AgrGltfWriter(part, TestPaths.FixtureDir, options).Write(outDir);
-        Assert.Equal(4, asked.Count);
-        Assert.Equal(4, res.Images.Count);
+        Assert.Equal(5, asked.Count);
+        Assert.Equal(5, res.Images.Count);
         var uris = Json(res.GltfPath)["images"]!.AsArray().Select(i => (string)i!["uri"]!).ToList();
         foreach (var img in res.Images)
         {
@@ -353,11 +406,16 @@ public class GltfWriterTests
             Assert.Equal(File.ReadAllBytes(img.Source), File.ReadAllBytes(Path.Combine(outDir, img.File)));
             Assert.Equal(new FileInfo(img.Source).Length, img.Bytes);
         }
-        Assert.Equal(4, model(res).LogicalImages.Count);
+        Assert.Equal(5, model(res).LogicalImages.Count);
 
+        // Тот же том: исходник рядом (короткий путь), чтобы проверялась именно ссылка, а не предел длины пути.
+        string src = Path.Combine(tmp.Path, "s");
+        TestPaths.CopyDirectory(TestPaths.FixtureDir, src);
         string same = Path.Combine(tmp.Path, "same");
-        var res2 = new AgrGltfWriter(part, TestPaths.FixtureDir).Write(same);
+        var res2 = new AgrGltfWriter(ReadFixture(src), src).Write(same);
+        Assert.Equal(5, res2.Images.Count);
         Assert.All(res2.Images, i => Assert.False(i.Copied));
+        Assert.All(res2.Images, i => Assert.StartsWith("../s/", i.Uri));
         Assert.Empty(Directory.GetFiles(same, "*.png"));
 
         Assert.True(AgrGltfWriter.SameVolumeByRoot(@"G:\a\b.png", @"g:\c"));

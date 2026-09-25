@@ -68,6 +68,10 @@ public sealed class AgrTileInfo
 
     /// <summary>Вид карты → имя файла текстуры.</summary>
     public SortedDictionary<string, string?> MapFiles { get; } = new(StringComparer.Ordinal);
+
+    /// <summary>Канал → путь картинки внутри папки части (<see cref="AgrTextureInfo.RelativePath"/>): ключ текстуры
+    /// для записи glTF — одноимённые файлы из разных подпапок не смешиваются (ревью C1b).</summary>
+    public SortedDictionary<string, string> MapPaths { get; } = new(StringComparer.Ordinal);
 }
 
 public sealed class AgrAlphaStats

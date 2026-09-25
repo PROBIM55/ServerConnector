@@ -351,6 +351,7 @@ public sealed class AgrPartReader
                     {
                         t.UsedFaces += n;
                         ti.MapFiles[kind] = t.File;
+                        ti.MapPaths[kind] = t.RelativePath;
                     }
                     else
                     {
