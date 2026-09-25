@@ -8,6 +8,15 @@ public sealed class AgrReadOptions
 {
     /// <summary>Считать статистику текстур (WIC). Без неё — только геометрия, тайлы и паспорт.</summary>
     public bool AnalyzeTextures { get; init; } = true;
+
+    /// <summary>
+    /// Прогресс статистики текстур: (готово, всего) — перед каждой картинкой и в конце. Вызывается в потоке
+    /// <see cref="AgrPartReader.Read"/> (служба конвертера C2a показывает этап «текстуры»).
+    /// </summary>
+    public Action<int, int>? TextureProgress { get; init; }
+
+    /// <summary>Отмена между картинками статистики текстур.</summary>
+    public CancellationToken CancellationToken { get; init; }
 }
 
 /// <summary>
@@ -371,10 +380,14 @@ public sealed class AgrPartReader
         if (_options.AnalyzeTextures)
         {
             var fullOf = textureFiles.ToDictionary(f => f.Rel, f => f.Full, StringComparer.Ordinal);
+            int done = 0;
             foreach (var t in part.Textures)
             {
+                _options.CancellationToken.ThrowIfCancellationRequested();
+                _options.TextureProgress?.Invoke(done++, part.Textures.Count);
                 _textures.Fill(fullOf[t.RelativePath], t);
             }
+            _options.TextureProgress?.Invoke(done, part.Textures.Count);
         }
 
         var byFile = part.Textures.ToDictionary(t => t.File, StringComparer.Ordinal);

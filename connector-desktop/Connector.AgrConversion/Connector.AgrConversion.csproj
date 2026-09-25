@@ -30,4 +30,9 @@
     <Using Include="System.IO" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Тестам C2a-fix: внутренний хук снимка истории службы конвертера. -->
+    <InternalsVisibleTo Include="Connector.AgrConversion.Tests" />
+  </ItemGroup>
+
 </Project>

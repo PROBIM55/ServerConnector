@@ -74,7 +74,31 @@ public sealed class AgrConvertOptions
     public static double QuantizationLimit(int bits, double errorM) => Math.Round(errorM * 2 * ((1 << bits) - 1) / Math.Sqrt(3), 1);
 }
 
-public sealed record AgrConvertProgress(string Stage, int Step, int Steps);
+/// <summary>Этапы конвертации части для экрана: пять точек строки (C2, Р11).</summary>
+public enum AgrConvertPhase
+{
+    /// <summary>Распаковка zip или открытие папки части.</summary>
+    Read,
+    /// <summary>Импорт FBX, сетки и тайлы.</summary>
+    Geometry,
+    /// <summary>Статистика картинок и запись промежуточного glTF с картинками.</summary>
+    Textures,
+    /// <summary>gltfpack и замер уровней L2 → L0.</summary>
+    Levels,
+    /// <summary>tileset.json, manifest.json и zip.</summary>
+    Pack,
+}
+
+/// <summary>
+/// Прогресс части. <see cref="Stage"/> — подпись шага; <see cref="Step"/>/<see cref="Steps"/> — счёт шагов (при
+/// повторных сборках уровня шагов больше расчётного); <see cref="Phase"/> и <see cref="PhaseFraction"/> (0…1 внутри
+/// этапа) — для полосы прогресса службы.
+/// </summary>
+public sealed record AgrConvertProgress(string Stage, int Step, int Steps)
+{
+    public AgrConvertPhase Phase { get; init; }
+    public double PhaseFraction { get; init; }
+}
 
 /// <summary>(н) Уровень взял геометрию более точного уровня: после <see cref="Attempts"/> сборок ошибка выше предела.</summary>
 public sealed record AgrLevelFallback(string GeometryOf, int Attempts, double ErrorM, double? SeRelative);
@@ -141,6 +165,9 @@ public sealed class AgrConvertResult
 
     /// <summary>manifest.json пакета (то же, что в zip).</summary>
     public JsonObject? Manifest { get; set; }
+
+    /// <summary>Отчёт чтения части (<see cref="AgrReport"/>, JSON): в zip не входит, его кладёт рядом служба конвертера.</summary>
+    public string? PartReportJson { get; set; }
 }
 
 /// <summary>
@@ -152,7 +179,9 @@ public sealed class AgrConvertResult
 /// геометрии, но без сжатия и текстур (<c>-tr</c>) — позиции и индексы читаются без декодера meshopt. Совпадение
 /// двойника с настоящим GLB (число индексов и вершин, min/max позиций по примитивам) проверяется и пишется в манифест.
 /// </para>
-/// Временная папка удаляется в <c>finally</c>. Прогресс и отмена — только точки в сигнатуре (реализация — C1d).
+/// Временная папка удаляется в <c>finally</c>. Прогресс — по этапам <see cref="AgrConvertPhase"/> с долей внутри этапа
+/// (картинки текстур, уровни по весу предела текстур). Отмена — между шагами, между картинками и внутри gltfpack
+/// (процесс снимается); недописанный <c>.glb.zip.part</c> удаляется.
 /// </summary>
 public static class AgrPartConverter
 {
@@ -187,26 +216,38 @@ public static class AgrPartConverter
         Directory.CreateDirectory(outDir);
         string work = Path.Combine(Path.GetFullPath(options.WorkRoot ?? Path.GetTempPath()), "agr-conv-" + Guid.NewGuid().ToString("N")[..12]);
         Directory.CreateDirectory(work);
-        int steps = 3 + options.Levels.Count * 2;
+        int steps = 4 + options.Levels.Count * 2;
         int step = 0;
-        void Stage(string name)
+        void Stage(string name, AgrConvertPhase phase, double fraction)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            progress?.Report(new AgrConvertProgress(name, ++step, steps));
+            progress?.Report(new AgrConvertProgress(name, ++step, steps) { Phase = phase, PhaseFraction = Math.Clamp(fraction, 0, 1) });
         }
+        // Доля этапа «уровни»: вес уровня — предел текстур (KTX2 — основное время gltfpack: у 001 L2 52 с, L1 20 с, L0 6 с).
+        double levelWeightSum = options.Levels.Sum(l => (double)Math.Max(1, l.TextureLimit));
+        double levelBase = 0, levelWeight = 0;
         try
         {
             var reader = new AgrPackageReader(work);
+            Stage(source.Kind == AgrSourceKind.Zip ? "распаковка" : "чтение части", AgrConvertPhase.Read, 0);
             return reader.WithPartDirectory(source, partDir =>
             {
-                Stage("чтение части");
+                Stage("чтение FBX", AgrConvertPhase.Geometry, 0);
                 var t0 = sw.Elapsed.TotalSeconds;
-                var part = new AgrPartReader().Read(partDir, source.Kind == AgrSourceKind.Zip ? "zip " + Path.GetFileName(source.Path) : source.Path);
+                var readOptions = new AgrReadOptions
+                {
+                    CancellationToken = cancellationToken,
+                    TextureProgress = (done, total) => progress?.Report(new AgrConvertProgress($"текстуры {done} из {total}", step, steps)
+                    {
+                        Phase = AgrConvertPhase.Textures, PhaseFraction = total == 0 ? 0.8 : 0.8 * done / total,
+                    }),
+                };
+                var part = new AgrPartReader(readOptions).Read(partDir, source.Kind == AgrSourceKind.Zip ? "zip " + Path.GetFileName(source.Path) : source.Path);
                 string stem = AgrGltfWriter.FileStem(part.Name);
                 var result = new AgrConvertResult { PartName = part.Name, ZipPath = Path.Combine(outDir, stem + ".glb.zip") };
                 result.TimingsS["read"] = Math.Round(sw.Elapsed.TotalSeconds - t0, 2);
 
-                Stage("запись glTF");
+                Stage("запись glTF", AgrConvertPhase.Textures, 0.8);
                 t0 = sw.Elapsed.TotalSeconds;
                 var gltf = new AgrGltfWriter(part, partDir).Write(Path.Combine(work, "gltf"));
                 result.TimingsS["gltf"] = Math.Round(sw.Elapsed.TotalSeconds - t0, 2);
@@ -242,7 +283,7 @@ public static class AgrPartConverter
                     };
                     string glb = Path.Combine(levelDir, spec.Name + ".glb");
                     string twin = Path.Combine(twinDir, spec.Name + ".glb");
-                    lr.PackSeconds = RunGltfpack(gp.Path, gltf.GltfPath, glb, flags, work, out string packLog);
+                    lr.PackSeconds = RunGltfpack(gp.Path, gltf.GltfPath, glb, flags, work, out string packLog, cancellationToken);
                     foreach (var wl in packLog.Split('\n').Select(x => x.Trim()).Where(x => x.StartsWith("Warning", StringComparison.OrdinalIgnoreCase)).Distinct())
                     {
                         result.Warnings.Add($"{spec.Name}: gltfpack: {wl}");
@@ -251,11 +292,11 @@ public static class AgrPartConverter
                     {
                         throw new InvalidOperationException($"{part.Name} {spec.Name}: gltfpack пропустил картинку — {Tail(packLog, 600)}");
                     }
-                    lr.TwinSeconds = RunGltfpack(gp.Path, gltf.GltfPath, twin, twinFlags, work, out _);
+                    lr.TwinSeconds = RunGltfpack(gp.Path, gltf.GltfPath, twin, twinFlags, work, out _, cancellationToken);
                     lr.Command = $"gltfpack -i {Path.GetFileName(gltf.GltfPath)} -o parts/{stem}/{spec.Name}.glb {string.Join(" ", flags)}";
                     lr.TwinCommand = $"gltfpack -i {Path.GetFileName(gltf.GltfPath)} -o twin/{spec.Name}.glb {string.Join(" ", twinFlags)}";
 
-                    Stage("замер " + spec.Name);
+                    Stage("замер " + spec.Name, AgrConvertPhase.Levels, levelBase + 0.9 * levelWeight);
                     double t1 = sw.Elapsed.TotalSeconds;
                     Measure(lr, spec, glb, twin, srcTree, srcVerts, srcPrims, texturedMaterials, materialNames, options);
                     lr.MeasureSeconds = Math.Round(sw.Elapsed.TotalSeconds - t1, 2);
@@ -269,7 +310,8 @@ public static class AgrPartConverter
                 for (int li = options.Levels.Count - 1; li >= 0; li--)
                 {
                     var spec = options.Levels[li];
-                    Stage("gltfpack " + spec.Name);
+                    levelWeight = Math.Max(1, spec.TextureLimit) / levelWeightSum;
+                    Stage("gltfpack " + spec.Name, AgrConvertPhase.Levels, levelBase);
                     var geometry = spec.Simplifies && smallPart ? spec with { SimplifyRatio = 1, ErrorM = 0 } : spec;
                     double errScale = 1;
                     AgrLevelResult lr;
@@ -313,18 +355,30 @@ public static class AgrPartConverter
                         result.Warnings.Add($"{spec.Name}: двойник без сжатия не совпал с GLB по индексам/вершинам — ошибки уровня под вопросом");
                     }
                     levels[li] = lr;
+                    levelBase += levelWeight;
                 }
                 result.Levels.AddRange(levels);
 
-                Stage("tileset и manifest");
+                Stage("tileset и manifest", AgrConvertPhase.Pack, 0);
                 var tileset = BuildTileset(part, stem, result);
                 var manifest = BuildManifest(part, stem, source, gltf, result, gp, options);
                 result.Manifest = manifest;
+                result.PartReportJson = AgrReport.ToJson(part);
                 File.WriteAllText(Path.Combine(pkg, "tileset.json"), tileset.ToJsonString(JsonOut));
                 File.WriteAllText(Path.Combine(pkg, "manifest.json"), manifest.ToJsonString(JsonOut));
                 string tmpZip = result.ZipPath + ".part";
-                WriteZip(pkg, tmpZip);
-                File.Move(tmpZip, result.ZipPath, overwrite: true);
+                try
+                {
+                    WriteZip(pkg, tmpZip);
+                    cancellationToken.ThrowIfCancellationRequested();
+                    File.Move(tmpZip, result.ZipPath, overwrite: true);
+                }
+                catch
+                {
+                    // Недописанный zip не остаётся в папке выхода ни при отмене, ни при ошибке.
+                    try { File.Delete(tmpZip); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+                    throw;
+                }
                 result.ZipBytes = new FileInfo(result.ZipPath).Length;
                 result.Seconds = Math.Round(sw.Elapsed.TotalSeconds, 2);
                 return result;
@@ -393,8 +447,11 @@ public static class AgrPartConverter
         public string Version { get; }
     }
 
-    static double RunGltfpack(string exe, string input, string output, List<string> flags, string work, out string log)
+    /// <summary>Отмена снимает процесс gltfpack (со всем деревом) и бросает <see cref="OperationCanceledException"/>.</summary>
+    static double RunGltfpack(string exe, string input, string output, List<string> flags, string work, out string log,
+                              CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var sw = Stopwatch.StartNew();
         var psi = new ProcessStartInfo(exe)
         {
@@ -411,9 +468,22 @@ public static class AgrPartConverter
         psi.ArgumentList.Add(output);
         foreach (var f in flags) psi.ArgumentList.Add(f);
         using var p = Process.Start(psi) ?? throw new InvalidOperationException("gltfpack не запустился");
+        Exception? killError = null;
+        using var kill = cancellationToken.Register(() =>
+        {
+            // Идёт в потоке, вызвавшем Cancel (окно), — не бросать: уже вышел, нет прав, AggregateException по дереву.
+            try { p.Kill(entireProcessTree: true); }
+            catch (Exception ex) { killError = ex; }
+        });
         var err = p.StandardError.ReadToEndAsync();
         string stdout = p.StandardOutput.ReadToEnd();
         p.WaitForExit();
+        if (cancellationToken.IsCancellationRequested)
+        {
+            throw killError is { } ke and not InvalidOperationException
+                ? new OperationCanceledException($"gltfpack снят не сразу: {ke.Message}", ke, cancellationToken)
+                : new OperationCanceledException(cancellationToken);
+        }
         string all = stdout + err.Result;
         log = all;
         if (p.ExitCode != 0 || !File.Exists(output))
