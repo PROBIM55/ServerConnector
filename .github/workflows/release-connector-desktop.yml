@@ -23,6 +23,11 @@ jobs:
       - name: Run desktop tests
         run: dotnet test connector-desktop/Connector.Desktop.Tests/Connector.Desktop.Tests.csproj --configuration Release --nologo
 
+      # AGR converter library. Without AGR_REF_ROOT/AGR_GLTFPACK the reference and live gltfpack tests are skipped;
+      # locally (26.09.2026, C2c) this run took ~15 s including the rebuild.
+      - name: Run AGR converter tests
+        run: dotnet test connector-desktop/Connector.AgrConversion.Tests/Connector.AgrConversion.Tests.csproj --configuration Release --nologo
+
       - name: Sync app versions from tag
         shell: pwsh
         run: |

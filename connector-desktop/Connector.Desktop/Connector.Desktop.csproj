@@ -10,9 +10,9 @@
     <SatelliteResourceLanguages>ru;en</SatelliteResourceLanguages>
     <AssemblyName>Connector.Desktop</AssemblyName>
     <RootNamespace>Connector.Desktop</RootNamespace>
-    <Version>1.0.29</Version>
-    <FileVersion>1.0.29.0</FileVersion>
-    <AssemblyVersion>1.0.29.0</AssemblyVersion>
+    <Version>1.0.30</Version>
+    <FileVersion>1.0.30.0</FileVersion>
+    <AssemblyVersion>1.0.30.0</AssemblyVersion>
     <ApplicationIcon>Assets\structura_connector.ico</ApplicationIcon>
   </PropertyGroup>
 
@@ -23,6 +23,14 @@
   <ItemGroup>
     <PackageReference Include="dnlib" Version="4.4.0" />
     <PackageReference Include="System.ServiceProcess.ServiceController" Version="8.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Third-party licenses of the AGR converter (Assimp, Silk.NET, SharpGLTF, gltfpack): next to the exe and in the MSI. -->
+    <Content Include="THIRD_PARTY_NOTICES.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
   </ItemGroup>
 
   <ItemGroup>
