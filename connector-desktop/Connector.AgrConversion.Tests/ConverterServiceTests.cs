@@ -346,6 +346,27 @@ public class ConverterServiceTests
         Assert.Equal("Готово 0 из 1, 1 ошибка", h.Service.CurrentRun!.Summary);
     }
 
+    // C2c-fix Д1: Assimp не загрузился — строка с ошибкой по-русски, служба не падает и берёт следующую часть.
+    [Fact]
+    public void AssimpLoadFailure_RowError_ServiceContinues()
+    {
+        using var h = new Harness();
+        var loadFailure = Assert.IsType<AgrReadException>(Record.Exception(() => AssimpFbxReader.LoadApi(
+            () => throw new DllNotFoundException("Unable to load DLL 'Assimp64.dll' or one of its dependencies"))));
+        h.Fake.Fail = input => Path.GetFileNameWithoutExtension(input) == "SM_NoAssimp" ? loadFailure : null;
+        string bad = h.PartZip("SM_NoAssimp");
+        string good = h.PartZip("SM_AfterNoAssimp");
+        h.Service.Add(new[] { bad, good });
+        h.Fake.Release.Set();
+        Idle(h.Service);
+        var badRow = h.Service.Rows.Single(r => r.SourcePath == bad);
+        Assert.Equal(AgrRowState.Error, badRow.State);
+        Assert.StartsWith("Не загрузилась библиотека чтения FBX (Assimp): ", badRow.Error);
+        Assert.Contains("Переустановите Structura Connector", badRow.Error);
+        Assert.Equal(AgrRowState.Done, h.Service.Rows.Single(r => r.SourcePath == good).State);
+        Assert.Equal("Готово 1 из 2, 1 ошибка", h.Service.CurrentRun!.Summary);
+    }
+
     [Fact]
     public void RunFolder_DateNamed_UniquePerRun_DefaultRoot()
     {

@@ -15,6 +15,8 @@ $bundledAwgDir = Join-Path $root 'Connector.Desktop\tools\awg'
 $ensureAwgScript = Join-Path $root 'scripts\ensure_bundled_amneziawg.ps1'
 $bundledGltfpackDir = Join-Path $root 'Connector.Desktop\tools\gltfpack'
 $ensureGltfpackScript = Join-Path $root 'scripts\ensure_bundled_gltfpack.ps1'
+$copyVcRuntimeScript = Join-Path $root 'scripts\copy_vc_runtime.ps1'
+$checkNativeImportsScript = Join-Path $root 'scripts\check_native_imports.ps1'
 # Pinned gltfpack.exe (meshoptimizer v1.2); must match scripts/ensure_bundled_gltfpack.ps1.
 $gltfpackExeSha256 = 'ff64f45e84aac9a1f58880e40934b3f29277413e2d0b3ed257322261ec021d2b'
 
@@ -99,6 +101,12 @@ foreach ($name in @('Connector.AgrConversion.dll', 'Assimp64.dll', 'Silk.NET.Ass
         throw "AGR converter file $name was not published to $publishDir"
     }
 }
+
+# Assimp64.dll is built with MSVC and imports msvcp140.dll, vcruntime140.dll and vcruntime140_1.dll. They go next to it
+# (app-local, redist.txt of Visual Studio): a PC without the Visual C++ 2015-2022 x64 runtime could not load Assimp.
+& $copyVcRuntimeScript -TargetDir $publishDir
+# Every DLL imported by the converter's native files must be in the publish folder or be a Windows system DLL.
+& $checkNativeImportsScript -Dir $publishDir -Files @('Assimp64.dll', 'gltfpack.exe')
 
 Invoke-ExternalCommand -Description 'dotnet build' -Command {
     dotnet build $setupProj -c Release -t:Rebuild -o $outputDir

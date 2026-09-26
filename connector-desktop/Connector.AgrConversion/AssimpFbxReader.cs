@@ -59,8 +59,35 @@ public static unsafe class AssimpFbxReader
         {
             lock (ApiGate)
             {
-                return _api ??= AssimpApi.GetApi();
+                return _api ??= LoadApi(AssimpApi.GetApi);
             }
+        }
+    }
+
+    /// <summary>Начало текста ошибки части, когда нативная библиотека assimp не загрузилась.</summary>
+    public const string LoadFailedPrefix = "Не загрузилась библиотека чтения FBX (Assimp): ";
+
+    /// <summary>
+    /// Загрузка нативного assimp. Assimp64.dll или её зависимости (msvcp140.dll, vcruntime140.dll, vcruntime140_1.dll
+    /// рядом с программой) не нашлись или не той разрядности — <see cref="AgrReadException"/> с понятным текстом:
+    /// часть получает ошибку, служба конвертера работает дальше. Silk.NET на ненайденную библиотеку бросает
+    /// <see cref="FileNotFoundException"/>, .NET — <see cref="DllNotFoundException"/>, на чужую разрядность —
+    /// <see cref="BadImageFormatException"/>. Неудача не запоминается: следующая часть пробует загрузить снова.
+    /// </summary>
+    internal static AssimpApi LoadApi(Func<AssimpApi> getApi)
+    {
+        try
+        {
+            return getApi();
+        }
+        catch (Exception ex) when (ex is DllNotFoundException or BadImageFormatException or FileNotFoundException
+                                       or FileLoadException or EntryPointNotFoundException)
+        {
+            string reason = ex is BadImageFormatException
+                ? "Assimp64.dll или библиотека Visual C++ рядом с ней повреждена или не для 64-разрядной Windows"
+                : "не найдена Assimp64.dll или нужная ей библиотека Visual C++ (msvcp140.dll, vcruntime140.dll, vcruntime140_1.dll)";
+            throw new AgrReadException("Assimp64.dll",
+                $"{LoadFailedPrefix}{reason}. Переустановите Structura Connector — обычно это помогает.", ex);
         }
     }
 

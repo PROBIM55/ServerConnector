@@ -96,6 +96,43 @@ public class ErrorMessageTests
         Assert.Contains("занят другим процессом", e.Message);
     }
 
+    public static TheoryData<Exception, string> AssimpLoadFailures => new()
+    {
+        { new DllNotFoundException("Unable to load DLL 'Assimp64.dll' or one of its dependencies (0x8007007E)"), "не найдена Assimp64.dll" },
+        { new FileNotFoundException("Could not find or load the native library from any name: [ Assimp64.dll ]"), "vcruntime140_1.dll" },
+        { new BadImageFormatException("An attempt was made to load a program with an incorrect format. (0x8007000B)"), "не для 64-разрядной Windows" },
+    };
+
+    // C2c-fix Д1: без библиотек Visual C++ GetApi падал сырым исключением — теперь часть получает понятную ошибку.
+    [Theory]
+    [MemberData(nameof(AssimpLoadFailures))]
+    public void AssimpLoadFailure_UserMessage_ReinstallHint(Exception failure, string reason)
+    {
+        var e = AssertUserMessage(Record.Exception(() => AssimpFbxReader.LoadApi(() => throw failure)), "Assimp64.dll");
+        Assert.StartsWith(AssimpFbxReader.LoadFailedPrefix, e.Message);
+        Assert.StartsWith("Не загрузилась библиотека чтения FBX (Assimp): ", e.Message);
+        Assert.Contains(reason, e.Message);
+        Assert.Contains("Переустановите Structura Connector", e.Message);
+        Assert.Same(failure, e.InnerException);
+    }
+
+    [Fact]
+    public void AssimpLoadFailure_RealSilkLoader_MissingLibrary_UserMessage()
+    {
+        // настоящий загрузчик Silk.NET на ненайденной библиотеке — тот же путь, что GetApi без Assimp64.dll
+        var ex = Record.Exception(() => AssimpFbxReader.LoadApi(
+            () => new Silk.NET.Assimp.Assimp(new Silk.NET.Core.Contexts.DefaultNativeContext("Assimp64_c2c_missing.dll"))));
+        var e = AssertUserMessage(ex, "Assimp64.dll");
+        Assert.StartsWith(AssimpFbxReader.LoadFailedPrefix, e.Message);
+    }
+
+    [Fact]
+    public void AssimpLoadFailure_OtherExceptions_NotMasked()
+    {
+        var bug = new InvalidOperationException("не ошибка загрузки");
+        Assert.Same(bug, Record.Exception(() => AssimpFbxReader.LoadApi(() => throw bug)));
+    }
+
     [Fact]
     public void EmptyFbx_AfterSuccessfulImport_HasNoStaleAssimpError()
     {

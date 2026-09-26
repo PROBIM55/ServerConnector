@@ -10,9 +10,9 @@
     <SatelliteResourceLanguages>ru;en</SatelliteResourceLanguages>
     <AssemblyName>Connector.Desktop</AssemblyName>
     <RootNamespace>Connector.Desktop</RootNamespace>
-    <Version>1.0.30</Version>
-    <FileVersion>1.0.30.0</FileVersion>
-    <AssemblyVersion>1.0.30.0</AssemblyVersion>
+    <Version>1.0.31</Version>
+    <FileVersion>1.0.31.0</FileVersion>
+    <AssemblyVersion>1.0.31.0</AssemblyVersion>
     <ApplicationIcon>Assets\structura_connector.ico</ApplicationIcon>
   </PropertyGroup>
 

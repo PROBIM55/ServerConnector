@@ -15,6 +15,7 @@ Contents:
   8. cgltf (part of gltfpack.exe)
   9. fast_obj (part of gltfpack.exe)
   10. sdefl (part of gltfpack.exe)
+  11. Microsoft Visual C++ Redistributable (runtime for Assimp64.dll)
 
 ==============================================================================
 1. Open Asset Import Library (Assimp)
@@ -576,3 +577,13 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+==============================================================================
+11. Microsoft Visual C++ Redistributable (runtime for Assimp64.dll)
+==============================================================================
+Component: msvcp140.dll, vcruntime140.dll, vcruntime140_1.dll (x64), installed next to
+Assimp64.dll; taken from VC\Redist\MSVC\<version>\x64\Microsoft.VC14x.CRT of Visual Studio 2022
+Copyright (c) Microsoft Corporation. All rights reserved.
+License: distributed under the Microsoft Visual Studio license terms as "Distributable Code"
+(redistributable code listed in redist.txt of Visual Studio). Only the unmodified object code
+of these files is distributed, as part of Structura Connector.
