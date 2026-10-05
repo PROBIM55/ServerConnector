@@ -1,0 +1,181 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <!-- Protected machine staging only. This package deliberately has no custom actions. -->
+  <Package Name="Structura Unified Connector Installer"
+           Manufacturer="Structura"
+           Version="$(var.ProductVersion)"
+           UpgradeCode="A487F2B6-0CA7-4D5D-9E38-954D956D8312"
+           InstallerVersion="500"
+           Compressed="yes"
+           Scope="perMachine"
+           Codepage="1251"
+           Language="1049">
+    <MajorUpgrade DowngradeErrorMessage="Установлена более новая версия установщика Structura Connector." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="PF_STRUCTURA_CONNECTOR" Name="Structura Connector">
+        <Directory Id="PF_NETBIRD_ROOT" Name="NetBird">
+          <Directory Id="PF_NETBIRD_SCRIPTS" Name="scripts" />
+          <Directory Id="PF_NETBIRD_INFRA" Name="infra">
+            <Directory Id="PF_NETBIRD_LOCKS" Name="netbird" />
+          </Directory>
+          <Directory Id="PF_NETBIRD_INSTALLER" Name="installer" />
+        </Directory>
+      </Directory>
+      <Directory Id="PF_INSTALLER_ROOT" Name="StructuraConnectorInstaller">
+        <Directory Id="BOOTSTRAPPER_DIR" Name="Bootstrapper" />
+        <Directory Id="HELPER_RELEASE_DIR" Name="HelperRelease" />
+      </Directory>
+    </StandardDirectory>
+    <StandardDirectory Id="CommonAppDataFolder">
+      <Directory Id="PD_INSTALLER_ROOT" Name="StructuraConnectorInstaller">
+        <Directory Id="MACHINE_HELPER_DIR" Name="Helper" />
+      </Directory>
+    </StandardDirectory>
+
+    <!-- All protected runtime paths are non-inheriting. BUILTIN\Users receive RX only;
+         the trusted owner and mutators match TrustedHelperImageLease / release trust. -->
+    <Component Id="ProtectedProgramFilesRootAcl" Directory="PF_INSTALLER_ROOT" Guid="EAA17D0D-2786-4650-90B5-CC5AFAB7E126">
+      <CreateFolder><PermissionEx Sddl="O:SYG:SYD:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;GRGX;;;BU)" /></CreateFolder>
+      <RegistryValue Root="HKLM" Key="Software\Structura\UnifiedConnectorSetup" Name="ProgramFilesRoot" Type="integer" Value="1" KeyPath="yes" />
+    </Component>
+    <Component Id="ProtectedNetBirdMachineRootAcl" Directory="PF_STRUCTURA_CONNECTOR" Guid="0EFC1CA4-8DA7-4688-BF66-75A6C30BD28A">
+      <CreateFolder><PermissionEx Sddl="O:SYG:SYD:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;GRGX;;;BU)" /></CreateFolder>
+      <RegistryValue Root="HKLM" Key="Software\Structura\UnifiedConnectorSetup" Name="NetBirdMachineRoot" Type="integer" Value="1" KeyPath="yes" />
+    </Component>
+    <Component Id="ProtectedNetBirdRuntimeRootAcl" Directory="PF_NETBIRD_ROOT" Guid="40C4C099-BB00-42A4-B6AE-B278A4689E83">
+      <CreateFolder><PermissionEx Sddl="O:SYG:SYD:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;GRGX;;;BU)" /></CreateFolder>
+      <RegistryValue Root="HKLM" Key="Software\Structura\UnifiedConnectorSetup" Name="NetBirdRuntimeRoot" Type="integer" Value="1" KeyPath="yes" />
+    </Component>
+    <Component Id="ProtectedNetBirdScriptsAcl" Directory="PF_NETBIRD_SCRIPTS" Guid="D11CC4DF-A4C1-41FD-9B5A-92BCD386460E">
+      <CreateFolder><PermissionEx Sddl="O:SYG:SYD:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;GRGX;;;BU)" /></CreateFolder>
+      <RegistryValue Root="HKLM" Key="Software\Structura\UnifiedConnectorSetup" Name="NetBirdScripts" Type="integer" Value="1" KeyPath="yes" />
+    </Component>
+    <Component Id="ProtectedNetBirdInfraAcl" Directory="PF_NETBIRD_INFRA" Guid="6533C91C-19E4-4118-B1F6-F4EEA2DA8E5F">
+      <CreateFolder><PermissionEx Sddl="O:SYG:SYD:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;GRGX;;;BU)" /></CreateFolder>
+      <RegistryValue Root="HKLM" Key="Software\Structura\UnifiedConnectorSetup" Name="NetBirdInfra" Type="integer" Value="1" KeyPath="yes" />
+    </Component>
+    <Component Id="ProtectedNetBirdLockAcl" Directory="PF_NETBIRD_LOCKS" Guid="1D3C4F96-4B5F-4B36-A2F7-4753C4B8CC08">
+      <CreateFolder><PermissionEx Sddl="O:SYG:SYD:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;GRGX;;;BU)" /></CreateFolder>
+      <RegistryValue Root="HKLM" Key="Software\Structura\UnifiedConnectorSetup" Name="NetBirdLock" Type="integer" Value="1" KeyPath="yes" />
+    </Component>
+    <Component Id="ProtectedNetBirdInstallerAcl" Directory="PF_NETBIRD_INSTALLER" Guid="516C4E7E-7B34-4AB0-BF2B-90732B2CFA93">
+      <CreateFolder><PermissionEx Sddl="O:SYG:SYD:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;GRGX;;;BU)" /></CreateFolder>
+      <RegistryValue Root="HKLM" Key="Software\Structura\UnifiedConnectorSetup" Name="NetBirdInstaller" Type="integer" Value="1" KeyPath="yes" />
+    </Component>
+    <Component Id="ProtectedBootstrapperDirectoryAcl" Directory="BOOTSTRAPPER_DIR" Guid="F6C1CCCA-8457-4B9D-A760-22E514D5DB05">
+      <CreateFolder><PermissionEx Sddl="O:SYG:SYD:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;GRGX;;;BU)" /></CreateFolder>
+      <RegistryValue Root="HKLM" Key="Software\Structura\UnifiedConnectorSetup" Name="BootstrapperDirectory" Type="integer" Value="1" KeyPath="yes" />
+    </Component>
+    <Component Id="ProtectedHelperReleaseDirectoryAcl" Directory="HELPER_RELEASE_DIR" Guid="638D5844-231F-443F-86F0-67FE87DD0C39">
+      <CreateFolder><PermissionEx Sddl="O:SYG:SYD:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;GRGX;;;BU)" /></CreateFolder>
+      <RegistryValue Root="HKLM" Key="Software\Structura\UnifiedConnectorSetup" Name="HelperReleaseDirectory" Type="integer" Value="1" KeyPath="yes" />
+    </Component>
+    <Component Id="ProtectedProgramDataRootAcl" Directory="PD_INSTALLER_ROOT" Guid="158D7527-4F6D-4D7C-A27C-6525574F7671">
+      <CreateFolder><PermissionEx Sddl="O:SYG:SYD:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;GRGX;;;BU)" /></CreateFolder>
+      <RegistryValue Root="HKLM" Key="Software\Structura\UnifiedConnectorSetup" Name="ProgramDataRoot" Type="integer" Value="1" KeyPath="yes" />
+    </Component>
+    <Component Id="ProtectedMachineHelperDirectoryAcl" Directory="MACHINE_HELPER_DIR" Guid="1A90EAC0-7A2C-4432-9C45-977477CA4BC5">
+      <CreateFolder><PermissionEx Sddl="O:SYG:SYD:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;GRGX;;;BU)" /></CreateFolder>
+      <RegistryValue Root="HKLM" Key="Software\Structura\UnifiedConnectorSetup" Name="HelperDirectory" Type="integer" Value="1" KeyPath="yes" />
+    </Component>
+
+    <Component Id="BootstrapperImage" Directory="BOOTSTRAPPER_DIR" Guid="*">
+      <File Id="BootstrapperExe" Source="$(var.BootstrapperDir)\Connector.Upgrade.Bootstrapper.exe" KeyPath="yes">
+        <PermissionEx Sddl="O:SYG:SYD:P(A;;FA;;;SY)(A;;FA;;;BA)(A;;GRGX;;;BU)" />
+      </File>
+    </Component>
+    <Component Id="BootstrapperShortcut" Directory="ProgramMenuFolder" Guid="*">
+      <Shortcut Id="OriginalUserBootstrapperShortcut" Name="Structura Connector Installer"
+                Target="[BOOTSTRAPPER_DIR]Connector.Upgrade.Bootstrapper.exe"
+                WorkingDirectory="BOOTSTRAPPER_DIR" />
+      <RegistryValue Root="HKLM" Key="Software\Structura\UnifiedConnectorSetup" Name="BootstrapperShortcut" Type="integer" Value="1" KeyPath="yes" />
+    </Component>
+
+    <Component Id="HelperImage" Directory="MACHINE_HELPER_DIR" Guid="*">
+      <File Id="MachineHelperExe" Source="$(var.HelperDir)\Connector.Upgrade.MachineHelper.exe" KeyPath="yes">
+        <PermissionEx Sddl="O:SYG:SYD:P(A;;FA;;;SY)(A;;FA;;;BA)(A;;GRGX;;;BU)" />
+      </File>
+    </Component>
+    <Component Id="HelperSetupExe" Directory="MACHINE_HELPER_DIR" Guid="*">
+      <File Id="VelopackSetupExe" Source="$(var.SetupSource)" Name="Setup.exe" KeyPath="yes">
+        <PermissionEx Sddl="O:SYG:SYD:P(A;;FA;;;SY)(A;;FA;;;BA)(A;;GRGX;;;BU)" />
+      </File>
+    </Component>
+    <Component Id="NetBirdPinnedMsi" Directory="MACHINE_HELPER_DIR" Guid="*">
+      <File Id="PinnedNetBirdMsi" Source="$(var.NetBirdMsi)" KeyPath="yes">
+        <PermissionEx Sddl="O:SYG:SYD:P(A;;FA;;;SY)(A;;FA;;;BA)(A;;GRGX;;;BU)" />
+      </File>
+    </Component>
+    <Component Id="NetBirdRuntimeConfiguration" Directory="PF_NETBIRD_ROOT" Guid="*">
+      <File Id="MachineConnectorAccessConfiguration" Source="$(var.AccessConfiguration)" KeyPath="yes"><PermissionEx Sddl="O:SYG:SYD:P(A;;FA;;;SY)(A;;FA;;;BA)(A;;GRGX;;;BU)" /></File>
+    </Component>
+    <Component Id="NetBirdRuntimePreflight" Directory="PF_NETBIRD_SCRIPTS" Guid="*">
+      <File Id="MachineNetBirdPreflightScript" Source="$(var.NetBirdPreflight)" KeyPath="yes"><PermissionEx Sddl="O:SYG:SYD:P(A;;FA;;;SY)(A;;FA;;;BA)(A;;GRGX;;;BU)" /></File>
+    </Component>
+    <Component Id="NetBirdRuntimeVerifier" Directory="PF_NETBIRD_SCRIPTS" Guid="*">
+      <File Id="MachineNetBirdVerifierScript" Source="$(var.NetBirdVerifier)" KeyPath="yes"><PermissionEx Sddl="O:SYG:SYD:P(A;;FA;;;SY)(A;;FA;;;BA)(A;;GRGX;;;BU)" /></File>
+    </Component>
+    <Component Id="NetBirdRuntimeIdentityLock" Directory="PF_NETBIRD_LOCKS" Guid="*">
+      <File Id="MachineNetBirdIdentityLock" Source="$(var.NetBirdIdentityLock)" KeyPath="yes"><PermissionEx Sddl="O:SYG:SYD:P(A;;FA;;;SY)(A;;FA;;;BA)(A;;GRGX;;;BU)" /></File>
+    </Component>
+    <Component Id="NetBirdRuntimeInstaller" Directory="PF_NETBIRD_INSTALLER" Guid="*">
+      <File Id="MachineNetBirdInstallerMsi" Source="$(var.NetBirdMsi)" KeyPath="yes"><PermissionEx Sddl="O:SYG:SYD:P(A;;FA;;;SY)(A;;FA;;;BA)(A;;GRGX;;;BU)" /></File>
+    </Component>
+    <Component Id="LegacyConnectorPinnedMsi" Directory="MACHINE_HELPER_DIR" Guid="*">
+      <File Id="PinnedLegacyConnectorMsi" Source="$(var.LegacyConnectorMsi)" KeyPath="yes">
+        <PermissionEx Sddl="O:SYG:SYD:P(A;;FA;;;SY)(A;;FA;;;BA)(A;;GRGX;;;BU)" />
+      </File>
+    </Component>
+    <Component Id="LegacyPlatformPinnedMsi" Directory="MACHINE_HELPER_DIR" Guid="*">
+      <File Id="PinnedLegacyPlatformMsi" Source="$(var.LegacyPlatformMsi)" KeyPath="yes">
+        <PermissionEx Sddl="O:SYG:SYD:P(A;;FA;;;SY)(A;;FA;;;BA)(A;;GRGX;;;BU)" />
+      </File>
+    </Component>
+    <Component Id="HelperReleaseManifestFile" Directory="HELPER_RELEASE_DIR" Guid="*">
+      <File Id="HelperReleaseJson" Source="$(var.HelperReleaseManifest)" KeyPath="yes">
+        <PermissionEx Sddl="O:SYG:SYD:P(A;;FA;;;SY)(A;;FA;;;BA)(A;;GRGX;;;BU)" />
+      </File>
+    </Component>
+    <Component Id="HelperReleaseSignatureFile" Directory="HELPER_RELEASE_DIR" Guid="*">
+      <File Id="HelperReleaseSig" Source="$(var.HelperReleaseSignature)" KeyPath="yes">
+        <PermissionEx Sddl="O:SYG:SYD:P(A;;FA;;;SY)(A;;FA;;;BA)(A;;GRGX;;;BU)" />
+      </File>
+    </Component>
+
+    <Feature Id="MachineStagingFeature" Title="Structura Unified Connector Installer" Level="1">
+      <Files Include="$(var.BootstrapperDir)\**" Directory="BOOTSTRAPPER_DIR">
+        <Exclude Files="$(var.BootstrapperDir)\Connector.Upgrade.Bootstrapper.exe" />
+      </Files>
+      <Files Include="$(var.HelperDir)\**" Directory="MACHINE_HELPER_DIR">
+        <Exclude Files="$(var.HelperDir)\Connector.Upgrade.MachineHelper.exe" />
+      </Files>
+      <ComponentRef Id="ProtectedNetBirdMachineRootAcl" />
+      <ComponentRef Id="ProtectedNetBirdRuntimeRootAcl" />
+      <ComponentRef Id="ProtectedNetBirdScriptsAcl" />
+      <ComponentRef Id="ProtectedNetBirdInfraAcl" />
+      <ComponentRef Id="ProtectedNetBirdLockAcl" />
+      <ComponentRef Id="ProtectedNetBirdInstallerAcl" />
+      <ComponentRef Id="NetBirdRuntimeConfiguration" />
+      <ComponentRef Id="NetBirdRuntimePreflight" />
+      <ComponentRef Id="NetBirdRuntimeVerifier" />
+      <ComponentRef Id="NetBirdRuntimeIdentityLock" />
+      <ComponentRef Id="NetBirdRuntimeInstaller" />
+      <ComponentRef Id="ProtectedProgramFilesRootAcl" />
+      <ComponentRef Id="ProtectedBootstrapperDirectoryAcl" />
+      <ComponentRef Id="ProtectedHelperReleaseDirectoryAcl" />
+      <ComponentRef Id="ProtectedProgramDataRootAcl" />
+      <ComponentRef Id="ProtectedMachineHelperDirectoryAcl" />
+      <ComponentRef Id="BootstrapperImage" />
+      <ComponentRef Id="BootstrapperShortcut" />
+      <ComponentRef Id="HelperImage" />
+      <ComponentRef Id="HelperSetupExe" />
+      <ComponentRef Id="NetBirdPinnedMsi" />
+      <ComponentRef Id="LegacyConnectorPinnedMsi" />
+      <ComponentRef Id="LegacyPlatformPinnedMsi" />
+      <ComponentRef Id="HelperReleaseManifestFile" />
+      <ComponentRef Id="HelperReleaseSignatureFile" />
+    </Feature>
+  </Package>
+</Wix>

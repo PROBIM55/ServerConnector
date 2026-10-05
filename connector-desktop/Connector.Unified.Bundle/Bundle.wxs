@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:bal="http://wixtoolset.org/schemas/v4/wxs/bal">
+  <Bundle Name="Structura Unified Connector Installer"
+          Manufacturer="Structura"
+          Version="$(var.ProductVersion)"
+          UpgradeCode="DC40328B-3AD1-4F4C-8A34-9A876DA14E23"
+          Compressed="yes">
+    <BootstrapperApplication>
+      <bal:WixStandardBootstrapperApplication Theme="hyperlinkLicense" LicenseUrl="" />
+    </BootstrapperApplication>
+
+    <Chain>
+      <MsiPackage Id="UnifiedMachineSetup"
+                  SourceFile="$(var.UnifiedSetupMsi)"
+                  Vital="yes"
+                  Visible="no" />
+
+      <!-- Once staging is committed, a per-user migration failure must never roll it back. -->
+      <RollbackBoundary Id="UnifiedMachineSetupCommitted" />
+
+      <!-- Burn's default per-user execution impersonates the initiating user even when the
+           machine MSI required elevation. The bridge has no arguments or uninstall action. -->
+      <ExePackage Id="OriginalUserUpgradeBridge"
+                  Name="Connector.Upgrade.LaunchBridge.exe"
+                  SourceFile="$(var.LaunchBridge)"
+                  DetectCondition="0"
+                  PerMachine="no"
+                  Permanent="yes"
+                  Vital="yes"
+                  Compressed="yes">
+        <ExitCode Value="3010" Behavior="scheduleReboot" />
+      </ExePackage>
+    </Chain>
+  </Bundle>
+</Wix>

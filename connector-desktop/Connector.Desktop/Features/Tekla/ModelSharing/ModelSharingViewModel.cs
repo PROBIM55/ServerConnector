@@ -69,6 +69,9 @@ public sealed class ModelSharingViewModel : ObservableObject
     private bool _isBusy;
     public bool IsBusy { get => _isBusy; private set { if (SetProperty(ref _isBusy, value)) RaiseCanExec(); } }
 
+    private OperationOutcome _lastOperationOutcome;
+    public OperationOutcome LastOperationOutcome { get => _lastOperationOutcome; private set => SetProperty(ref _lastOperationOutcome, value); }
+
     private string _resultMessage = "";
     public string ResultMessage { get => _resultMessage; private set => SetProperty(ref _resultMessage, value); }
 
@@ -122,6 +125,11 @@ public sealed class ModelSharingViewModel : ObservableObject
                 text = $"Статус: настроено ({status.IdentityEmail}, сервер {status.ServerHost}:{status.ServerPort}). Применено: {applied}.";
                 brush = System.Windows.Media.Brushes.MediumSpringGreen;
             }
+            else if (status.NeedsManualReview)
+            {
+                text = "Статус: файлы Model Sharing требуют проверки перед настройкой.";
+                brush = System.Windows.Media.Brushes.Orange;
+            }
             else if (status.NeedsReapply)
             {
                 text = "Статус: ранее настраивалось, но файл заменён обновлением Tekla — запустите настройку повторно.";
@@ -134,7 +142,7 @@ public sealed class ModelSharingViewModel : ObservableObject
             }
             StatusLine = text;
             StatusBrush = brush;
-            SetupEnabled = hasDevice && status.FeatureDllExists;
+            SetupEnabled = hasDevice && status.FeatureDllExists && !status.NeedsManualReview;
         }
         catch (Exception ex)
         {
@@ -148,6 +156,7 @@ public sealed class ModelSharingViewModel : ObservableObject
     // provisioning off-thread behind the View-supplied progress window, then hand persistence to the shell.
     private async Task SetupAsync()
     {
+        LastOperationOutcome = OperationOutcome.Running;
         // Created only after the confirm passes (matches the original lifecycle); the early guards below must not
         // touch a phantom window. The IsTeklaRunning / confirm-cancel branches Dismiss() a still-null handle (no-op).
         ModelSharingProgressHandle? progress = null;
@@ -155,19 +164,26 @@ public sealed class ModelSharingViewModel : ObservableObject
         {
             if (!_identity.HasDevice)
             {
-                throw new InvalidOperationException("Сначала подключитесь по токену устройства на вкладке \"Коннектор\".");
+                ResultMessage = "Сначала подключитесь по токену устройства на вкладке \"Коннектор\".";
+                LastOperationOutcome = OperationOutcome.Rejected;
+                ShowMessage?.Invoke(ResultMessage, true);
+                return;
             }
 
             var teklaBin = ResolveTeklaBin();
             var dll = Path.Combine(teklaBin, "Features", "SharingUIFeature.dll");
             if (!File.Exists(dll))
             {
-                throw new InvalidOperationException("Не найден файл " + dll + ". Укажите правильную папку bin Tekla.");
+                ResultMessage = "Не найден SharingUIFeature.dll. Укажите правильную папку bin Tekla.";
+                LastOperationOutcome = OperationOutcome.Rejected;
+                ShowMessage?.Invoke(ResultMessage, true);
+                return;
             }
 
             if (_service.IsTeklaRunning())
             {
                 progress?.Dismiss();
+                LastOperationOutcome = OperationOutcome.Rejected;
                 ShowMessage?.Invoke("Сейчас запущена Tekla Structures. Закройте её и повторите настройку Model Sharing.", true);
                 return;
             }
@@ -181,6 +197,7 @@ public sealed class ModelSharingViewModel : ObservableObject
             if (!confirm)
             {
                 progress?.Dismiss();
+                LastOperationOutcome = OperationOutcome.Cancelled;
                 return;
             }
 
@@ -204,6 +221,7 @@ public sealed class ModelSharingViewModel : ObservableObject
 
             if (result.IsSuccess)
             {
+                LastOperationOutcome = OperationOutcome.Succeeded;
                 // Persistence stays in the shell: hand back the applied values for it to save the ModelSharing* keys.
                 OnProvisioned?.Invoke(new ModelSharingProvisionedInfo(teklaBin, serverHost, serverPort, email, DateTimeOffset.UtcNow));
                 progress?.Step("Готово", "Tekla настроена", 2, 2, TimeSpan.Zero);
@@ -213,6 +231,7 @@ public sealed class ModelSharingViewModel : ObservableObject
             }
             else
             {
+                LastOperationOutcome = OperationOutcome.Failed;
                 progress?.Failed(result.Message);
                 Log?.Invoke("Model Sharing не настроен: " + result.Message +
                             (string.IsNullOrWhiteSpace(result.TechnicalDetails) ? string.Empty : " | " + result.TechnicalDetails));
@@ -221,6 +240,7 @@ public sealed class ModelSharingViewModel : ObservableObject
         }
         catch (Exception ex)
         {
+            LastOperationOutcome = OperationOutcome.Failed;
             progress?.Failed(ex.Message);
             ResultMessage = ex.Message;
             Log?.Invoke("Ошибка настройки Model Sharing: " + ex.Message);

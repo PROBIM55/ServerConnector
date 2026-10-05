@@ -1,0 +1,72 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- WinExe: демон живёт в фоне БЕЗ консольного окна (запуск задачей при логоне,
+         из коннектора, вручную — окна нет нигде; пользователь не может его случайно
+         закрыть). Вывод — только структурный лог desktop.jsonl. -->
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <PlatformTarget>x64</PlatformTarget>
+    <LangVersion>10.0</LangVersion>
+    <Nullable>enable</Nullable>
+    <AssemblyName>Platform.Bridge.Desktop.Tekla</AssemblyName>
+    <RootNamespace>Platform.Bridge.Desktop.Tekla</RootNamespace>
+    <!--
+      Tekla SDK assemblies must be loaded from the user's Tekla install,
+      never copied into our output. See TEKLA_BRIDGE_DESKTOP_PLAN.md §10.1.
+      Override TeklaBin via msbuild /p:TeklaBin=... if installed elsewhere.
+    -->
+    <TeklaProfile Condition="'$(TeklaProfile)' == ''">2025.0</TeklaProfile>
+    <TeklaBin Condition="'$(TeklaBin)' == ''">C:\TeklaStructures\2025.0\bin</TeklaBin>
+    <UseLocalTeklaReferences Condition="'$(UseLocalTeklaReferences)' == ''">false</UseLocalTeklaReferences>
+    <TeklaOpenApiVersion Condition="'$(TeklaOpenApiVersion)' == ''">$(TeklaProfile).0</TeklaOpenApiVersion>
+    <!--
+      app.config содержит 110 binding redirects для зависимостей Tekla SDK
+      (включая <codeBase> на C:\TeklaStructures\2025.0\bin\*.dll). Без этого
+      .NET Framework Fusion не находит Tekla.Structures.Model и т.д., потому
+      что мы не копируем DLL'и в наш output (Private=false). См. plan §10.1.
+    -->
+    <TeklaAppConfig Condition="'$(TeklaAppConfig)' == '' and '$(TeklaProfile)' == '2020.0'">profiles\2020.0\app.config</TeklaAppConfig>
+    <TeklaAppConfig Condition="'$(TeklaAppConfig)' == ''">app.config</TeklaAppConfig>
+    <AppConfig>$(TeklaAppConfig)</AppConfig>
+    <GenerateBindingRedirectsOutputType>true</GenerateBindingRedirectsOutputType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.Text.Json" Version="8.0.5" />
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\..\..\shared\fachwerk-geometry\src\Platform.Fachwerk.Geometry.csproj" />
+    <ProjectReference Include="..\..\..\..\..\shared\contracts\dotnet\Platform.Contracts.TeklaPlan\Platform.Contracts.TeklaPlan.csproj" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(UseLocalTeklaReferences)' != 'true'">
+    <PackageReference Include="Tekla.Structures.All" Version="$(TeklaOpenApiVersion)" PrivateAssets="all" ExcludeAssets="runtime" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(UseLocalTeklaReferences)' == 'true'">
+    <Reference Include="Tekla.Structures">
+      <HintPath>$(TeklaBin)\Tekla.Structures.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Tekla.Structures.Model">
+      <HintPath>$(TeklaBin)\Tekla.Structures.Model.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Tekla.Structures.Geometry3d.Compatibility">
+      <HintPath>$(TeklaBin)\Tekla.Structures.Geometry3d.Compatibility.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Tekla.Common.Geometry">
+      <HintPath>$(TeklaBin)\Tekla.Common.Geometry.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Tekla.Common.Geometry.Primitives">
+      <HintPath>$(TeklaBin)\Tekla.Common.Geometry.Primitives.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+</Project>

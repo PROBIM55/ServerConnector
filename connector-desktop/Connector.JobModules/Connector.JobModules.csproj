@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <Version>0.1.2</Version>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\src\Platform.Connector.Core\Platform.Connector.Core.csproj" />
+    <ProjectReference Include="..\Connector.AgrConversion\Connector.AgrConversion.csproj" />
+  </ItemGroup>
+</Project>

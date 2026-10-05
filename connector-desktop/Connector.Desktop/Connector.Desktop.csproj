@@ -11,19 +11,64 @@
     <AssemblyName>Connector.Desktop</AssemblyName>
     <RootNamespace>Connector.Desktop</RootNamespace>
     <Version>1.0.31</Version>
-    <FileVersion>1.0.31.0</FileVersion>
-    <AssemblyVersion>1.0.31.0</AssemblyVersion>
     <ApplicationIcon>Assets\structura_connector.ico</ApplicationIcon>
+    <StartupObject>Connector.Desktop.App</StartupObject>
   </PropertyGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Connector.AgrConversion\Connector.AgrConversion.csproj" />
+    <ProjectReference Include="..\Connector.Platform\Connector.Platform.csproj" />
+    <ProjectReference Include="..\Connector.JobModules\Connector.JobModules.csproj" />
+    <ProjectReference Include="..\src\Connector.Network\Connector.Network.csproj" />
+    <ProjectReference Include="..\src\Connector.CommonAccess.Runtime\Connector.CommonAccess.Runtime.csproj" />
+    <ProjectReference Include="..\src\Connector.SmbAccess\Connector.SmbAccess.csproj" />
+    <ProjectReference Include="..\..\connector-access\src\Connector.Access.Client\Connector.Access.Client.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="Services\CommonSmbAccessService.cs" />
+    <Compile Remove="Services\WindowsSmbMappingPort.cs" />
   </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="dnlib" Version="4.4.0" />
     <PackageReference Include="System.ServiceProcess.ServiceController" Version="8.0.0" />
+    <PackageReference Include="Velopack" Version="1.2.161" />
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4191.47" />
   </ItemGroup>
+
+  <ItemGroup>
+    <ApplicationDefinition Remove="App.xaml" />
+    <Page Include="App.xaml" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="..\design\*.html;..\design\*.js;..\design\style.css">
+      <Link>ui\%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
+    <Content Include="..\design\brand\structura-logo.png;..\design\brand\platform-field-refined-v3.png">
+      <Link>ui\brand\%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="connector-update.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Assets\update-public-key.pem" Condition="Exists('Assets\update-public-key.pem')" />
+  </ItemGroup>
+
+  <Target Name="RequireSignedUpdateKeyForRelease" BeforeTargets="BeforeBuild" Condition="'$(Configuration)' == 'Release'">
+    <Error Condition="!Exists('Assets\update-public-key.pem')" Text="Release build requires Connector.Desktop\Assets\update-public-key.pem." />
+  </Target>
 
   <ItemGroup>
     <!-- Third-party licenses of the AGR converter (Assimp, Silk.NET, SharpGLTF, gltfpack): next to the exe and in the MSI. -->
@@ -36,6 +81,7 @@
   <ItemGroup>
     <Content Include="Assets\structura_connector.ico" />
     <Resource Include="Assets\structura_logo.png" />
+    <Resource Include="Assets\platform-field-refined-v3.png" />
   </ItemGroup>
 
   <ItemGroup>

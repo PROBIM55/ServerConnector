@@ -1,0 +1,10 @@
+page("CrossMember", "")
+{
+  plugin(1, "CrossMemberPlugin")
+  {
+    tab_page("", "jd_Picture", 1)
+    {
+      attribute("", "CrossMemberPlugin", label, "%s", none, none, "0.0", "0.0", 20, 20)
+    }
+  }
+}

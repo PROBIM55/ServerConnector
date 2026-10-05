@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.IO;
 using System.Windows;
+using Connector.Desktop.Features.Connector;
 using Connector.Desktop.Services;
 using Forms = System.Windows.Forms;
 
@@ -35,6 +36,7 @@ public partial class StandardView : System.Windows.Controls.UserControl
     private const string DefaultTeklaPublishSourcePath = @"\\62.113.36.107\BIM_Models\Tekla\02_ПАПКА ФИРМЫ\01_XS_FIRM";
     private const string DefaultTeklaExtensionsPublishSourcePath = @"\\62.113.36.107\BIM_Models\Tekla\02_ПАПКА ФИРМЫ\07_Extensions";
     private const string DefaultTeklaLibrariesPublishSourcePath = @"\\62.113.36.107\BIM_Models\Tekla\02_ПАПКА ФИРМЫ\02_Grasshopper\Libraries\8";
+    private int _publicationInProgress;
 
     public StandardView(IShellHost host, TeklaStandardService teklaStandardService)
     {
@@ -271,7 +273,8 @@ public partial class StandardView : System.Windows.Controls.UserControl
         bool showDialogs,
         bool forceRefresh,
         bool autoApplyIfPossible,
-        OperationProgressWindow? progressReporter = null)
+        OperationProgressWindow? progressReporter = null,
+        TeklaStandardSection? section = null)
     {
         var summaryLines = new List<string>();
         if (_host.TeklaCheckInProgress)
@@ -291,35 +294,27 @@ public partial class StandardView : System.Windows.Controls.UserControl
             NormalizeTeklaSettings();
             ApplyAndPersistTeklaPathsOnly();
 
-            const int totalSteps = 3;
+            var totalSteps = section.HasValue ? 1 : 3;
             var currentStep = 0;
 
-            currentStep++;
-            progressReporter?.UpdateStep(
-                "Проверяем раздел: Папка фирмы",
-                "Получаем данные и применяем обновление при необходимости",
-                currentStep,
-                totalSteps,
-                EstimateOperationEta(currentStep, totalSteps));
-            await CheckAndApplyTeklaTargetAsync(CreateFirmTargetState(), ApplyFirmTargetState, forceRefresh, autoApplyIfPossible, summaryLines, progressReporter);
-
-            currentStep++;
-            progressReporter?.UpdateStep(
-                "Проверяем раздел: Пользовательские приложения",
-                "Получаем данные и применяем обновление при необходимости",
-                currentStep,
-                totalSteps,
-                EstimateOperationEta(currentStep, totalSteps));
-            await CheckAndApplyTeklaTargetAsync(CreateExtensionsTargetState(), ApplyExtensionsTargetState, forceRefresh, autoApplyIfPossible, summaryLines, progressReporter);
-
-            currentStep++;
-            progressReporter?.UpdateStep(
-                "Проверяем раздел: Grasshopper Libraries",
-                "Получаем данные и применяем обновление при необходимости",
-                currentStep,
-                totalSteps,
-                EstimateOperationEta(currentStep, totalSteps));
-            await CheckAndApplyTeklaTargetAsync(CreateLibrariesTargetState(), ApplyLibrariesTargetState, forceRefresh, autoApplyIfPossible, summaryLines, progressReporter);
+            if (section is null or TeklaStandardSection.Firm)
+            {
+                currentStep++;
+                progressReporter?.UpdateStep("Проверяем раздел: Папка фирмы", "Получаем данные и применяем обновление при необходимости", currentStep, totalSteps, EstimateOperationEta(currentStep, totalSteps));
+                await CheckAndApplyTeklaTargetAsync(CreateFirmTargetState(), ApplyFirmTargetState, forceRefresh, autoApplyIfPossible, summaryLines, progressReporter);
+            }
+            if (section is null or TeklaStandardSection.Extensions)
+            {
+                currentStep++;
+                progressReporter?.UpdateStep("Проверяем раздел: Пользовательские приложения", "Получаем данные и применяем обновление при необходимости", currentStep, totalSteps, EstimateOperationEta(currentStep, totalSteps));
+                await CheckAndApplyTeklaTargetAsync(CreateExtensionsTargetState(), ApplyExtensionsTargetState, forceRefresh, autoApplyIfPossible, summaryLines, progressReporter);
+            }
+            if (section is null or TeklaStandardSection.Libraries)
+            {
+                currentStep++;
+                progressReporter?.UpdateStep("Проверяем раздел: Grasshopper Libraries", "Получаем данные и применяем обновление при необходимости", currentStep, totalSteps, EstimateOperationEta(currentStep, totalSteps));
+                await CheckAndApplyTeklaTargetAsync(CreateLibrariesTargetState(), ApplyLibrariesTargetState, forceRefresh, autoApplyIfPossible, summaryLines, progressReporter);
+            }
 
             _host.SaveSettings();
             UpdateTeklaUi();
@@ -338,12 +333,7 @@ public partial class StandardView : System.Windows.Controls.UserControl
         }
         catch (Exception ex)
         {
-            _host.Settings.TeklaStandardLastError = ex.Message;
-            _host.Settings.TeklaExtensionsLastError = ex.Message;
-            _host.Settings.TeklaLibrariesLastError = ex.Message;
-            _host.Settings.TeklaStandardLastTechnicalError = ex.ToString();
-            _host.Settings.TeklaExtensionsLastTechnicalError = ex.ToString();
-            _host.Settings.TeklaLibrariesLastTechnicalError = ex.ToString();
+            SetSectionError(section, ex);
             _host.SaveSettings();
             summaryLines.Add("Синхронизация завершилась с ошибкой: " + ex.Message);
             _host.Log("Ошибка проверки Tekla sync: " + ex.Message);
@@ -524,6 +514,53 @@ public partial class StandardView : System.Windows.Controls.UserControl
         catch (Exception ex)
         {
             progressWindow.MarkFailed(ex.Message);
+        }
+    }
+
+    public async Task RunInteractiveSyncAsync(TeklaStandardSection section)
+    {
+        if (_host.TeklaCheckInProgress)
+        {
+            _host.ShowDialog("Синхронизация уже выполняется. Дождитесь завершения текущей операции", "Стандарт Tekla", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        var name = section switch
+        {
+            TeklaStandardSection.Firm => "папки фирмы",
+            TeklaStandardSection.Extensions => "пользовательских приложений",
+            _ => "Grasshopper Libraries"
+        };
+        var progressWindow = new OperationProgressWindow("Синхронизация Tekla", "Проверяем раздел: " + name) { Owner = _host.OwnerWindow };
+        progressWindow.Show();
+        try
+        {
+            var summaryLines = await RunTeklaSyncCycleAsync(false, true, true, progressWindow, section);
+            var resultText = summaryLines.Count == 0 ? "Синхронизация завершена" : string.Join(Environment.NewLine, summaryLines);
+            if (HasTeklaSyncErrors(section)) progressWindow.MarkFailed(resultText); else progressWindow.MarkSucceeded(resultText);
+        }
+        catch (Exception ex)
+        {
+            progressWindow.MarkFailed(ex.Message);
+        }
+    }
+
+    private void SetSectionError(TeklaStandardSection? section, Exception ex)
+    {
+        if (section is null or TeklaStandardSection.Firm)
+        {
+            _host.Settings.TeklaStandardLastError = ex.Message;
+            _host.Settings.TeklaStandardLastTechnicalError = ex.ToString();
+        }
+        if (section is null or TeklaStandardSection.Extensions)
+        {
+            _host.Settings.TeklaExtensionsLastError = ex.Message;
+            _host.Settings.TeklaExtensionsLastTechnicalError = ex.ToString();
+        }
+        if (section is null or TeklaStandardSection.Libraries)
+        {
+            _host.Settings.TeklaLibrariesLastError = ex.Message;
+            _host.Settings.TeklaLibrariesLastTechnicalError = ex.ToString();
         }
     }
 
@@ -958,42 +995,13 @@ public partial class StandardView : System.Windows.Controls.UserControl
                !string.IsNullOrWhiteSpace(_host.Settings.TeklaLibrariesLastError);
     }
 
-    private List<TeklaPublishTargetSelection> GetSelectedPublishTargets()
+    private bool HasTeklaSyncErrors(TeklaStandardSection section) => section switch
     {
-        var targets = new List<TeklaPublishTargetSelection>();
-
-        if (PublishFirmCheckBox.IsChecked == true)
-        {
-            targets.Add(new TeklaPublishTargetSelection
-            {
-                TargetKey = "firm",
-                DisplayName = "Папка фирмы",
-                SourcePath = (TeklaPublishFirmSourcePathTextBox.Text ?? string.Empty).Trim()
-            });
-        }
-
-        if (PublishExtensionsCheckBox.IsChecked == true)
-        {
-            targets.Add(new TeklaPublishTargetSelection
-            {
-                TargetKey = "extensions",
-                DisplayName = "Пользовательские приложения",
-                SourcePath = (TeklaPublishExtensionsSourcePathTextBox.Text ?? string.Empty).Trim()
-            });
-        }
-
-        if (PublishLibrariesCheckBox.IsChecked == true)
-        {
-            targets.Add(new TeklaPublishTargetSelection
-            {
-                TargetKey = "libraries",
-                DisplayName = "Grasshopper Libraries",
-                SourcePath = (TeklaPublishLibrariesSourcePathTextBox.Text ?? string.Empty).Trim()
-            });
-        }
-
-        return targets;
-    }
+        TeklaStandardSection.Firm => !string.IsNullOrWhiteSpace(_host.Settings.TeklaStandardLastError),
+        TeklaStandardSection.Extensions => !string.IsNullOrWhiteSpace(_host.Settings.TeklaExtensionsLastError),
+        TeklaStandardSection.Libraries => !string.IsNullOrWhiteSpace(_host.Settings.TeklaLibrariesLastError),
+        _ => true
+    };
 
     private void TeklaPublishFirmBrowse_Click(object sender, RoutedEventArgs e)
     {
@@ -1067,45 +1075,25 @@ public partial class StandardView : System.Windows.Controls.UserControl
         }
     }
 
-    private async void TeklaPublish_Click(object sender, RoutedEventArgs e)
+    public Task ValidatePublicationAsync(TeklaPublicationRequest request, CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+        ValidatePublication(request);
+        return Task.CompletedTask;
+    }
+
+    public async Task PublishPublicationAsync(TeklaPublicationRequest request, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (Interlocked.CompareExchange(ref _publicationInProgress, 1, 0) != 0)
+            throw new InvalidOperationException("Публикация уже выполняется. Дождитесь её завершения.");
         OperationProgressWindow? progressWindow = null;
         try
         {
-            if (!_host.Settings.IsFirmAdmin)
-            {
-                throw new InvalidOperationException("Публикация доступна только для роли admin_firm.");
-            }
-
+            cancellationToken.ThrowIfCancellationRequested();
+            var selectedTargets = ValidatePublication(request);
             var token = SettingsService.DecryptToken(_host.Settings.TokenCipherBase64).Trim();
-            if (string.IsNullOrWhiteSpace(token))
-            {
-                throw new InvalidOperationException("Токен устройства не найден. Выполните подключение по токену.");
-            }
-
-            var selectedTargets = GetSelectedPublishTargets();
-            if (selectedTargets.Count == 0)
-            {
-                throw new InvalidOperationException("Выберите хотя бы один раздел для публикации.");
-            }
-
-            var publishComment = (TeklaPublishNotesTextBox.Text ?? string.Empty).Trim();
-            if (string.IsNullOrWhiteSpace(publishComment))
-            {
-                throw new InvalidOperationException("Комментарий публикации обязателен.");
-            }
-
-            foreach (var selectedTarget in selectedTargets)
-            {
-                if (string.IsNullOrWhiteSpace(selectedTarget.SourcePath))
-                {
-                    throw new InvalidOperationException("Для раздела \"" + selectedTarget.DisplayName + "\" не указан путь к эталонной папке.");
-                }
-            }
-
-            _host.Settings.TeklaPublishSourcePath = (TeklaPublishFirmSourcePathTextBox.Text ?? string.Empty).Trim();
-            _host.Settings.TeklaExtensionsPublishSourcePath = (TeklaPublishExtensionsSourcePathTextBox.Text ?? string.Empty).Trim();
-            _host.Settings.TeklaLibrariesPublishSourcePath = (TeklaPublishLibrariesSourcePathTextBox.Text ?? string.Empty).Trim();
+            var publishComment = request.Comment.Trim();
             _host.SaveSettings();
 
             var totalSteps = selectedTargets.Count + 3;
@@ -1133,7 +1121,7 @@ public partial class StandardView : System.Windows.Controls.UserControl
                     SourcePath = selectedTarget.SourcePath,
                     Comment = publishComment
                 };
-                var result = await _host.Heartbeat.PublishTeklaManifestAsync(_host.Settings.ServerUrl, token, payload, CancellationToken.None);
+                var result = await _host.Heartbeat.PublishTeklaManifestAsync(_host.Settings.ServerUrl, token, payload, cancellationToken);
 
                 if (result.NoChanges)
                 {
@@ -1172,6 +1160,8 @@ public partial class StandardView : System.Windows.Controls.UserControl
                 showDialogs: false,
                 forceRefresh: true,
                 autoApplyIfPossible: true);
+            if (HasTeklaSyncErrors())
+                throw new InvalidOperationException("Публикация на сервере завершена, но локальная синхронизация требует проверки журнала.");
 
             currentStep++;
             progressWindow.UpdateStep(
@@ -1193,12 +1183,58 @@ public partial class StandardView : System.Windows.Controls.UserControl
             var message = GetFriendlyTeklaPublishErrorMessage(ex);
             progressWindow?.MarkFailed(message);
             _host.Log("Ошибка публикации Tekla: " + message);
-            _host.ShowDialog(message, "Стандарт Tekla", MessageBoxButton.OK, MessageBoxImage.Error);
+            throw new InvalidOperationException(message, ex);
         }
         finally
         {
+            Interlocked.Exchange(ref _publicationInProgress, 0);
             TeklaPublishButton.IsEnabled = _host.Settings.IsFirmAdmin;
         }
+    }
+
+    private async void TeklaPublish_Click(object sender, RoutedEventArgs e)
+    {
+        var request = new TeklaPublicationRequest(
+            PublishFirmCheckBox.IsChecked == true,
+            PublishExtensionsCheckBox.IsChecked == true,
+            PublishLibrariesCheckBox.IsChecked == true,
+            TeklaPublishNotesTextBox.Text ?? string.Empty);
+        try
+        {
+            await PublishPublicationAsync(request, CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            _host.ShowDialog(GetFriendlyTeklaPublishErrorMessage(ex), "Стандарт Tekla", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private List<TeklaPublishTargetSelection> ValidatePublication(TeklaPublicationRequest request)
+    {
+        if (!_host.Settings.IsFirmAdmin)
+            throw new InvalidOperationException("Публикация доступна только для роли admin_firm.");
+
+        if (string.IsNullOrWhiteSpace(SettingsService.DecryptToken(_host.Settings.TokenCipherBase64)))
+            throw new InvalidOperationException("Токен устройства не найден. Выполните подключение по токену.");
+
+        if (string.IsNullOrWhiteSpace(request.Comment))
+            throw new InvalidOperationException("Комментарий публикации обязателен.");
+
+        var targets = new List<TeklaPublishTargetSelection>();
+        AddPublicationTarget(targets, request.PublishFirm, "firm", "Папка фирмы", _host.Settings.TeklaPublishSourcePath);
+        AddPublicationTarget(targets, request.PublishExtensions, "extensions", "Пользовательские приложения", _host.Settings.TeklaExtensionsPublishSourcePath);
+        AddPublicationTarget(targets, request.PublishLibraries, "libraries", "Grasshopper Libraries", _host.Settings.TeklaLibrariesPublishSourcePath);
+        if (targets.Count == 0)
+            throw new InvalidOperationException("Выберите хотя бы один раздел для публикации.");
+        return targets;
+    }
+
+    private static void AddPublicationTarget(List<TeklaPublishTargetSelection> targets, bool selected, string key, string displayName, string? sourcePath)
+    {
+        if (!selected) return;
+        if (string.IsNullOrWhiteSpace(sourcePath))
+            throw new InvalidOperationException("Для раздела \"" + displayName + "\" не указан путь к эталонной папке.");
+        targets.Add(new TeklaPublishTargetSelection { TargetKey = key, DisplayName = displayName, SourcePath = sourcePath.Trim() });
     }
 
     private static TimeSpan EstimateOperationEta(int currentStep, int totalSteps)

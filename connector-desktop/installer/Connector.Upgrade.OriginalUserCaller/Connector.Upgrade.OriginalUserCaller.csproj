@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Connector.Upgrade.HelperLauncher\Connector.Upgrade.HelperLauncher.csproj" />
+    <ProjectReference Include="..\Connector.Upgrade.HelperReleaseTrust\Connector.Upgrade.HelperReleaseTrust.csproj" />
+    <ProjectReference Include="..\Connector.Upgrade.MutualMachineChannel\Connector.Upgrade.MutualMachineChannel.csproj" />
+    <ProjectReference Include="..\Connector.Upgrade.ProtectedCallerImage\Connector.Upgrade.ProtectedCallerImage.csproj" />
+    <ProjectReference Include="..\Connector.Upgrade.MachineCommandChannel\Connector.Upgrade.MachineCommandChannel.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Connector.Upgrade.OriginalUserCaller.Tests" />
+  </ItemGroup>
+</Project>

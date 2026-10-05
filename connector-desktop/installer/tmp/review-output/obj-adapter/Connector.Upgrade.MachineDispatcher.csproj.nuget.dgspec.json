@@ -1,0 +1,971 @@
+{
+  "format": 1,
+  "restore": {
+    "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.MachineDispatcher\\Connector.Upgrade.MachineDispatcher.csproj": {}
+  },
+  "projects": {
+    "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.Core\\Connector.Upgrade.Core.csproj": {
+      "version": "1.0.0",
+      "restore": {
+        "projectUniqueName": "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.Core\\Connector.Upgrade.Core.csproj",
+        "projectName": "Connector.Upgrade.Core",
+        "projectPath": "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.Core\\Connector.Upgrade.Core.csproj",
+        "packagesPath": "C:\\Users\\Lagom\\.nuget\\packages\\",
+        "outputPath": "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\tmp\\review-output\\obj-adapter\\",
+        "projectStyle": "PackageReference",
+        "configFilePaths": [
+          "C:\\Users\\Lagom\\AppData\\Roaming\\NuGet\\NuGet.Config"
+        ],
+        "originalTargetFrameworks": [
+          "net8.0"
+        ],
+        "sources": {
+          "https://api.nuget.org/v3/index.json": {}
+        },
+        "frameworks": {
+          "net8.0": {
+            "targetAlias": "net8.0",
+            "projectReferences": {}
+          }
+        },
+        "warningProperties": {
+          "warnAsError": [
+            "NU1605"
+          ]
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
+        }
+      },
+      "frameworks": {
+        "net8.0": {
+          "targetAlias": "net8.0",
+          "imports": [
+            "net461",
+            "net462",
+            "net47",
+            "net471",
+            "net472",
+            "net48",
+            "net481"
+          ],
+          "assetTargetFallback": true,
+          "warn": true,
+          "frameworkReferences": {
+            "Microsoft.NETCore.App": {
+              "privateAssets": "all"
+            }
+          },
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\8.0.422/PortableRuntimeIdentifierGraph.json"
+        }
+      }
+    },
+    "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.MachineAcl\\Connector.Upgrade.MachineAcl.csproj": {
+      "version": "1.0.0",
+      "restore": {
+        "projectUniqueName": "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.MachineAcl\\Connector.Upgrade.MachineAcl.csproj",
+        "projectName": "Connector.Upgrade.MachineAcl",
+        "projectPath": "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.MachineAcl\\Connector.Upgrade.MachineAcl.csproj",
+        "packagesPath": "C:\\Users\\Lagom\\.nuget\\packages\\",
+        "outputPath": "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\tmp\\review-output\\obj-adapter\\",
+        "projectStyle": "PackageReference",
+        "configFilePaths": [
+          "C:\\Users\\Lagom\\AppData\\Roaming\\NuGet\\NuGet.Config"
+        ],
+        "originalTargetFrameworks": [
+          "net8.0-windows"
+        ],
+        "sources": {
+          "https://api.nuget.org/v3/index.json": {}
+        },
+        "frameworks": {
+          "net8.0-windows7.0": {
+            "targetAlias": "net8.0-windows",
+            "projectReferences": {}
+          }
+        },
+        "warningProperties": {
+          "warnAsError": [
+            "NU1605"
+          ]
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
+        }
+      },
+      "frameworks": {
+        "net8.0-windows7.0": {
+          "targetAlias": "net8.0-windows",
+          "imports": [
+            "net461",
+            "net462",
+            "net47",
+            "net471",
+            "net472",
+            "net48",
+            "net481"
+          ],
+          "assetTargetFallback": true,
+          "warn": true,
+          "frameworkReferences": {
+            "Microsoft.NETCore.App": {
+              "privateAssets": "all"
+            }
+          },
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\8.0.422/PortableRuntimeIdentifierGraph.json"
+        }
+      }
+    },
+    "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.MachineDispatcher\\Connector.Upgrade.MachineDispatcher.csproj": {
+      "version": "1.0.0",
+      "restore": {
+        "projectUniqueName": "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.MachineDispatcher\\Connector.Upgrade.MachineDispatcher.csproj",
+        "projectName": "Connector.Upgrade.MachineDispatcher",
+        "projectPath": "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.MachineDispatcher\\Connector.Upgrade.MachineDispatcher.csproj",
+        "packagesPath": "C:\\Users\\Lagom\\.nuget\\packages\\",
+        "outputPath": "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\tmp\\review-output\\obj-adapter\\",
+        "projectStyle": "PackageReference",
+        "configFilePaths": [
+          "C:\\Users\\Lagom\\AppData\\Roaming\\NuGet\\NuGet.Config"
+        ],
+        "originalTargetFrameworks": [
+          "net8.0-windows"
+        ],
+        "sources": {
+          "https://api.nuget.org/v3/index.json": {}
+        },
+        "frameworks": {
+          "net8.0-windows7.0": {
+            "targetAlias": "net8.0-windows",
+            "projectReferences": {
+              "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.MachineIpc\\Connector.Upgrade.MachineIpc.csproj": {
+                "projectPath": "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.MachineIpc\\Connector.Upgrade.MachineIpc.csproj"
+              },
+              "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.MachineJournal\\Connector.Upgrade.MachineJournal.csproj": {
+                "projectPath": "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.MachineJournal\\Connector.Upgrade.MachineJournal.csproj"
+              },
+              "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.VelopackPayload\\Connector.Upgrade.VelopackPayload.csproj": {
+                "projectPath": "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.VelopackPayload\\Connector.Upgrade.VelopackPayload.csproj"
+              },
+              "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.WindowsHost\\Connector.Upgrade.WindowsHost.csproj": {
+                "projectPath": "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.WindowsHost\\Connector.Upgrade.WindowsHost.csproj"
+              },
+              "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.WindowsPayload\\Connector.Upgrade.WindowsPayload.csproj": {
+                "projectPath": "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.WindowsPayload\\Connector.Upgrade.WindowsPayload.csproj"
+              }
+            }
+          }
+        },
+        "warningProperties": {
+          "warnAsError": [
+            "NU1605"
+          ]
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
+        }
+      },
+      "frameworks": {
+        "net8.0-windows7.0": {
+          "targetAlias": "net8.0-windows",
+          "imports": [
+            "net461",
+            "net462",
+            "net47",
+            "net471",
+            "net472",
+            "net48",
+            "net481"
+          ],
+          "assetTargetFallback": true,
+          "warn": true,
+          "frameworkReferences": {
+            "Microsoft.NETCore.App": {
+              "privateAssets": "all"
+            }
+          },
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\8.0.422/PortableRuntimeIdentifierGraph.json"
+        }
+      }
+    },
+    "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.MachineIpc\\Connector.Upgrade.MachineIpc.csproj": {
+      "version": "1.0.0",
+      "restore": {
+        "projectUniqueName": "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.MachineIpc\\Connector.Upgrade.MachineIpc.csproj",
+        "projectName": "Connector.Upgrade.MachineIpc",
+        "projectPath": "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.MachineIpc\\Connector.Upgrade.MachineIpc.csproj",
+        "packagesPath": "C:\\Users\\Lagom\\.nuget\\packages\\",
+        "outputPath": "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\tmp\\review-output\\obj-adapter\\",
+        "projectStyle": "PackageReference",
+        "configFilePaths": [
+          "C:\\Users\\Lagom\\AppData\\Roaming\\NuGet\\NuGet.Config"
+        ],
+        "originalTargetFrameworks": [
+          "net8.0"
+        ],
+        "sources": {
+          "https://api.nuget.org/v3/index.json": {}
+        },
+        "frameworks": {
+          "net8.0": {
+            "targetAlias": "net8.0",
+            "projectReferences": {}
+          }
+        },
+        "warningProperties": {
+          "warnAsError": [
+            "NU1605"
+          ]
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
+        }
+      },
+      "frameworks": {
+        "net8.0": {
+          "targetAlias": "net8.0",
+          "imports": [
+            "net461",
+            "net462",
+            "net47",
+            "net471",
+            "net472",
+            "net48",
+            "net481"
+          ],
+          "assetTargetFallback": true,
+          "warn": true,
+          "frameworkReferences": {
+            "Microsoft.NETCore.App": {
+              "privateAssets": "all"
+            }
+          },
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\8.0.422/PortableRuntimeIdentifierGraph.json"
+        }
+      }
+    },
+    "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.MachineJournal\\Connector.Upgrade.MachineJournal.csproj": {
+      "version": "1.0.0",
+      "restore": {
+        "projectUniqueName": "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.MachineJournal\\Connector.Upgrade.MachineJournal.csproj",
+        "projectName": "Connector.Upgrade.MachineJournal",
+        "projectPath": "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.MachineJournal\\Connector.Upgrade.MachineJournal.csproj",
+        "packagesPath": "C:\\Users\\Lagom\\.nuget\\packages\\",
+        "outputPath": "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\tmp\\review-output\\obj-adapter\\",
+        "projectStyle": "PackageReference",
+        "configFilePaths": [
+          "C:\\Users\\Lagom\\AppData\\Roaming\\NuGet\\NuGet.Config"
+        ],
+        "originalTargetFrameworks": [
+          "net8.0-windows"
+        ],
+        "sources": {
+          "https://api.nuget.org/v3/index.json": {}
+        },
+        "frameworks": {
+          "net8.0-windows7.0": {
+            "targetAlias": "net8.0-windows",
+            "projectReferences": {
+              "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.Core\\Connector.Upgrade.Core.csproj": {
+                "projectPath": "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.Core\\Connector.Upgrade.Core.csproj"
+              },
+              "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.MachinePipe\\Connector.Upgrade.MachinePipe.csproj": {
+                "projectPath": "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.MachinePipe\\Connector.Upgrade.MachinePipe.csproj"
+              },
+              "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.WindowsJournal\\Connector.Upgrade.WindowsJournal.csproj": {
+                "projectPath": "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.WindowsJournal\\Connector.Upgrade.WindowsJournal.csproj"
+              }
+            }
+          }
+        },
+        "warningProperties": {
+          "warnAsError": [
+            "NU1605"
+          ]
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
+        }
+      },
+      "frameworks": {
+        "net8.0-windows7.0": {
+          "targetAlias": "net8.0-windows",
+          "imports": [
+            "net461",
+            "net462",
+            "net47",
+            "net471",
+            "net472",
+            "net48",
+            "net481"
+          ],
+          "assetTargetFallback": true,
+          "warn": true,
+          "frameworkReferences": {
+            "Microsoft.NETCore.App": {
+              "privateAssets": "all"
+            }
+          },
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\8.0.422/PortableRuntimeIdentifierGraph.json"
+        }
+      }
+    },
+    "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.MachinePipe\\Connector.Upgrade.MachinePipe.csproj": {
+      "version": "1.0.0",
+      "restore": {
+        "projectUniqueName": "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.MachinePipe\\Connector.Upgrade.MachinePipe.csproj",
+        "projectName": "Connector.Upgrade.MachinePipe",
+        "projectPath": "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.MachinePipe\\Connector.Upgrade.MachinePipe.csproj",
+        "packagesPath": "C:\\Users\\Lagom\\.nuget\\packages\\",
+        "outputPath": "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\tmp\\review-output\\obj-adapter\\",
+        "projectStyle": "PackageReference",
+        "configFilePaths": [
+          "C:\\Users\\Lagom\\AppData\\Roaming\\NuGet\\NuGet.Config"
+        ],
+        "originalTargetFrameworks": [
+          "net8.0-windows"
+        ],
+        "sources": {
+          "https://api.nuget.org/v3/index.json": {}
+        },
+        "frameworks": {
+          "net8.0-windows7.0": {
+            "targetAlias": "net8.0-windows",
+            "projectReferences": {}
+          }
+        },
+        "warningProperties": {
+          "warnAsError": [
+            "NU1605"
+          ]
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
+        }
+      },
+      "frameworks": {
+        "net8.0-windows7.0": {
+          "targetAlias": "net8.0-windows",
+          "imports": [
+            "net461",
+            "net462",
+            "net47",
+            "net471",
+            "net472",
+            "net48",
+            "net481"
+          ],
+          "assetTargetFallback": true,
+          "warn": true,
+          "frameworkReferences": {
+            "Microsoft.NETCore.App": {
+              "privateAssets": "all"
+            }
+          },
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\8.0.422/PortableRuntimeIdentifierGraph.json"
+        }
+      }
+    },
+    "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.NetBirdMachine\\Connector.Upgrade.NetBirdMachine.csproj": {
+      "version": "1.0.0",
+      "restore": {
+        "projectUniqueName": "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.NetBirdMachine\\Connector.Upgrade.NetBirdMachine.csproj",
+        "projectName": "Connector.Upgrade.NetBirdMachine",
+        "projectPath": "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.NetBirdMachine\\Connector.Upgrade.NetBirdMachine.csproj",
+        "packagesPath": "C:\\Users\\Lagom\\.nuget\\packages\\",
+        "outputPath": "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\tmp\\review-output\\obj-adapter\\",
+        "projectStyle": "PackageReference",
+        "configFilePaths": [
+          "C:\\Users\\Lagom\\AppData\\Roaming\\NuGet\\NuGet.Config"
+        ],
+        "originalTargetFrameworks": [
+          "net8.0-windows"
+        ],
+        "sources": {
+          "https://api.nuget.org/v3/index.json": {}
+        },
+        "frameworks": {
+          "net8.0-windows7.0": {
+            "targetAlias": "net8.0-windows",
+            "projectReferences": {
+              "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.Core\\Connector.Upgrade.Core.csproj": {
+                "projectPath": "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.Core\\Connector.Upgrade.Core.csproj"
+              },
+              "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.WindowsMsi\\Connector.Upgrade.WindowsMsi.csproj": {
+                "projectPath": "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.WindowsMsi\\Connector.Upgrade.WindowsMsi.csproj"
+              }
+            }
+          }
+        },
+        "warningProperties": {
+          "warnAsError": [
+            "NU1605"
+          ]
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
+        }
+      },
+      "frameworks": {
+        "net8.0-windows7.0": {
+          "targetAlias": "net8.0-windows",
+          "imports": [
+            "net461",
+            "net462",
+            "net47",
+            "net471",
+            "net472",
+            "net48",
+            "net481"
+          ],
+          "assetTargetFallback": true,
+          "warn": true,
+          "frameworkReferences": {
+            "Microsoft.NETCore.App": {
+              "privateAssets": "all"
+            }
+          },
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\8.0.422/PortableRuntimeIdentifierGraph.json"
+        }
+      }
+    },
+    "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.UserState\\Connector.Upgrade.UserState.csproj": {
+      "version": "1.0.0",
+      "restore": {
+        "projectUniqueName": "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.UserState\\Connector.Upgrade.UserState.csproj",
+        "projectName": "Connector.Upgrade.UserState",
+        "projectPath": "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.UserState\\Connector.Upgrade.UserState.csproj",
+        "packagesPath": "C:\\Users\\Lagom\\.nuget\\packages\\",
+        "outputPath": "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\tmp\\review-output\\obj-adapter\\",
+        "projectStyle": "PackageReference",
+        "configFilePaths": [
+          "C:\\Users\\Lagom\\AppData\\Roaming\\NuGet\\NuGet.Config"
+        ],
+        "originalTargetFrameworks": [
+          "net8.0"
+        ],
+        "sources": {
+          "https://api.nuget.org/v3/index.json": {}
+        },
+        "frameworks": {
+          "net8.0": {
+            "targetAlias": "net8.0",
+            "projectReferences": {}
+          }
+        },
+        "warningProperties": {
+          "warnAsError": [
+            "NU1605"
+          ]
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
+        }
+      },
+      "frameworks": {
+        "net8.0": {
+          "targetAlias": "net8.0",
+          "imports": [
+            "net461",
+            "net462",
+            "net47",
+            "net471",
+            "net472",
+            "net48",
+            "net481"
+          ],
+          "assetTargetFallback": true,
+          "warn": true,
+          "frameworkReferences": {
+            "Microsoft.NETCore.App": {
+              "privateAssets": "all"
+            }
+          },
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\8.0.422/PortableRuntimeIdentifierGraph.json"
+        }
+      }
+    },
+    "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.VelopackPayload\\Connector.Upgrade.VelopackPayload.csproj": {
+      "version": "1.0.0",
+      "restore": {
+        "projectUniqueName": "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.VelopackPayload\\Connector.Upgrade.VelopackPayload.csproj",
+        "projectName": "Connector.Upgrade.VelopackPayload",
+        "projectPath": "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.VelopackPayload\\Connector.Upgrade.VelopackPayload.csproj",
+        "packagesPath": "C:\\Users\\Lagom\\.nuget\\packages\\",
+        "outputPath": "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\tmp\\review-output\\obj-adapter\\",
+        "projectStyle": "PackageReference",
+        "configFilePaths": [
+          "C:\\Users\\Lagom\\AppData\\Roaming\\NuGet\\NuGet.Config"
+        ],
+        "originalTargetFrameworks": [
+          "net8.0-windows"
+        ],
+        "sources": {
+          "https://api.nuget.org/v3/index.json": {}
+        },
+        "frameworks": {
+          "net8.0-windows7.0": {
+            "targetAlias": "net8.0-windows",
+            "projectReferences": {
+              "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.MachineAcl\\Connector.Upgrade.MachineAcl.csproj": {
+                "projectPath": "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.MachineAcl\\Connector.Upgrade.MachineAcl.csproj"
+              },
+              "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.Velopack\\Connector.Upgrade.Velopack.csproj": {
+                "projectPath": "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.Velopack\\Connector.Upgrade.Velopack.csproj"
+              }
+            }
+          }
+        },
+        "warningProperties": {
+          "warnAsError": [
+            "NU1605"
+          ]
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
+        }
+      },
+      "frameworks": {
+        "net8.0-windows7.0": {
+          "targetAlias": "net8.0-windows",
+          "imports": [
+            "net461",
+            "net462",
+            "net47",
+            "net471",
+            "net472",
+            "net48",
+            "net481"
+          ],
+          "assetTargetFallback": true,
+          "warn": true,
+          "frameworkReferences": {
+            "Microsoft.NETCore.App": {
+              "privateAssets": "all"
+            }
+          },
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\8.0.422/PortableRuntimeIdentifierGraph.json"
+        }
+      }
+    },
+    "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.Velopack\\Connector.Upgrade.Velopack.csproj": {
+      "version": "1.0.0",
+      "restore": {
+        "projectUniqueName": "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.Velopack\\Connector.Upgrade.Velopack.csproj",
+        "projectName": "Connector.Upgrade.Velopack",
+        "projectPath": "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.Velopack\\Connector.Upgrade.Velopack.csproj",
+        "packagesPath": "C:\\Users\\Lagom\\.nuget\\packages\\",
+        "outputPath": "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\tmp\\review-output\\obj-adapter\\",
+        "projectStyle": "PackageReference",
+        "configFilePaths": [
+          "C:\\Users\\Lagom\\AppData\\Roaming\\NuGet\\NuGet.Config"
+        ],
+        "originalTargetFrameworks": [
+          "net8.0-windows"
+        ],
+        "sources": {
+          "https://api.nuget.org/v3/index.json": {}
+        },
+        "frameworks": {
+          "net8.0-windows7.0": {
+            "targetAlias": "net8.0-windows",
+            "projectReferences": {}
+          }
+        },
+        "warningProperties": {
+          "warnAsError": [
+            "NU1605"
+          ]
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
+        }
+      },
+      "frameworks": {
+        "net8.0-windows7.0": {
+          "targetAlias": "net8.0-windows",
+          "imports": [
+            "net461",
+            "net462",
+            "net47",
+            "net471",
+            "net472",
+            "net48",
+            "net481"
+          ],
+          "assetTargetFallback": true,
+          "warn": true,
+          "frameworkReferences": {
+            "Microsoft.NETCore.App": {
+              "privateAssets": "all"
+            }
+          },
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\8.0.422/PortableRuntimeIdentifierGraph.json"
+        }
+      }
+    },
+    "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.WindowsHost\\Connector.Upgrade.WindowsHost.csproj": {
+      "version": "1.0.0",
+      "restore": {
+        "projectUniqueName": "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.WindowsHost\\Connector.Upgrade.WindowsHost.csproj",
+        "projectName": "Connector.Upgrade.WindowsHost",
+        "projectPath": "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.WindowsHost\\Connector.Upgrade.WindowsHost.csproj",
+        "packagesPath": "C:\\Users\\Lagom\\.nuget\\packages\\",
+        "outputPath": "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\tmp\\review-output\\obj-adapter\\",
+        "projectStyle": "PackageReference",
+        "configFilePaths": [
+          "C:\\Users\\Lagom\\AppData\\Roaming\\NuGet\\NuGet.Config"
+        ],
+        "originalTargetFrameworks": [
+          "net8.0-windows"
+        ],
+        "sources": {
+          "https://api.nuget.org/v3/index.json": {}
+        },
+        "frameworks": {
+          "net8.0-windows7.0": {
+            "targetAlias": "net8.0-windows",
+            "projectReferences": {
+              "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.Core\\Connector.Upgrade.Core.csproj": {
+                "projectPath": "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.Core\\Connector.Upgrade.Core.csproj"
+              },
+              "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.NetBirdMachine\\Connector.Upgrade.NetBirdMachine.csproj": {
+                "projectPath": "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.NetBirdMachine\\Connector.Upgrade.NetBirdMachine.csproj"
+              },
+              "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.UserState\\Connector.Upgrade.UserState.csproj": {
+                "projectPath": "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.UserState\\Connector.Upgrade.UserState.csproj"
+              },
+              "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.VelopackPayload\\Connector.Upgrade.VelopackPayload.csproj": {
+                "projectPath": "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.VelopackPayload\\Connector.Upgrade.VelopackPayload.csproj"
+              },
+              "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.Velopack\\Connector.Upgrade.Velopack.csproj": {
+                "projectPath": "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.Velopack\\Connector.Upgrade.Velopack.csproj"
+              },
+              "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.WindowsJournal\\Connector.Upgrade.WindowsJournal.csproj": {
+                "projectPath": "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.WindowsJournal\\Connector.Upgrade.WindowsJournal.csproj"
+              },
+              "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.WindowsMsi\\Connector.Upgrade.WindowsMsi.csproj": {
+                "projectPath": "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.WindowsMsi\\Connector.Upgrade.WindowsMsi.csproj"
+              },
+              "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.WindowsPayload\\Connector.Upgrade.WindowsPayload.csproj": {
+                "projectPath": "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.WindowsPayload\\Connector.Upgrade.WindowsPayload.csproj"
+              },
+              "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.WindowsUserStage\\Connector.Upgrade.WindowsUserStage.csproj": {
+                "projectPath": "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.WindowsUserStage\\Connector.Upgrade.WindowsUserStage.csproj"
+              }
+            }
+          }
+        },
+        "warningProperties": {
+          "warnAsError": [
+            "NU1605"
+          ]
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
+        }
+      },
+      "frameworks": {
+        "net8.0-windows7.0": {
+          "targetAlias": "net8.0-windows",
+          "imports": [
+            "net461",
+            "net462",
+            "net47",
+            "net471",
+            "net472",
+            "net48",
+            "net481"
+          ],
+          "assetTargetFallback": true,
+          "warn": true,
+          "frameworkReferences": {
+            "Microsoft.NETCore.App": {
+              "privateAssets": "all"
+            }
+          },
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\8.0.422/PortableRuntimeIdentifierGraph.json"
+        }
+      }
+    },
+    "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.WindowsJournal\\Connector.Upgrade.WindowsJournal.csproj": {
+      "version": "1.0.0",
+      "restore": {
+        "projectUniqueName": "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.WindowsJournal\\Connector.Upgrade.WindowsJournal.csproj",
+        "projectName": "Connector.Upgrade.WindowsJournal",
+        "projectPath": "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.WindowsJournal\\Connector.Upgrade.WindowsJournal.csproj",
+        "packagesPath": "C:\\Users\\Lagom\\.nuget\\packages\\",
+        "outputPath": "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\tmp\\review-output\\obj-adapter\\",
+        "projectStyle": "PackageReference",
+        "configFilePaths": [
+          "C:\\Users\\Lagom\\AppData\\Roaming\\NuGet\\NuGet.Config"
+        ],
+        "originalTargetFrameworks": [
+          "net8.0-windows"
+        ],
+        "sources": {
+          "https://api.nuget.org/v3/index.json": {}
+        },
+        "frameworks": {
+          "net8.0-windows7.0": {
+            "targetAlias": "net8.0-windows",
+            "projectReferences": {
+              "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.Core\\Connector.Upgrade.Core.csproj": {
+                "projectPath": "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.Core\\Connector.Upgrade.Core.csproj"
+              }
+            }
+          }
+        },
+        "warningProperties": {
+          "warnAsError": [
+            "NU1605"
+          ]
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
+        }
+      },
+      "frameworks": {
+        "net8.0-windows7.0": {
+          "targetAlias": "net8.0-windows",
+          "imports": [
+            "net461",
+            "net462",
+            "net47",
+            "net471",
+            "net472",
+            "net48",
+            "net481"
+          ],
+          "assetTargetFallback": true,
+          "warn": true,
+          "frameworkReferences": {
+            "Microsoft.NETCore.App": {
+              "privateAssets": "all"
+            }
+          },
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\8.0.422/PortableRuntimeIdentifierGraph.json"
+        }
+      }
+    },
+    "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.WindowsMsi\\Connector.Upgrade.WindowsMsi.csproj": {
+      "version": "1.0.0",
+      "restore": {
+        "projectUniqueName": "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.WindowsMsi\\Connector.Upgrade.WindowsMsi.csproj",
+        "projectName": "Connector.Upgrade.WindowsMsi",
+        "projectPath": "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.WindowsMsi\\Connector.Upgrade.WindowsMsi.csproj",
+        "packagesPath": "C:\\Users\\Lagom\\.nuget\\packages\\",
+        "outputPath": "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\tmp\\review-output\\obj-adapter\\",
+        "projectStyle": "PackageReference",
+        "configFilePaths": [
+          "C:\\Users\\Lagom\\AppData\\Roaming\\NuGet\\NuGet.Config"
+        ],
+        "originalTargetFrameworks": [
+          "net8.0-windows"
+        ],
+        "sources": {
+          "https://api.nuget.org/v3/index.json": {}
+        },
+        "frameworks": {
+          "net8.0-windows7.0": {
+            "targetAlias": "net8.0-windows",
+            "projectReferences": {
+              "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.Core\\Connector.Upgrade.Core.csproj": {
+                "projectPath": "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.Core\\Connector.Upgrade.Core.csproj"
+              },
+              "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.WindowsPayload\\Connector.Upgrade.WindowsPayload.csproj": {
+                "projectPath": "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.WindowsPayload\\Connector.Upgrade.WindowsPayload.csproj"
+              }
+            }
+          }
+        },
+        "warningProperties": {
+          "warnAsError": [
+            "NU1605"
+          ]
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
+        }
+      },
+      "frameworks": {
+        "net8.0-windows7.0": {
+          "targetAlias": "net8.0-windows",
+          "imports": [
+            "net461",
+            "net462",
+            "net47",
+            "net471",
+            "net472",
+            "net48",
+            "net481"
+          ],
+          "assetTargetFallback": true,
+          "warn": true,
+          "frameworkReferences": {
+            "Microsoft.NETCore.App": {
+              "privateAssets": "all"
+            }
+          },
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\8.0.422/PortableRuntimeIdentifierGraph.json"
+        }
+      }
+    },
+    "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.WindowsPayload\\Connector.Upgrade.WindowsPayload.csproj": {
+      "version": "1.0.0",
+      "restore": {
+        "projectUniqueName": "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.WindowsPayload\\Connector.Upgrade.WindowsPayload.csproj",
+        "projectName": "Connector.Upgrade.WindowsPayload",
+        "projectPath": "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.WindowsPayload\\Connector.Upgrade.WindowsPayload.csproj",
+        "packagesPath": "C:\\Users\\Lagom\\.nuget\\packages\\",
+        "outputPath": "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\tmp\\review-output\\obj-adapter\\",
+        "projectStyle": "PackageReference",
+        "configFilePaths": [
+          "C:\\Users\\Lagom\\AppData\\Roaming\\NuGet\\NuGet.Config"
+        ],
+        "originalTargetFrameworks": [
+          "net8.0-windows"
+        ],
+        "sources": {
+          "https://api.nuget.org/v3/index.json": {}
+        },
+        "frameworks": {
+          "net8.0-windows7.0": {
+            "targetAlias": "net8.0-windows",
+            "projectReferences": {
+              "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.Core\\Connector.Upgrade.Core.csproj": {
+                "projectPath": "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.Core\\Connector.Upgrade.Core.csproj"
+              },
+              "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.MachineAcl\\Connector.Upgrade.MachineAcl.csproj": {
+                "projectPath": "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.MachineAcl\\Connector.Upgrade.MachineAcl.csproj"
+              }
+            }
+          }
+        },
+        "warningProperties": {
+          "warnAsError": [
+            "NU1605"
+          ]
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
+        }
+      },
+      "frameworks": {
+        "net8.0-windows7.0": {
+          "targetAlias": "net8.0-windows",
+          "imports": [
+            "net461",
+            "net462",
+            "net47",
+            "net471",
+            "net472",
+            "net48",
+            "net481"
+          ],
+          "assetTargetFallback": true,
+          "warn": true,
+          "frameworkReferences": {
+            "Microsoft.NETCore.App": {
+              "privateAssets": "all"
+            }
+          },
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\8.0.422/PortableRuntimeIdentifierGraph.json"
+        }
+      }
+    },
+    "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.WindowsUserStage\\Connector.Upgrade.WindowsUserStage.csproj": {
+      "version": "1.0.0",
+      "restore": {
+        "projectUniqueName": "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.WindowsUserStage\\Connector.Upgrade.WindowsUserStage.csproj",
+        "projectName": "Connector.Upgrade.WindowsUserStage",
+        "projectPath": "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.WindowsUserStage\\Connector.Upgrade.WindowsUserStage.csproj",
+        "packagesPath": "C:\\Users\\Lagom\\.nuget\\packages\\",
+        "outputPath": "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\tmp\\review-output\\obj-adapter\\",
+        "projectStyle": "PackageReference",
+        "configFilePaths": [
+          "C:\\Users\\Lagom\\AppData\\Roaming\\NuGet\\NuGet.Config"
+        ],
+        "originalTargetFrameworks": [
+          "net8.0-windows"
+        ],
+        "sources": {
+          "https://api.nuget.org/v3/index.json": {}
+        },
+        "frameworks": {
+          "net8.0-windows7.0": {
+            "targetAlias": "net8.0-windows",
+            "projectReferences": {
+              "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.MachineAcl\\Connector.Upgrade.MachineAcl.csproj": {
+                "projectPath": "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.MachineAcl\\Connector.Upgrade.MachineAcl.csproj"
+              },
+              "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.UserState\\Connector.Upgrade.UserState.csproj": {
+                "projectPath": "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.UserState\\Connector.Upgrade.UserState.csproj"
+              }
+            }
+          }
+        },
+        "warningProperties": {
+          "warnAsError": [
+            "NU1605"
+          ]
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
+        }
+      },
+      "frameworks": {
+        "net8.0-windows7.0": {
+          "targetAlias": "net8.0-windows",
+          "imports": [
+            "net461",
+            "net462",
+            "net47",
+            "net471",
+            "net472",
+            "net48",
+            "net481"
+          ],
+          "assetTargetFallback": true,
+          "warn": true,
+          "frameworkReferences": {
+            "Microsoft.NETCore.App": {
+              "privateAssets": "all"
+            }
+          },
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\8.0.422/PortableRuntimeIdentifierGraph.json"
+        }
+      }
+    }
+  }
+}

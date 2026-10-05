@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Connector.Upgrade.Core\Connector.Upgrade.Core.csproj" />
+    <ProjectReference Include="..\Connector.Upgrade.NetBirdMachine\Connector.Upgrade.NetBirdMachine.csproj" />
+    <ProjectReference Include="..\Connector.Upgrade.UserState\Connector.Upgrade.UserState.csproj" />
+    <ProjectReference Include="..\Connector.Upgrade.Velopack\Connector.Upgrade.Velopack.csproj" />
+    <ProjectReference Include="..\Connector.Upgrade.VelopackPayload\Connector.Upgrade.VelopackPayload.csproj" />
+    <ProjectReference Include="..\Connector.Upgrade.WindowsMsi\Connector.Upgrade.WindowsMsi.csproj" />
+    <ProjectReference Include="..\Connector.Upgrade.WindowsPayload\Connector.Upgrade.WindowsPayload.csproj" />
+    <ProjectReference Include="..\Connector.Upgrade.WindowsJournal\Connector.Upgrade.WindowsJournal.csproj" />
+    <ProjectReference Include="..\Connector.Upgrade.WindowsUserStage\Connector.Upgrade.WindowsUserStage.csproj" />
+  </ItemGroup>
+</Project>

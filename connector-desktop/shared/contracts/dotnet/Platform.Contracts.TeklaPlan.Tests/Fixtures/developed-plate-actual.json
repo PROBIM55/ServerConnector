@@ -1,0 +1,3428 @@
+{
+  "source": {
+    "id": "cross-member-plate/CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d",
+    "kind": "developed-plate",
+    "name": "flange-element-0",
+    "role": "cross-member-flange",
+    "owner": {
+      "entityId": "ef958171-98f3-4e78-8968-b35ef069e2fe",
+      "moduleId": "axis-split",
+      "partPath": [
+        "CM-1/jacking-S1",
+        "panel-1",
+        "panel-1/piece-01"
+      ]
+    },
+    "spine": {
+      "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine",
+      "nodes": [
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-1",
+          "point": [
+            11110.212906298166,
+            6203.653867420911,
+            1306.710639887371
+          ]
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-2",
+          "point": [
+            11032.273346345615,
+            6917.209594470558,
+            1292.3856333422464
+          ]
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-3",
+          "point": [
+            11030.091435633634,
+            6937.723883272604,
+            1291.0854885942676
+          ]
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-4",
+          "point": [
+            11028.045780504157,
+            6958.063450774974,
+            1288.0188218888227
+          ]
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-5",
+          "point": [
+            11026.151555994718,
+            6978.07741440913,
+            1283.2083823108826
+          ]
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-6",
+          "point": [
+            11024.422813803287,
+            6997.61730699457,
+            1276.689854566094
+          ]
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-7",
+          "point": [
+            11022.872378050246,
+            7016.538178095059,
+            1268.5115942652192
+          ]
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-8",
+          "point": [
+            11021.511750146761,
+            7034.699669287034,
+            1258.734269213521
+          ]
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-9",
+          "point": [
+            11020.351023475243,
+            7051.9670553636215,
+            1247.4304093660771
+          ]
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-10",
+          "point": [
+            11019.398808514827,
+            7068.212243750438,
+            1234.68386878753
+          ]
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-11",
+          "point": [
+            11018.662168967287,
+            7083.314724719344,
+            1220.5892036075643
+          ]
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-12",
+          "point": [
+            11018.14656935722,
+            7097.162465351272,
+            1205.2509705865332
+          ]
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-13",
+          "point": [
+            11017.85583449524,
+            7109.652740616561,
+            1188.7829514946125
+          ]
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-14",
+          "point": [
+            11017.79212110482,
+            7120.692895407693,
+            1171.3073090581743
+          ]
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-15",
+          "point": [
+            11017.955901823343,
+            7130.201031871543,
+            1152.9536807347188
+          ]
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-16",
+          "point": [
+            11018.345961695995,
+            7138.106616942377,
+            1133.8582170389075
+          ]
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-17",
+          "point": [
+            11018.959407188513,
+            7144.351005568811,
+            1114.162571553565
+          ]
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-18",
+          "point": [
+            11019.791687651943,
+            7148.887875753351,
+            1094.0128501179386
+          ]
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-19",
+          "point": [
+            11020.836629080173,
+            7151.683572177292,
+            1073.5585269883109
+          ]
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-20",
+          "point": [
+            11022.086479909824,
+            7152.7173558619315,
+            1052.9513360110932
+          ]
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-21",
+          "point": [
+            11122.090803857493,
+            7163.773429794153,
+            -476.21279790139016
+          ]
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-22",
+          "point": [
+            11128.616496804589,
+            7164.49488403567,
+            -575.9970393192496
+          ]
+        }
+      ],
+      "segments": [
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/segment-1",
+          "kind": "line",
+          "endNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-2",
+          "startNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-1"
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/segment-2",
+          "kind": "line",
+          "endNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-3",
+          "startNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-2"
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/segment-3",
+          "kind": "line",
+          "endNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-4",
+          "startNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-3"
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/segment-4",
+          "kind": "line",
+          "endNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-5",
+          "startNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-4"
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/segment-5",
+          "kind": "line",
+          "endNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-6",
+          "startNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-5"
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/segment-6",
+          "kind": "line",
+          "endNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-7",
+          "startNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-6"
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/segment-7",
+          "kind": "line",
+          "endNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-8",
+          "startNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-7"
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/segment-8",
+          "kind": "line",
+          "endNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-9",
+          "startNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-8"
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/segment-9",
+          "kind": "line",
+          "endNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-10",
+          "startNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-9"
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/segment-10",
+          "kind": "line",
+          "endNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-11",
+          "startNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-10"
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/segment-11",
+          "kind": "line",
+          "endNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-12",
+          "startNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-11"
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/segment-12",
+          "kind": "line",
+          "endNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-13",
+          "startNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-12"
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/segment-13",
+          "kind": "line",
+          "endNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-14",
+          "startNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-13"
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/segment-14",
+          "kind": "line",
+          "endNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-15",
+          "startNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-14"
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/segment-15",
+          "kind": "line",
+          "endNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-16",
+          "startNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-15"
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/segment-16",
+          "kind": "line",
+          "endNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-17",
+          "startNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-16"
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/segment-17",
+          "kind": "line",
+          "endNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-18",
+          "startNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-17"
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/segment-18",
+          "kind": "line",
+          "endNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-19",
+          "startNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-18"
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/segment-19",
+          "kind": "line",
+          "endNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-20",
+          "startNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-19"
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/segment-20",
+          "kind": "line",
+          "endNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-21",
+          "startNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-20"
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/segment-21",
+          "kind": "line",
+          "endNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-22",
+          "startNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-21"
+        }
+      ]
+    },
+    "source": "generated",
+    "material": {
+      "id": "axis-split.cross-member.steel",
+      "name": "Сталь поперечной балки"
+    },
+    "stations": [
+      {
+        "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/station-1",
+        "frame": {
+          "axisX": [
+            0.9917996277580533,
+            0.10964935892539261,
+            0.06565452357787274
+          ],
+          "axisY": [
+            0.06744117155255205,
+            -0.012661808427373994,
+            -0.9976429055463522
+          ],
+          "axisZ": [
+            -0.10855960002968998,
+            0.9938896803441509,
+            -0.019952858110928066
+          ],
+          "origin": [
+            11110.212906298166,
+            6203.653867420911,
+            1306.710639887371
+          ]
+        },
+        "stationMm": 0,
+        "spineNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-1"
+      },
+      {
+        "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/station-2",
+        "frame": {
+          "axisX": [
+            0.9917996277580531,
+            0.1096493589253932,
+            0.0656545235778727
+          ],
+          "axisY": [
+            0.069763599251191,
+            -0.03406448179508867,
+            -0.9969817707960116
+          ],
+          "axisZ": [
+            -0.10708192470490234,
+            0.9933864450289638,
+            -0.04143467429836107
+          ],
+          "origin": [
+            11032.273346345615,
+            6917.209594470558,
+            1292.3856333422464
+          ]
+        },
+        "stationMm": 717.9425857430836,
+        "spineNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-2"
+      },
+      {
+        "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/station-3",
+        "frame": {
+          "axisX": [
+            0.9917996277580517,
+            0.10964935892540713,
+            0.06565452357787166
+          ],
+          "axisY": [
+            0.07653246618580589,
+            -0.09813801176923245,
+            -0.9922256357631063
+          ],
+          "axisZ": [
+            -0.1023537004631906,
+            0.9891137188075136,
+            -0.10572497939589409
+          ],
+          "origin": [
+            11030.091435633634,
+            6937.723883272604,
+            1291.0854885942676
+          ]
+        },
+        "stationMm": 738.6135111160445,
+        "spineNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-3"
+      },
+      {
+        "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/station-4",
+        "frame": {
+          "axisX": [
+            0.9917996277580523,
+            0.1096493589254015,
+            0.0656545235778725
+          ],
+          "axisY": [
+            0.08505602922529414,
+            -0.18288620969577643,
+            -0.9794478578237529
+          ],
+          "axisZ": [
+            -0.09538852274469321,
+            0.9770003338742322,
+            -0.19071281377564595
+          ],
+          "origin": [
+            11028.045780504157,
+            6958.063450774974,
+            1288.0188218888227
+          ]
+        },
+        "stationMm": 759.2844364890045,
+        "spineNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-4"
+      },
+      {
+        "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/station-5",
+        "frame": {
+          "axisX": [
+            0.9917996277580531,
+            0.10964935892539363,
+            0.0656545235778744
+          ],
+          "axisY": [
+            0.09294863134795474,
+            -0.26627772483808015,
+            -0.9594043595823389
+          ],
+          "axisZ": [
+            -0.08771573581478678,
+            0.9576393848115823,
+            -0.2742859062149651
+          ],
+          "origin": [
+            11026.151555994718,
+            6978.07741440913,
+            1283.2083823108826
+          ]
+        },
+        "stationMm": 779.9553618619651,
+        "spineNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-5"
+      },
+      {
+        "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/station-6",
+        "frame": {
+          "axisX": [
+            0.991799627758053,
+            0.10964935892539318,
+            0.06565452357787452
+          ],
+          "axisY": [
+            0.10015172381225261,
+            -0.3476939439440855,
+            -0.932243827312384
+          ],
+          "axisZ": [
+            -0.0793922577863967,
+            0.9311744946205612,
+            -0.35582429648875985
+          ],
+          "origin": [
+            11024.422813803287,
+            6997.61730699457,
+            1276.689854566094
+          ]
+        },
+        "stationMm": 800.6262872349264,
+        "spineNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-6"
+      },
+      {
+        "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/station-7",
+        "frame": {
+          "axisX": [
+            0.9917996277580544,
+            0.10964935892537567,
+            0.06565452357788208
+          ],
+          "axisY": [
+            0.1066118727832579,
+            -0.42653090686281314,
+            -0.8981677427253961
+          ],
+          "axisZ": [
+            -0.07047983371597144,
+            0.8978019846146702,
+            -0.43472311815836123
+          ],
+          "origin": [
+            11022.872378050246,
+            7016.538178095059,
+            1268.5115942652192
+          ]
+        },
+        "stationMm": 821.2972126078871,
+        "spineNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-7"
+      },
+      {
+        "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/station-8",
+        "frame": {
+          "axisX": [
+            0.9917996277580532,
+            0.10964935892539227,
+            0.06565452357787316
+          ],
+          "axisY": [
+            0.11228115571444444,
+            -0.5022037868293535,
+            -0.8574288883433346
+          ],
+          "axisZ": [
+            -0.061044577567673376,
+            0.8577694180731251,
+            -0.5103970855795283
+          ],
+          "origin": [
+            11021.511750146761,
+            7034.699669287034,
+            1258.734269213521
+          ]
+        },
+        "stationMm": 841.9681379808475,
+        "spineNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-8"
+      },
+      {
+        "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/station-9",
+        "frame": {
+          "axisX": [
+            0.9917996277580519,
+            0.10964935892541293,
+            0.06565452357785963
+          ],
+          "axisY": [
+            0.11711751684576786,
+            -0.5741512288151192,
+            -0.8103294723123244
+          ],
+          "axisZ": [
+            -0.05115648176791519,
+            0.8113737637718726,
+            -0.5822848356567378
+          ],
+          "origin": [
+            11020.351023475243,
+            7051.9670553636215,
+            1247.4304093660771
+          ]
+        },
+        "stationMm": 862.639063353809,
+        "spineNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-9"
+      },
+      {
+        "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/station-10",
+        "frame": {
+          "axisX": [
+            0.9917996277580536,
+            0.10964935892538231,
+            0.06565452357788364
+          ],
+          "axisY": [
+            0.12108507918083576,
+            -0.6418395137602098,
+            -0.7572188865683612
+          ],
+          "axisZ": [
+            -0.04088889798902552,
+            0.7589591930158764,
+            -0.6498530921353939
+          ],
+          "origin": [
+            11019.398808514827,
+            7068.212243750438,
+            1234.68386878753
+          ]
+        },
+        "stationMm": 883.3099887267704,
+        "spineNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-10"
+      },
+      {
+        "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/station-11",
+        "frame": {
+          "axisX": [
+            0.9917996277580525,
+            0.10964935892540123,
+            0.06565452357786596
+          ],
+          "axisY": [
+            0.12415441062892366,
+            -0.7047665177973134,
+            -0.6984911149851758
+          ],
+          "axisZ": [
+            -0.03031799301359903,
+            0.7009145265145371,
+            -0.7126006215409368
+          ],
+          "origin": [
+            11018.662168967287,
+            7083.314724719344,
+            1220.5892036075643
+          ]
+        },
+        "stationMm": 903.980914099731,
+        "spineNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-11"
+      },
+      {
+        "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/station-12",
+        "frame": {
+          "axisX": [
+            0.9917996277580523,
+            0.10964935892541633,
+            0.06565452357784929
+          ],
+          "axisY": [
+            0.12630274233752595,
+            -0.7624654370970059,
+            -0.6345818107308879
+          ],
+          "axisZ": [
+            -0.019522183715191203,
+            0.6376703500396714,
+            -0.7700619514190227
+          ],
+          "origin": [
+            11018.14656935722,
+            7097.162465351272,
+            1205.2509705865332
+          ]
+        },
+        "stationMm": 924.6518394726913,
+        "spineNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-12"
+      },
+      {
+        "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/station-13",
+        "frame": {
+          "axisX": [
+            0.9917996277580531,
+            0.10964935892537594,
+            0.06565452357790251
+          ],
+          "axisY": [
+            0.1275141375957809,
+            -0.8145082507023789,
+            -0.5659650645145468
+          ],
+          "axisZ": [
+            -0.008581555348043623,
+            0.569695820262888,
+            -0.8218108232937819
+          ],
+          "origin": [
+            11017.85583449524,
+            7109.652740616561,
+            1188.7829514946125
+          ]
+        },
+        "stationMm": 945.3227648456523,
+        "spineNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-13"
+      },
+      {
+        "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/station-14",
+        "frame": {
+          "axisX": [
+            0.991799627758053,
+            0.10964935892537876,
+            0.06565452357789796
+          ],
+          "axisY": [
+            0.12777961005586738,
+            -0.8605088956654428,
+            -0.4931498876960339
+          ],
+          "axisZ": [
+            0.002422732539465095,
+            0.4974951844670395,
+            -0.8674633547298402
+          ],
+          "origin": [
+            11017.79212110482,
+            7120.692895407693,
+            1171.3073090581743
+          ]
+        },
+        "stationMm": 965.9936902186132,
+        "spineNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-14"
+      },
+      {
+        "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/station-15",
+        "frame": {
+          "axisX": [
+            0.9917996277580533,
+            0.10964935892539382,
+            0.06565452357786883
+          ],
+          "axisY": [
+            0.12709719039535203,
+            -0.9001261309314862,
+            -0.41667643634830265
+          ],
+          "axisZ": [
+            0.013409048161388064,
+            0.4216040399492912,
+            -0.9066808870412137
+          ],
+          "origin": [
+            11017.955901823343,
+            7130.201031871543,
+            1152.9536807347188
+          ]
+        },
+        "stationMm": 986.6646155915737,
+        "spineNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-15"
+      },
+      {
+        "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/station-16",
+        "frame": {
+          "axisX": [
+            0.9917996277580534,
+            0.10964935892539662,
+            0.06565452357786213
+          ],
+          "axisY": [
+            0.12547194092596806,
+            -0.933066068726619,
+            -0.33711200428243904
+          ],
+          "axisZ": [
+            0.024295893053289937,
+            0.3425853608639783,
+            -0.9391724975223884
+          ],
+          "origin": [
+            11018.345961695995,
+            7138.106616942377,
+            1133.8582170389075
+          ]
+        },
+        "stationMm": 1007.3355409645338,
+        "spineNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-16"
+      },
+      {
+        "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/station-17",
+        "frame": {
+          "axisX": [
+            0.9917996277580535,
+            0.1096493589253977,
+            0.06565452357785861
+          ],
+          "axisY": [
+            0.1229159180404779,
+            -0.9590843546700902,
+            -0.25504681476019897
+          ],
+          "axisZ": [
+            0.035002506642422285,
+            0.26102532197912515,
+            -0.9646971575652337
+          ],
+          "origin": [
+            11018.959407188513,
+            7144.351005568811,
+            1114.162571553565
+          ]
+        },
+        "stationMm": 1028.0064663374949,
+        "spineNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-17"
+      },
+      {
+        "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/station-18",
+        "frame": {
+          "axisX": [
+            0.991799627758054,
+            0.10964935892539959,
+            0.06565452357785029
+          ],
+          "axisY": [
+            0.11944808277618643,
+            -0.9779879804390079,
+            -0.17108964211174407
+          ],
+          "axisZ": [
+            0.045449465344258234,
+            0.17752895032664448,
+            -0.9830655206525357
+          ],
+          "origin": [
+            11019.791687651943,
+            7148.887875753351,
+            1094.0128501179386
+          ]
+        },
+        "stationMm": 1048.6773917104558,
+        "spineNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-18"
+      },
+      {
+        "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/station-19",
+        "frame": {
+          "axisX": [
+            0.9917996277580523,
+            0.10964935892539539,
+            0.06565452357788101
+          ],
+          "axisY": [
+            0.11509416015855736,
+            -0.9896367155387672,
+            -0.08586329573827511
+          ],
+          "axisZ": [
+            0.05555927174095321,
+            0.09271563700310714,
+            -0.9941413269644931
+          ],
+          "origin": [
+            11020.836629080173,
+            7151.683572177292,
+            1073.5585269883109
+          ]
+        },
+        "stationMm": 1069.348317083416,
+        "spineNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-19"
+      },
+      {
+        "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/station-20",
+        "frame": {
+          "axisX": [
+            0.9917996277580514,
+            0.1096493589253944,
+            0.06565452357789761
+          ],
+          "axisY": [
+            0.11126641208519623,
+            -0.9935582185186322,
+            -0.021490741163821846
+          ],
+          "axisZ": [
+            0.0628751454923008,
+            0.02861965236219865,
+            -0.9976109620378021
+          ],
+          "origin": [
+            11022.086479909824,
+            7152.7173558619315,
+            1052.9513360110932
+          ]
+        },
+        "stationMm": 1090.0192424563772,
+        "spineNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-20"
+      },
+      {
+        "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/station-21",
+        "frame": {
+          "axisX": [
+            0.9917996277580527,
+            0.10964935892539478,
+            0.06565452357787548
+          ],
+          "axisY": [
+            0.10988644836835126,
+            -0.9939441475580966,
+            1.2203267105788734e-13
+          ],
+          "axisZ": [
+            0.06525692947095772,
+            0.007214542415167819,
+            -0.9978424141785928
+          ],
+          "origin": [
+            11122.090803857493,
+            7163.773429794153,
+            -476.21279790139016
+          ]
+        },
+        "stationMm": 2622.4898131438995,
+        "spineNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-21"
+      },
+      {
+        "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/station-22",
+        "frame": {
+          "axisX": [
+            0.9917996277580525,
+            0.10964935892539475,
+            0.06565452357787864
+          ],
+          "axisY": [
+            0.10988644836835126,
+            -0.9939441475580966,
+            1.2203267105788734e-13
+          ],
+          "axisZ": [
+            0.06525692947096094,
+            0.007214542415167661,
+            -0.9978424141785925
+          ],
+          "origin": [
+            11128.616496804589,
+            7164.49488403567,
+            -575.9970393192496
+          ]
+        },
+        "stationMm": 2722.4898131438995,
+        "spineNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-22"
+      }
+    ],
+    "topology": [
+      {
+        "role": "part",
+        "target": {
+          "kind": "element"
+        }
+      },
+      {
+        "role": "axis-start",
+        "target": {
+          "kind": "path-node",
+          "nodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-1",
+          "pathId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine"
+        }
+      },
+      {
+        "role": "axis-end",
+        "target": {
+          "kind": "path-node",
+          "nodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-22",
+          "pathId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine"
+        }
+      }
+    ],
+    "stableKey": "cross-member-plate/CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d",
+    "properties": {
+      "hostId": "girder/0",
+      "lineId": "CM-1/jacking-S1",
+      "ownerId": "ef958171-98f3-4e78-8968-b35ef069e2fe",
+      "panelId": "panel-1",
+      "pieceId": "panel-1/piece-01",
+      "ownerKind": "beam",
+      "renderKind": "strip",
+      "plateFactId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d",
+      "stationFrameVersion": "1",
+      "developedStockMaxOffsetMm": 149.99999999999997,
+      "developedStockMinOffsetMm": -150,
+      "constructiveRepresentation": "developed-plate"
+    },
+    "thicknessMm": 20,
+    "stockWidthMm": 300,
+    "developedContour": {
+      "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development",
+      "edges": [
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-1",
+          "kind": "line",
+          "endVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-2",
+          "startVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-1"
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-2",
+          "kind": "line",
+          "endVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-3",
+          "startVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-2"
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-3",
+          "kind": "line",
+          "endVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-4",
+          "startVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-3"
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-4",
+          "kind": "line",
+          "endVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-5",
+          "startVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-4"
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-5",
+          "kind": "line",
+          "endVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-6",
+          "startVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-5"
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-6",
+          "kind": "line",
+          "endVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-7",
+          "startVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-6"
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-7",
+          "kind": "line",
+          "endVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-8",
+          "startVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-7"
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-8",
+          "kind": "line",
+          "endVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-9",
+          "startVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-8"
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-9",
+          "kind": "line",
+          "endVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-10",
+          "startVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-9"
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-10",
+          "kind": "line",
+          "endVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-11",
+          "startVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-10"
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-11",
+          "kind": "line",
+          "endVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-12",
+          "startVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-11"
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-12",
+          "kind": "line",
+          "endVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-13",
+          "startVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-12"
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-13",
+          "kind": "line",
+          "endVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-14",
+          "startVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-13"
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-14",
+          "kind": "line",
+          "endVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-15",
+          "startVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-14"
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-15",
+          "kind": "line",
+          "endVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-16",
+          "startVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-15"
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-16",
+          "kind": "line",
+          "endVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-17",
+          "startVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-16"
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-17",
+          "kind": "line",
+          "endVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-18",
+          "startVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-17"
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-18",
+          "kind": "line",
+          "endVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-19",
+          "startVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-18"
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-19",
+          "kind": "line",
+          "endVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-20",
+          "startVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-19"
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-20",
+          "kind": "line",
+          "endVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-21",
+          "startVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-20"
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-21",
+          "kind": "line",
+          "endVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-22",
+          "startVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-21"
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-22",
+          "kind": "line",
+          "endVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-23",
+          "startVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-22"
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-23",
+          "kind": "line",
+          "endVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-24",
+          "startVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-23"
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-24",
+          "kind": "line",
+          "endVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-25",
+          "startVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-24"
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-25",
+          "kind": "line",
+          "endVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-26",
+          "startVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-25"
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-26",
+          "kind": "line",
+          "endVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-27",
+          "startVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-26"
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-27",
+          "kind": "line",
+          "endVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-28",
+          "startVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-27"
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-28",
+          "kind": "line",
+          "endVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-29",
+          "startVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-28"
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-29",
+          "kind": "line",
+          "endVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-30",
+          "startVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-29"
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-30",
+          "kind": "line",
+          "endVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-31",
+          "startVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-30"
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-31",
+          "kind": "line",
+          "endVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-32",
+          "startVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-31"
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-32",
+          "kind": "line",
+          "endVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-33",
+          "startVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-32"
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-33",
+          "kind": "line",
+          "endVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-34",
+          "startVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-33"
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-34",
+          "kind": "line",
+          "endVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-35",
+          "startVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-34"
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-35",
+          "kind": "line",
+          "endVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-36",
+          "startVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-35"
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-36",
+          "kind": "line",
+          "endVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-37",
+          "startVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-36"
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-37",
+          "kind": "line",
+          "endVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-38",
+          "startVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-37"
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-38",
+          "kind": "line",
+          "endVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-39",
+          "startVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-38"
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-39",
+          "kind": "line",
+          "endVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-40",
+          "startVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-39"
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-40",
+          "kind": "line",
+          "endVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-41",
+          "startVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-40"
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-41",
+          "kind": "line",
+          "endVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-42",
+          "startVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-41"
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-42",
+          "kind": "line",
+          "endVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-43",
+          "startVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-42"
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-43",
+          "kind": "line",
+          "endVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-44",
+          "startVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-43"
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-44",
+          "kind": "line",
+          "endVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-1",
+          "startVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-44"
+        }
+      ],
+      "vertices": [
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-1",
+          "point": [
+            0,
+            -150
+          ]
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-2",
+          "point": [
+            717.9425857430836,
+            -150
+          ]
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-3",
+          "point": [
+            738.6135111160445,
+            -150
+          ]
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-4",
+          "point": [
+            759.2844364890045,
+            -150
+          ]
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-5",
+          "point": [
+            779.9553618619651,
+            -150
+          ]
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-6",
+          "point": [
+            800.6262872349264,
+            -150
+          ]
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-7",
+          "point": [
+            821.2972126078871,
+            -150
+          ]
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-8",
+          "point": [
+            841.9681379808475,
+            -150
+          ]
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-9",
+          "point": [
+            862.639063353809,
+            -150
+          ]
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-10",
+          "point": [
+            883.3099887267704,
+            -150
+          ]
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-11",
+          "point": [
+            903.980914099731,
+            -150
+          ]
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-12",
+          "point": [
+            924.6518394726913,
+            -150
+          ]
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-13",
+          "point": [
+            945.3227648456523,
+            -150
+          ]
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-14",
+          "point": [
+            965.9936902186132,
+            -150
+          ]
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-15",
+          "point": [
+            986.6646155915737,
+            -150
+          ]
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-16",
+          "point": [
+            1007.3355409645338,
+            -150
+          ]
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-17",
+          "point": [
+            1028.0064663374949,
+            -150
+          ]
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-18",
+          "point": [
+            1048.6773917104558,
+            -150
+          ]
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-19",
+          "point": [
+            1069.348317083416,
+            -150
+          ]
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-20",
+          "point": [
+            1090.0192424563772,
+            -150
+          ]
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-21",
+          "point": [
+            2622.4898131438995,
+            -150
+          ]
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-22",
+          "point": [
+            2722.4898131438995,
+            -50
+          ]
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-23",
+          "point": [
+            2722.4898131438995,
+            49.99999999999997
+          ]
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-24",
+          "point": [
+            2622.4898131438995,
+            149.99999999999997
+          ]
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-25",
+          "point": [
+            1090.0192424563772,
+            149.99999999999997
+          ]
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-26",
+          "point": [
+            1069.348317083416,
+            149.99999999999997
+          ]
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-27",
+          "point": [
+            1048.6773917104558,
+            149.99999999999997
+          ]
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-28",
+          "point": [
+            1028.0064663374949,
+            149.99999999999997
+          ]
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-29",
+          "point": [
+            1007.3355409645338,
+            149.99999999999997
+          ]
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-30",
+          "point": [
+            986.6646155915737,
+            149.99999999999997
+          ]
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-31",
+          "point": [
+            965.9936902186132,
+            149.99999999999997
+          ]
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-32",
+          "point": [
+            945.3227648456523,
+            149.99999999999997
+          ]
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-33",
+          "point": [
+            924.6518394726913,
+            149.99999999999997
+          ]
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-34",
+          "point": [
+            903.980914099731,
+            149.99999999999997
+          ]
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-35",
+          "point": [
+            883.3099887267704,
+            149.99999999999997
+          ]
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-36",
+          "point": [
+            862.639063353809,
+            149.99999999999997
+          ]
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-37",
+          "point": [
+            841.9681379808475,
+            149.99999999999997
+          ]
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-38",
+          "point": [
+            821.2972126078871,
+            149.99999999999997
+          ]
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-39",
+          "point": [
+            800.6262872349264,
+            149.99999999999997
+          ]
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-40",
+          "point": [
+            779.9553618619651,
+            149.99999999999997
+          ]
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-41",
+          "point": [
+            759.2844364890045,
+            149.99999999999997
+          ]
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-42",
+          "point": [
+            738.6135111160445,
+            149.99999999999997
+          ]
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-43",
+          "point": [
+            717.9425857430836,
+            149.99999999999997
+          ]
+        },
+        {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-44",
+          "point": [
+            0,
+            149.99999999999997
+          ]
+        }
+      ]
+    },
+    "revisionProvenance": {
+      "adapterId": "axis-split.cross-member-plates",
+      "revisionId": "51db4acdbdb8413fa4afdd80f4ae28e9",
+      "sourceHash": "fnv1a64:20845:3fe400d8:e317d6d9",
+      "sourcePath": [
+        "cross-members",
+        "CM-1/jacking-S1",
+        "panel-1",
+        "panel-1/piece-01",
+        "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d"
+      ],
+      "adapterVersion": "1.4.0"
+    },
+    "stationFrameVersion": 1
+  },
+  "plan": {
+    "capabilities": {
+      "assembly": false,
+      "beam": false,
+      "bend": false,
+      "boltGroup": false,
+      "booleanPart": true,
+      "contourArcEdges": false,
+      "contourChamfer": false,
+      "contourPlate": false,
+      "developedPlate": true,
+      "developedPlatePolyBeamStationFrameV1": true,
+      "edgeChamfer": false,
+      "fitting": false,
+      "loftedPlate": false,
+      "polyBeam": true,
+      "polyBeamArcSegments": false,
+      "polygonWeld": false,
+      "reinforcement": false,
+      "roundHole": false,
+      "slottedHole": false,
+      "udaStamp": true,
+      "weld": false
+    },
+    "commands": [
+      {
+        "commandId": "element:cross-member-plate/CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d:create-poly-beam",
+        "dependsOn": [],
+        "developedPlate": {
+          "developedContour": {
+            "edges": [
+              {
+                "endVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-2",
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-1",
+                "kind": "line",
+                "startVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-1"
+              },
+              {
+                "endVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-3",
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-2",
+                "kind": "line",
+                "startVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-2"
+              },
+              {
+                "endVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-4",
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-3",
+                "kind": "line",
+                "startVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-3"
+              },
+              {
+                "endVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-5",
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-4",
+                "kind": "line",
+                "startVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-4"
+              },
+              {
+                "endVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-6",
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-5",
+                "kind": "line",
+                "startVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-5"
+              },
+              {
+                "endVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-7",
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-6",
+                "kind": "line",
+                "startVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-6"
+              },
+              {
+                "endVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-8",
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-7",
+                "kind": "line",
+                "startVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-7"
+              },
+              {
+                "endVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-9",
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-8",
+                "kind": "line",
+                "startVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-8"
+              },
+              {
+                "endVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-10",
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-9",
+                "kind": "line",
+                "startVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-9"
+              },
+              {
+                "endVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-11",
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-10",
+                "kind": "line",
+                "startVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-10"
+              },
+              {
+                "endVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-12",
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-11",
+                "kind": "line",
+                "startVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-11"
+              },
+              {
+                "endVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-13",
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-12",
+                "kind": "line",
+                "startVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-12"
+              },
+              {
+                "endVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-14",
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-13",
+                "kind": "line",
+                "startVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-13"
+              },
+              {
+                "endVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-15",
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-14",
+                "kind": "line",
+                "startVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-14"
+              },
+              {
+                "endVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-16",
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-15",
+                "kind": "line",
+                "startVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-15"
+              },
+              {
+                "endVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-17",
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-16",
+                "kind": "line",
+                "startVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-16"
+              },
+              {
+                "endVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-18",
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-17",
+                "kind": "line",
+                "startVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-17"
+              },
+              {
+                "endVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-19",
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-18",
+                "kind": "line",
+                "startVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-18"
+              },
+              {
+                "endVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-20",
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-19",
+                "kind": "line",
+                "startVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-19"
+              },
+              {
+                "endVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-21",
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-20",
+                "kind": "line",
+                "startVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-20"
+              },
+              {
+                "endVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-22",
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-21",
+                "kind": "line",
+                "startVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-21"
+              },
+              {
+                "endVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-23",
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-22",
+                "kind": "line",
+                "startVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-22"
+              },
+              {
+                "endVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-24",
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-23",
+                "kind": "line",
+                "startVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-23"
+              },
+              {
+                "endVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-25",
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-24",
+                "kind": "line",
+                "startVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-24"
+              },
+              {
+                "endVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-26",
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-25",
+                "kind": "line",
+                "startVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-25"
+              },
+              {
+                "endVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-27",
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-26",
+                "kind": "line",
+                "startVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-26"
+              },
+              {
+                "endVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-28",
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-27",
+                "kind": "line",
+                "startVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-27"
+              },
+              {
+                "endVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-29",
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-28",
+                "kind": "line",
+                "startVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-28"
+              },
+              {
+                "endVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-30",
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-29",
+                "kind": "line",
+                "startVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-29"
+              },
+              {
+                "endVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-31",
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-30",
+                "kind": "line",
+                "startVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-30"
+              },
+              {
+                "endVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-32",
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-31",
+                "kind": "line",
+                "startVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-31"
+              },
+              {
+                "endVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-33",
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-32",
+                "kind": "line",
+                "startVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-32"
+              },
+              {
+                "endVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-34",
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-33",
+                "kind": "line",
+                "startVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-33"
+              },
+              {
+                "endVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-35",
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-34",
+                "kind": "line",
+                "startVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-34"
+              },
+              {
+                "endVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-36",
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-35",
+                "kind": "line",
+                "startVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-35"
+              },
+              {
+                "endVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-37",
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-36",
+                "kind": "line",
+                "startVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-36"
+              },
+              {
+                "endVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-38",
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-37",
+                "kind": "line",
+                "startVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-37"
+              },
+              {
+                "endVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-39",
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-38",
+                "kind": "line",
+                "startVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-38"
+              },
+              {
+                "endVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-40",
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-39",
+                "kind": "line",
+                "startVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-39"
+              },
+              {
+                "endVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-41",
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-40",
+                "kind": "line",
+                "startVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-40"
+              },
+              {
+                "endVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-42",
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-41",
+                "kind": "line",
+                "startVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-41"
+              },
+              {
+                "endVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-43",
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-42",
+                "kind": "line",
+                "startVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-42"
+              },
+              {
+                "endVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-44",
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-43",
+                "kind": "line",
+                "startVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-43"
+              },
+              {
+                "endVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-1",
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-44",
+                "kind": "line",
+                "startVertexId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-44"
+              }
+            ],
+            "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development",
+            "vertices": [
+              {
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-1",
+                "point": [
+                  0,
+                  -150
+                ]
+              },
+              {
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-2",
+                "point": [
+                  717.9425857430836,
+                  -150
+                ]
+              },
+              {
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-3",
+                "point": [
+                  738.6135111160445,
+                  -150
+                ]
+              },
+              {
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-4",
+                "point": [
+                  759.2844364890045,
+                  -150
+                ]
+              },
+              {
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-5",
+                "point": [
+                  779.9553618619651,
+                  -150
+                ]
+              },
+              {
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-6",
+                "point": [
+                  800.6262872349264,
+                  -150
+                ]
+              },
+              {
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-7",
+                "point": [
+                  821.2972126078871,
+                  -150
+                ]
+              },
+              {
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-8",
+                "point": [
+                  841.9681379808475,
+                  -150
+                ]
+              },
+              {
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-9",
+                "point": [
+                  862.639063353809,
+                  -150
+                ]
+              },
+              {
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-10",
+                "point": [
+                  883.3099887267704,
+                  -150
+                ]
+              },
+              {
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-11",
+                "point": [
+                  903.980914099731,
+                  -150
+                ]
+              },
+              {
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-12",
+                "point": [
+                  924.6518394726913,
+                  -150
+                ]
+              },
+              {
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-13",
+                "point": [
+                  945.3227648456523,
+                  -150
+                ]
+              },
+              {
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-14",
+                "point": [
+                  965.9936902186132,
+                  -150
+                ]
+              },
+              {
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-15",
+                "point": [
+                  986.6646155915737,
+                  -150
+                ]
+              },
+              {
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-16",
+                "point": [
+                  1007.3355409645338,
+                  -150
+                ]
+              },
+              {
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-17",
+                "point": [
+                  1028.0064663374949,
+                  -150
+                ]
+              },
+              {
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-18",
+                "point": [
+                  1048.6773917104558,
+                  -150
+                ]
+              },
+              {
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-19",
+                "point": [
+                  1069.348317083416,
+                  -150
+                ]
+              },
+              {
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-20",
+                "point": [
+                  1090.0192424563772,
+                  -150
+                ]
+              },
+              {
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-21",
+                "point": [
+                  2622.4898131438995,
+                  -150
+                ]
+              },
+              {
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-22",
+                "point": [
+                  2722.4898131438995,
+                  -50
+                ]
+              },
+              {
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-23",
+                "point": [
+                  2722.4898131438995,
+                  49.99999999999997
+                ]
+              },
+              {
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-24",
+                "point": [
+                  2622.4898131438995,
+                  149.99999999999997
+                ]
+              },
+              {
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-25",
+                "point": [
+                  1090.0192424563772,
+                  149.99999999999997
+                ]
+              },
+              {
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-26",
+                "point": [
+                  1069.348317083416,
+                  149.99999999999997
+                ]
+              },
+              {
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-27",
+                "point": [
+                  1048.6773917104558,
+                  149.99999999999997
+                ]
+              },
+              {
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-28",
+                "point": [
+                  1028.0064663374949,
+                  149.99999999999997
+                ]
+              },
+              {
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-29",
+                "point": [
+                  1007.3355409645338,
+                  149.99999999999997
+                ]
+              },
+              {
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-30",
+                "point": [
+                  986.6646155915737,
+                  149.99999999999997
+                ]
+              },
+              {
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-31",
+                "point": [
+                  965.9936902186132,
+                  149.99999999999997
+                ]
+              },
+              {
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-32",
+                "point": [
+                  945.3227648456523,
+                  149.99999999999997
+                ]
+              },
+              {
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-33",
+                "point": [
+                  924.6518394726913,
+                  149.99999999999997
+                ]
+              },
+              {
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-34",
+                "point": [
+                  903.980914099731,
+                  149.99999999999997
+                ]
+              },
+              {
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-35",
+                "point": [
+                  883.3099887267704,
+                  149.99999999999997
+                ]
+              },
+              {
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-36",
+                "point": [
+                  862.639063353809,
+                  149.99999999999997
+                ]
+              },
+              {
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-37",
+                "point": [
+                  841.9681379808475,
+                  149.99999999999997
+                ]
+              },
+              {
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-38",
+                "point": [
+                  821.2972126078871,
+                  149.99999999999997
+                ]
+              },
+              {
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-39",
+                "point": [
+                  800.6262872349264,
+                  149.99999999999997
+                ]
+              },
+              {
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-40",
+                "point": [
+                  779.9553618619651,
+                  149.99999999999997
+                ]
+              },
+              {
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-41",
+                "point": [
+                  759.2844364890045,
+                  149.99999999999997
+                ]
+              },
+              {
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-42",
+                "point": [
+                  738.6135111160445,
+                  149.99999999999997
+                ]
+              },
+              {
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-43",
+                "point": [
+                  717.9425857430836,
+                  149.99999999999997
+                ]
+              },
+              {
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/vertex-44",
+                "point": [
+                  0,
+                  149.99999999999997
+                ]
+              }
+            ]
+          },
+          "stationFrame": {
+            "stations": [
+              {
+                "frame": {
+                  "axisX": [
+                    0.9917996277580533,
+                    0.10964935892539261,
+                    0.06565452357787274
+                  ],
+                  "axisY": [
+                    0.06744117155255205,
+                    -0.012661808427373994,
+                    -0.9976429055463522
+                  ],
+                  "axisZ": [
+                    -0.10855960002968998,
+                    0.9938896803441509,
+                    -0.019952858110928066
+                  ],
+                  "origin": [
+                    11110.212906298166,
+                    6203.653867420911,
+                    1306.710639887371
+                  ]
+                },
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/station-1",
+                "spineNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-1",
+                "stationMm": 0
+              },
+              {
+                "frame": {
+                  "axisX": [
+                    0.9917996277580531,
+                    0.1096493589253932,
+                    0.0656545235778727
+                  ],
+                  "axisY": [
+                    0.069763599251191,
+                    -0.03406448179508867,
+                    -0.9969817707960116
+                  ],
+                  "axisZ": [
+                    -0.10708192470490234,
+                    0.9933864450289638,
+                    -0.04143467429836107
+                  ],
+                  "origin": [
+                    11032.273346345615,
+                    6917.209594470558,
+                    1292.3856333422464
+                  ]
+                },
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/station-2",
+                "spineNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-2",
+                "stationMm": 717.9425857430836
+              },
+              {
+                "frame": {
+                  "axisX": [
+                    0.9917996277580517,
+                    0.10964935892540713,
+                    0.06565452357787166
+                  ],
+                  "axisY": [
+                    0.07653246618580589,
+                    -0.09813801176923245,
+                    -0.9922256357631063
+                  ],
+                  "axisZ": [
+                    -0.1023537004631906,
+                    0.9891137188075136,
+                    -0.10572497939589409
+                  ],
+                  "origin": [
+                    11030.091435633634,
+                    6937.723883272604,
+                    1291.0854885942676
+                  ]
+                },
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/station-3",
+                "spineNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-3",
+                "stationMm": 738.6135111160445
+              },
+              {
+                "frame": {
+                  "axisX": [
+                    0.9917996277580523,
+                    0.1096493589254015,
+                    0.0656545235778725
+                  ],
+                  "axisY": [
+                    0.08505602922529414,
+                    -0.18288620969577643,
+                    -0.9794478578237529
+                  ],
+                  "axisZ": [
+                    -0.09538852274469321,
+                    0.9770003338742322,
+                    -0.19071281377564595
+                  ],
+                  "origin": [
+                    11028.045780504157,
+                    6958.063450774974,
+                    1288.0188218888227
+                  ]
+                },
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/station-4",
+                "spineNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-4",
+                "stationMm": 759.2844364890045
+              },
+              {
+                "frame": {
+                  "axisX": [
+                    0.9917996277580531,
+                    0.10964935892539363,
+                    0.0656545235778744
+                  ],
+                  "axisY": [
+                    0.09294863134795474,
+                    -0.26627772483808015,
+                    -0.9594043595823389
+                  ],
+                  "axisZ": [
+                    -0.08771573581478678,
+                    0.9576393848115823,
+                    -0.2742859062149651
+                  ],
+                  "origin": [
+                    11026.151555994718,
+                    6978.07741440913,
+                    1283.2083823108826
+                  ]
+                },
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/station-5",
+                "spineNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-5",
+                "stationMm": 779.9553618619651
+              },
+              {
+                "frame": {
+                  "axisX": [
+                    0.991799627758053,
+                    0.10964935892539318,
+                    0.06565452357787452
+                  ],
+                  "axisY": [
+                    0.10015172381225261,
+                    -0.3476939439440855,
+                    -0.932243827312384
+                  ],
+                  "axisZ": [
+                    -0.0793922577863967,
+                    0.9311744946205612,
+                    -0.35582429648875985
+                  ],
+                  "origin": [
+                    11024.422813803287,
+                    6997.61730699457,
+                    1276.689854566094
+                  ]
+                },
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/station-6",
+                "spineNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-6",
+                "stationMm": 800.6262872349264
+              },
+              {
+                "frame": {
+                  "axisX": [
+                    0.9917996277580544,
+                    0.10964935892537567,
+                    0.06565452357788208
+                  ],
+                  "axisY": [
+                    0.1066118727832579,
+                    -0.42653090686281314,
+                    -0.8981677427253961
+                  ],
+                  "axisZ": [
+                    -0.07047983371597144,
+                    0.8978019846146702,
+                    -0.43472311815836123
+                  ],
+                  "origin": [
+                    11022.872378050246,
+                    7016.538178095059,
+                    1268.5115942652192
+                  ]
+                },
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/station-7",
+                "spineNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-7",
+                "stationMm": 821.2972126078871
+              },
+              {
+                "frame": {
+                  "axisX": [
+                    0.9917996277580532,
+                    0.10964935892539227,
+                    0.06565452357787316
+                  ],
+                  "axisY": [
+                    0.11228115571444444,
+                    -0.5022037868293535,
+                    -0.8574288883433346
+                  ],
+                  "axisZ": [
+                    -0.061044577567673376,
+                    0.8577694180731251,
+                    -0.5103970855795283
+                  ],
+                  "origin": [
+                    11021.511750146761,
+                    7034.699669287034,
+                    1258.734269213521
+                  ]
+                },
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/station-8",
+                "spineNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-8",
+                "stationMm": 841.9681379808475
+              },
+              {
+                "frame": {
+                  "axisX": [
+                    0.9917996277580519,
+                    0.10964935892541293,
+                    0.06565452357785963
+                  ],
+                  "axisY": [
+                    0.11711751684576786,
+                    -0.5741512288151192,
+                    -0.8103294723123244
+                  ],
+                  "axisZ": [
+                    -0.05115648176791519,
+                    0.8113737637718726,
+                    -0.5822848356567378
+                  ],
+                  "origin": [
+                    11020.351023475243,
+                    7051.9670553636215,
+                    1247.4304093660771
+                  ]
+                },
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/station-9",
+                "spineNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-9",
+                "stationMm": 862.639063353809
+              },
+              {
+                "frame": {
+                  "axisX": [
+                    0.9917996277580536,
+                    0.10964935892538231,
+                    0.06565452357788364
+                  ],
+                  "axisY": [
+                    0.12108507918083576,
+                    -0.6418395137602098,
+                    -0.7572188865683612
+                  ],
+                  "axisZ": [
+                    -0.04088889798902552,
+                    0.7589591930158764,
+                    -0.6498530921353939
+                  ],
+                  "origin": [
+                    11019.398808514827,
+                    7068.212243750438,
+                    1234.68386878753
+                  ]
+                },
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/station-10",
+                "spineNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-10",
+                "stationMm": 883.3099887267704
+              },
+              {
+                "frame": {
+                  "axisX": [
+                    0.9917996277580525,
+                    0.10964935892540123,
+                    0.06565452357786596
+                  ],
+                  "axisY": [
+                    0.12415441062892366,
+                    -0.7047665177973134,
+                    -0.6984911149851758
+                  ],
+                  "axisZ": [
+                    -0.03031799301359903,
+                    0.7009145265145371,
+                    -0.7126006215409368
+                  ],
+                  "origin": [
+                    11018.662168967287,
+                    7083.314724719344,
+                    1220.5892036075643
+                  ]
+                },
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/station-11",
+                "spineNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-11",
+                "stationMm": 903.980914099731
+              },
+              {
+                "frame": {
+                  "axisX": [
+                    0.9917996277580523,
+                    0.10964935892541633,
+                    0.06565452357784929
+                  ],
+                  "axisY": [
+                    0.12630274233752595,
+                    -0.7624654370970059,
+                    -0.6345818107308879
+                  ],
+                  "axisZ": [
+                    -0.019522183715191203,
+                    0.6376703500396714,
+                    -0.7700619514190227
+                  ],
+                  "origin": [
+                    11018.14656935722,
+                    7097.162465351272,
+                    1205.2509705865332
+                  ]
+                },
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/station-12",
+                "spineNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-12",
+                "stationMm": 924.6518394726913
+              },
+              {
+                "frame": {
+                  "axisX": [
+                    0.9917996277580531,
+                    0.10964935892537594,
+                    0.06565452357790251
+                  ],
+                  "axisY": [
+                    0.1275141375957809,
+                    -0.8145082507023789,
+                    -0.5659650645145468
+                  ],
+                  "axisZ": [
+                    -0.008581555348043623,
+                    0.569695820262888,
+                    -0.8218108232937819
+                  ],
+                  "origin": [
+                    11017.85583449524,
+                    7109.652740616561,
+                    1188.7829514946125
+                  ]
+                },
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/station-13",
+                "spineNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-13",
+                "stationMm": 945.3227648456523
+              },
+              {
+                "frame": {
+                  "axisX": [
+                    0.991799627758053,
+                    0.10964935892537876,
+                    0.06565452357789796
+                  ],
+                  "axisY": [
+                    0.12777961005586738,
+                    -0.8605088956654428,
+                    -0.4931498876960339
+                  ],
+                  "axisZ": [
+                    0.002422732539465095,
+                    0.4974951844670395,
+                    -0.8674633547298402
+                  ],
+                  "origin": [
+                    11017.79212110482,
+                    7120.692895407693,
+                    1171.3073090581743
+                  ]
+                },
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/station-14",
+                "spineNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-14",
+                "stationMm": 965.9936902186132
+              },
+              {
+                "frame": {
+                  "axisX": [
+                    0.9917996277580533,
+                    0.10964935892539382,
+                    0.06565452357786883
+                  ],
+                  "axisY": [
+                    0.12709719039535203,
+                    -0.9001261309314862,
+                    -0.41667643634830265
+                  ],
+                  "axisZ": [
+                    0.013409048161388064,
+                    0.4216040399492912,
+                    -0.9066808870412137
+                  ],
+                  "origin": [
+                    11017.955901823343,
+                    7130.201031871543,
+                    1152.9536807347188
+                  ]
+                },
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/station-15",
+                "spineNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-15",
+                "stationMm": 986.6646155915737
+              },
+              {
+                "frame": {
+                  "axisX": [
+                    0.9917996277580534,
+                    0.10964935892539662,
+                    0.06565452357786213
+                  ],
+                  "axisY": [
+                    0.12547194092596806,
+                    -0.933066068726619,
+                    -0.33711200428243904
+                  ],
+                  "axisZ": [
+                    0.024295893053289937,
+                    0.3425853608639783,
+                    -0.9391724975223884
+                  ],
+                  "origin": [
+                    11018.345961695995,
+                    7138.106616942377,
+                    1133.8582170389075
+                  ]
+                },
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/station-16",
+                "spineNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-16",
+                "stationMm": 1007.3355409645338
+              },
+              {
+                "frame": {
+                  "axisX": [
+                    0.9917996277580535,
+                    0.1096493589253977,
+                    0.06565452357785861
+                  ],
+                  "axisY": [
+                    0.1229159180404779,
+                    -0.9590843546700902,
+                    -0.25504681476019897
+                  ],
+                  "axisZ": [
+                    0.035002506642422285,
+                    0.26102532197912515,
+                    -0.9646971575652337
+                  ],
+                  "origin": [
+                    11018.959407188513,
+                    7144.351005568811,
+                    1114.162571553565
+                  ]
+                },
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/station-17",
+                "spineNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-17",
+                "stationMm": 1028.0064663374949
+              },
+              {
+                "frame": {
+                  "axisX": [
+                    0.991799627758054,
+                    0.10964935892539959,
+                    0.06565452357785029
+                  ],
+                  "axisY": [
+                    0.11944808277618643,
+                    -0.9779879804390079,
+                    -0.17108964211174407
+                  ],
+                  "axisZ": [
+                    0.045449465344258234,
+                    0.17752895032664448,
+                    -0.9830655206525357
+                  ],
+                  "origin": [
+                    11019.791687651943,
+                    7148.887875753351,
+                    1094.0128501179386
+                  ]
+                },
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/station-18",
+                "spineNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-18",
+                "stationMm": 1048.6773917104558
+              },
+              {
+                "frame": {
+                  "axisX": [
+                    0.9917996277580523,
+                    0.10964935892539539,
+                    0.06565452357788101
+                  ],
+                  "axisY": [
+                    0.11509416015855736,
+                    -0.9896367155387672,
+                    -0.08586329573827511
+                  ],
+                  "axisZ": [
+                    0.05555927174095321,
+                    0.09271563700310714,
+                    -0.9941413269644931
+                  ],
+                  "origin": [
+                    11020.836629080173,
+                    7151.683572177292,
+                    1073.5585269883109
+                  ]
+                },
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/station-19",
+                "spineNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-19",
+                "stationMm": 1069.348317083416
+              },
+              {
+                "frame": {
+                  "axisX": [
+                    0.9917996277580514,
+                    0.1096493589253944,
+                    0.06565452357789761
+                  ],
+                  "axisY": [
+                    0.11126641208519623,
+                    -0.9935582185186322,
+                    -0.021490741163821846
+                  ],
+                  "axisZ": [
+                    0.0628751454923008,
+                    0.02861965236219865,
+                    -0.9976109620378021
+                  ],
+                  "origin": [
+                    11022.086479909824,
+                    7152.7173558619315,
+                    1052.9513360110932
+                  ]
+                },
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/station-20",
+                "spineNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-20",
+                "stationMm": 1090.0192424563772
+              },
+              {
+                "frame": {
+                  "axisX": [
+                    0.9917996277580527,
+                    0.10964935892539478,
+                    0.06565452357787548
+                  ],
+                  "axisY": [
+                    0.10988644836835126,
+                    -0.9939441475580966,
+                    1.2203267105788734e-13
+                  ],
+                  "axisZ": [
+                    0.06525692947095772,
+                    0.007214542415167819,
+                    -0.9978424141785928
+                  ],
+                  "origin": [
+                    11122.090803857493,
+                    7163.773429794153,
+                    -476.21279790139016
+                  ]
+                },
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/station-21",
+                "spineNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-21",
+                "stationMm": 2622.4898131438995
+              },
+              {
+                "frame": {
+                  "axisX": [
+                    0.9917996277580525,
+                    0.10964935892539475,
+                    0.06565452357787864
+                  ],
+                  "axisY": [
+                    0.10988644836835126,
+                    -0.9939441475580966,
+                    1.2203267105788734e-13
+                  ],
+                  "axisZ": [
+                    0.06525692947096094,
+                    0.007214542415167661,
+                    -0.9978424141785925
+                  ],
+                  "origin": [
+                    11128.616496804589,
+                    7164.49488403567,
+                    -575.9970393192496
+                  ]
+                },
+                "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/station-22",
+                "spineNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-22",
+                "stationMm": 2722.4898131438995
+              }
+            ],
+            "version": 1
+          },
+          "stockWidthMm": 300,
+          "thicknessMm": 20,
+          "transverseOffsetMm": -1.4210854715202004e-14
+        },
+        "kind": "create-poly-beam",
+        "material": {
+          "id": "axis-split.cross-member.steel",
+          "name": "Сталь поперечной балки"
+        },
+        "owner": {
+          "entityId": "ef958171-98f3-4e78-8968-b35ef069e2fe",
+          "moduleId": "axis-split",
+          "partPath": [
+            "CM-1/jacking-S1",
+            "panel-1",
+            "panel-1/piece-01"
+          ]
+        },
+        "ownership": {
+          "documentSourceHash": "fnv1a64:20845:3fe400d8:e317d6d9",
+          "generationId": "g",
+          "moduleId": "bridge",
+          "moduleVariantId": "v",
+          "namespace": "bimplatforma",
+          "revisionId": "51db4acdbdb8413fa4afdd80f4ae28e9",
+          "sourceId": "cross-member-plate/CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d",
+          "sourceKind": "element",
+          "stableKey": "cross-member-plate/CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d"
+        },
+        "path": {
+          "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine",
+          "nodes": [
+            {
+              "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-1",
+              "point": [
+                11110.212906298166,
+                6203.653867420911,
+                1306.710639887371
+              ]
+            },
+            {
+              "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-2",
+              "point": [
+                11032.273346345615,
+                6917.209594470558,
+                1292.3856333422464
+              ]
+            },
+            {
+              "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-3",
+              "point": [
+                11030.091435633634,
+                6937.723883272604,
+                1291.0854885942676
+              ]
+            },
+            {
+              "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-4",
+              "point": [
+                11028.045780504157,
+                6958.063450774974,
+                1288.0188218888227
+              ]
+            },
+            {
+              "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-5",
+              "point": [
+                11026.151555994718,
+                6978.07741440913,
+                1283.2083823108826
+              ]
+            },
+            {
+              "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-6",
+              "point": [
+                11024.422813803287,
+                6997.61730699457,
+                1276.689854566094
+              ]
+            },
+            {
+              "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-7",
+              "point": [
+                11022.872378050246,
+                7016.538178095059,
+                1268.5115942652192
+              ]
+            },
+            {
+              "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-8",
+              "point": [
+                11021.511750146761,
+                7034.699669287034,
+                1258.734269213521
+              ]
+            },
+            {
+              "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-9",
+              "point": [
+                11020.351023475243,
+                7051.9670553636215,
+                1247.4304093660771
+              ]
+            },
+            {
+              "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-10",
+              "point": [
+                11019.398808514827,
+                7068.212243750438,
+                1234.68386878753
+              ]
+            },
+            {
+              "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-11",
+              "point": [
+                11018.662168967287,
+                7083.314724719344,
+                1220.5892036075643
+              ]
+            },
+            {
+              "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-12",
+              "point": [
+                11018.14656935722,
+                7097.162465351272,
+                1205.2509705865332
+              ]
+            },
+            {
+              "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-13",
+              "point": [
+                11017.85583449524,
+                7109.652740616561,
+                1188.7829514946125
+              ]
+            },
+            {
+              "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-14",
+              "point": [
+                11017.79212110482,
+                7120.692895407693,
+                1171.3073090581743
+              ]
+            },
+            {
+              "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-15",
+              "point": [
+                11017.955901823343,
+                7130.201031871543,
+                1152.9536807347188
+              ]
+            },
+            {
+              "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-16",
+              "point": [
+                11018.345961695995,
+                7138.106616942377,
+                1133.8582170389075
+              ]
+            },
+            {
+              "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-17",
+              "point": [
+                11018.959407188513,
+                7144.351005568811,
+                1114.162571553565
+              ]
+            },
+            {
+              "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-18",
+              "point": [
+                11019.791687651943,
+                7148.887875753351,
+                1094.0128501179386
+              ]
+            },
+            {
+              "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-19",
+              "point": [
+                11020.836629080173,
+                7151.683572177292,
+                1073.5585269883109
+              ]
+            },
+            {
+              "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-20",
+              "point": [
+                11022.086479909824,
+                7152.7173558619315,
+                1052.9513360110932
+              ]
+            },
+            {
+              "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-21",
+              "point": [
+                11122.090803857493,
+                7163.773429794153,
+                -476.21279790139016
+              ]
+            },
+            {
+              "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-22",
+              "point": [
+                11128.616496804589,
+                7164.49488403567,
+                -575.9970393192496
+              ]
+            }
+          ],
+          "segments": [
+            {
+              "endNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-2",
+              "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/segment-1",
+              "kind": "line",
+              "startNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-1"
+            },
+            {
+              "endNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-3",
+              "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/segment-2",
+              "kind": "line",
+              "startNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-2"
+            },
+            {
+              "endNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-4",
+              "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/segment-3",
+              "kind": "line",
+              "startNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-3"
+            },
+            {
+              "endNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-5",
+              "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/segment-4",
+              "kind": "line",
+              "startNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-4"
+            },
+            {
+              "endNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-6",
+              "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/segment-5",
+              "kind": "line",
+              "startNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-5"
+            },
+            {
+              "endNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-7",
+              "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/segment-6",
+              "kind": "line",
+              "startNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-6"
+            },
+            {
+              "endNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-8",
+              "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/segment-7",
+              "kind": "line",
+              "startNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-7"
+            },
+            {
+              "endNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-9",
+              "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/segment-8",
+              "kind": "line",
+              "startNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-8"
+            },
+            {
+              "endNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-10",
+              "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/segment-9",
+              "kind": "line",
+              "startNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-9"
+            },
+            {
+              "endNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-11",
+              "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/segment-10",
+              "kind": "line",
+              "startNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-10"
+            },
+            {
+              "endNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-12",
+              "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/segment-11",
+              "kind": "line",
+              "startNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-11"
+            },
+            {
+              "endNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-13",
+              "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/segment-12",
+              "kind": "line",
+              "startNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-12"
+            },
+            {
+              "endNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-14",
+              "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/segment-13",
+              "kind": "line",
+              "startNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-13"
+            },
+            {
+              "endNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-15",
+              "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/segment-14",
+              "kind": "line",
+              "startNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-14"
+            },
+            {
+              "endNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-16",
+              "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/segment-15",
+              "kind": "line",
+              "startNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-15"
+            },
+            {
+              "endNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-17",
+              "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/segment-16",
+              "kind": "line",
+              "startNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-16"
+            },
+            {
+              "endNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-18",
+              "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/segment-17",
+              "kind": "line",
+              "startNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-17"
+            },
+            {
+              "endNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-19",
+              "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/segment-18",
+              "kind": "line",
+              "startNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-18"
+            },
+            {
+              "endNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-20",
+              "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/segment-19",
+              "kind": "line",
+              "startNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-19"
+            },
+            {
+              "endNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-21",
+              "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/segment-20",
+              "kind": "line",
+              "startNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-20"
+            },
+            {
+              "endNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-22",
+              "id": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/segment-21",
+              "kind": "line",
+              "startNodeId": "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/spine/node-21"
+            }
+          ]
+        },
+        "phase": "base-parts",
+        "profile": {
+          "kind": "plate",
+          "thicknessMm": 20,
+          "widthMm": 300
+        },
+        "revisionProvenance": {
+          "adapterId": "axis-split.cross-member-plates",
+          "adapterVersion": "1.4.0",
+          "revisionId": "51db4acdbdb8413fa4afdd80f4ae28e9",
+          "sourceHash": "fnv1a64:20845:3fe400d8:e317d6d9",
+          "sourcePath": [
+            "cross-members",
+            "CM-1/jacking-S1",
+            "panel-1",
+            "panel-1/piece-01",
+            "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d"
+          ]
+        },
+        "source": {
+          "id": "cross-member-plate/CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d",
+          "kind": "element",
+          "role": "cross-member-flange",
+          "sourceLayer": "generated",
+          "stableKey": "cross-member-plate/CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d"
+        }
+      },
+      {
+        "commandId": "element:cross-member-plate/CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d:development-cut/CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-21",
+        "cutter": {
+          "contour": {
+            "edges": [
+              {
+                "endVertexId": "cross-member-plate/CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development-cut/CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-21/vertex-2",
+                "id": "cross-member-plate/CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development-cut/CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-21/edge-1",
+                "kind": "line",
+                "startVertexId": "cross-member-plate/CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development-cut/CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-21/vertex-1"
+              },
+              {
+                "endVertexId": "cross-member-plate/CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development-cut/CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-21/vertex-3",
+                "id": "cross-member-plate/CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development-cut/CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-21/edge-2",
+                "kind": "line",
+                "startVertexId": "cross-member-plate/CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development-cut/CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-21/vertex-2"
+              },
+              {
+                "endVertexId": "cross-member-plate/CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development-cut/CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-21/vertex-1",
+                "id": "cross-member-plate/CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development-cut/CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-21/edge-3",
+                "kind": "line",
+                "startVertexId": "cross-member-plate/CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development-cut/CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-21/vertex-3"
+              }
+            ],
+            "id": "cross-member-plate/CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development-cut/CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-21",
+            "vertices": [
+              {
+                "id": "cross-member-plate/CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development-cut/CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-21/vertex-1",
+                "point": [
+                  4.547473508864641e-13,
+                  -150
+                ]
+              },
+              {
+                "id": "cross-member-plate/CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development-cut/CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-21/vertex-2",
+                "point": [
+                  100,
+                  -150
+                ]
+              },
+              {
+                "id": "cross-member-plate/CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development-cut/CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-21/vertex-3",
+                "point": [
+                  100,
+                  -50
+                ]
+              }
+            ]
+          },
+          "extrusionSide": "symmetric",
+          "kind": "through-contour",
+          "plane": {
+            "axisX": [
+              0.06525692947095772,
+              0.007214542415167819,
+              -0.9978424141785928
+            ],
+            "axisY": [
+              0.9917996277580527,
+              0.10964935892539478,
+              0.06565452357787548
+            ],
+            "axisZ": [
+              0.10988644836835126,
+              -0.9939441475580966,
+              1.2203267105788734e-13
+            ],
+            "origin": [
+              11122.090803857493,
+              7163.773429794153,
+              -476.21279790139016
+            ]
+          },
+          "thicknessMm": 20
+        },
+        "dependsOn": [
+          "element:cross-member-plate/CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d:create-poly-beam"
+        ],
+        "kind": "apply-boolean-cut",
+        "owner": {
+          "entityId": "ef958171-98f3-4e78-8968-b35ef069e2fe",
+          "moduleId": "axis-split",
+          "partPath": [
+            "CM-1/jacking-S1",
+            "panel-1",
+            "panel-1/piece-01"
+          ]
+        },
+        "ownership": {
+          "documentSourceHash": "fnv1a64:20845:3fe400d8:e317d6d9",
+          "generationId": "g",
+          "moduleId": "bridge",
+          "moduleVariantId": "v",
+          "namespace": "bimplatforma",
+          "revisionId": "51db4acdbdb8413fa4afdd80f4ae28e9",
+          "sourceId": "cross-member-plate/CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d",
+          "sourceKind": "element",
+          "stableKey": "cross-member-plate/CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d"
+        },
+        "phase": "boolean-cuts",
+        "revisionProvenance": {
+          "adapterId": "axis-split.cross-member-plates",
+          "adapterVersion": "1.4.0",
+          "revisionId": "51db4acdbdb8413fa4afdd80f4ae28e9",
+          "sourceHash": "fnv1a64:20845:3fe400d8:e317d6d9",
+          "sourcePath": [
+            "cross-members",
+            "CM-1/jacking-S1",
+            "panel-1",
+            "panel-1/piece-01",
+            "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d"
+          ]
+        },
+        "source": {
+          "id": "cross-member-plate/CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d",
+          "kind": "element",
+          "role": "cross-member-flange",
+          "sourceLayer": "generated",
+          "stableKey": "cross-member-plate/CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d"
+        },
+        "target": {
+          "elementId": "cross-member-plate/CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d",
+          "role": "part"
+        }
+      },
+      {
+        "commandId": "element:cross-member-plate/CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d:development-cut/CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-23",
+        "cutter": {
+          "contour": {
+            "edges": [
+              {
+                "endVertexId": "cross-member-plate/CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development-cut/CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-23/vertex-2",
+                "id": "cross-member-plate/CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development-cut/CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-23/edge-1",
+                "kind": "line",
+                "startVertexId": "cross-member-plate/CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development-cut/CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-23/vertex-1"
+              },
+              {
+                "endVertexId": "cross-member-plate/CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development-cut/CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-23/vertex-3",
+                "id": "cross-member-plate/CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development-cut/CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-23/edge-2",
+                "kind": "line",
+                "startVertexId": "cross-member-plate/CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development-cut/CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-23/vertex-2"
+              },
+              {
+                "endVertexId": "cross-member-plate/CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development-cut/CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-23/vertex-1",
+                "id": "cross-member-plate/CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development-cut/CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-23/edge-3",
+                "kind": "line",
+                "startVertexId": "cross-member-plate/CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development-cut/CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-23/vertex-3"
+              }
+            ],
+            "id": "cross-member-plate/CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development-cut/CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-23",
+            "vertices": [
+              {
+                "id": "cross-member-plate/CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development-cut/CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-23/vertex-1",
+                "point": [
+                  100,
+                  50
+                ]
+              },
+              {
+                "id": "cross-member-plate/CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development-cut/CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-23/vertex-2",
+                "point": [
+                  100,
+                  149.99999999999997
+                ]
+              },
+              {
+                "id": "cross-member-plate/CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development-cut/CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-23/vertex-3",
+                "point": [
+                  0,
+                  149.99999999999997
+                ]
+              }
+            ]
+          },
+          "extrusionSide": "symmetric",
+          "kind": "through-contour",
+          "plane": {
+            "axisX": [
+              0.06525692947095772,
+              0.007214542415167819,
+              -0.9978424141785928
+            ],
+            "axisY": [
+              0.9917996277580527,
+              0.10964935892539478,
+              0.06565452357787548
+            ],
+            "axisZ": [
+              0.10988644836835126,
+              -0.9939441475580966,
+              1.2203267105788734e-13
+            ],
+            "origin": [
+              11122.090803857493,
+              7163.773429794153,
+              -476.21279790139016
+            ]
+          },
+          "thicknessMm": 20
+        },
+        "dependsOn": [
+          "element:cross-member-plate/CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d:create-poly-beam"
+        ],
+        "kind": "apply-boolean-cut",
+        "owner": {
+          "entityId": "ef958171-98f3-4e78-8968-b35ef069e2fe",
+          "moduleId": "axis-split",
+          "partPath": [
+            "CM-1/jacking-S1",
+            "panel-1",
+            "panel-1/piece-01"
+          ]
+        },
+        "ownership": {
+          "documentSourceHash": "fnv1a64:20845:3fe400d8:e317d6d9",
+          "generationId": "g",
+          "moduleId": "bridge",
+          "moduleVariantId": "v",
+          "namespace": "bimplatforma",
+          "revisionId": "51db4acdbdb8413fa4afdd80f4ae28e9",
+          "sourceId": "cross-member-plate/CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d",
+          "sourceKind": "element",
+          "stableKey": "cross-member-plate/CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d"
+        },
+        "phase": "boolean-cuts",
+        "revisionProvenance": {
+          "adapterId": "axis-split.cross-member-plates",
+          "adapterVersion": "1.4.0",
+          "revisionId": "51db4acdbdb8413fa4afdd80f4ae28e9",
+          "sourceHash": "fnv1a64:20845:3fe400d8:e317d6d9",
+          "sourcePath": [
+            "cross-members",
+            "CM-1/jacking-S1",
+            "panel-1",
+            "panel-1/piece-01",
+            "CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d"
+          ]
+        },
+        "source": {
+          "id": "cross-member-plate/CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d",
+          "kind": "element",
+          "role": "cross-member-flange",
+          "sourceLayer": "generated",
+          "stableKey": "cross-member-plate/CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d"
+        },
+        "target": {
+          "elementId": "cross-member-plate/CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d",
+          "role": "part"
+        }
+      }
+    ],
+    "diagnostics": [],
+    "executable": true,
+    "mappings": [
+      {
+        "commandIds": [
+          "element:cross-member-plate/CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d:create-poly-beam",
+          "element:cross-member-plate/CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d:development-cut/CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-21",
+          "element:cross-member-plate/CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d:development-cut/CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d/development/edge-23"
+        ],
+        "expectedNativeKinds": [
+          "PolyBeam",
+          "BooleanPart",
+          "BooleanPart"
+        ],
+        "ownershipStableKey": "cross-member-plate/CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d",
+        "source": {
+          "id": "cross-member-plate/CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d",
+          "kind": "element",
+          "role": "cross-member-flange",
+          "sourceLayer": "generated",
+          "stableKey": "cross-member-plate/CM-1/jacking-S1/panel-1/panel-1/piece-01/flange-element-0/plate-3d"
+        },
+        "strategy": "native-composite"
+      }
+    ],
+    "schemaVersion": 1,
+    "source": {
+      "address": {
+        "moduleId": "bridge",
+        "moduleVariantId": "v",
+        "projectId": "p",
+        "revisionId": "51db4acdbdb8413fa4afdd80f4ae28e9"
+      },
+      "constructiveContentHash": "sha256:262caabc5aeed9e99abac4f83d8d1a0da13c4a014b0b56fcdf0fec5212449960",
+      "constructiveSchemaVersion": 1,
+      "generationId": "g",
+      "sourceHash": "fnv1a64:20845:3fe400d8:e317d6d9"
+    },
+    "target": {
+      "adapterId": "native",
+      "adapterVersion": "1",
+      "teklaVersion": "2025.0"
+    }
+  }
+}

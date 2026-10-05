@@ -1,9 +1,17 @@
 using System.Net.Http;
 using System.Windows;
+using Connector.Desktop.Features.Connector;
 using Connector.Desktop.Mvvm;
 using Connector.Desktop.Services;
 
 namespace Connector.Desktop.Features.Tekla.Standard;
+
+public enum TeklaStandardSection
+{
+    Firm,
+    Extensions,
+    Libraries
+}
 
 // Tekla domain module: "Стандарт" — firm-folder / extensions / Grasshopper-libraries git-sync + admin publish +
 // Tekla-server restart. Owns the View, which holds the VERBATIM-lifted MainWindow logic. The shell supplies the
@@ -41,6 +49,16 @@ public sealed class StandardModule : IFeatureModule
     // Interactive sync WITH a progress window + already-running notice — the shell's Коннектор-tab mirror button
     // forwarder calls this (identical to the Стандарт-tab button), restoring the progress UI on that button.
     public Task RunInteractiveSyncAsync() => _view.RunInteractiveSyncAsync();
+
+    // Native section buttons use the same sync engine, narrowed to one existing target.
+    public Task RunInteractiveSyncAsync(TeklaStandardSection section) => _view.RunInteractiveSyncAsync(section);
+
+    // Graphite passes only selection and comment; native settings retain the source paths.
+    public Task ValidatePublicationAsync(TeklaPublicationRequest request, CancellationToken cancellationToken) =>
+        _view.ValidatePublicationAsync(request, cancellationToken);
+
+    public Task PublishPublicationAsync(TeklaPublicationRequest request, CancellationToken cancellationToken) =>
+        _view.PublishPublicationAsync(request, cancellationToken);
 
     // Capture typed-but-unbrowsed path edits into Settings before the shell reads them (Save/Start/SendNow).
     public void FlushPathEdits() => _view.FlushPathEdits();

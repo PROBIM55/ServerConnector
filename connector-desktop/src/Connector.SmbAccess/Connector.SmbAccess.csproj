@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="..\..\Connector.Desktop\Services\CommonSmbAccessService.cs"
+             Link="CommonSmbAccessService.cs" />
+    <Compile Include="..\..\Connector.Desktop\Services\WindowsSmbMappingPort.cs"
+             Link="WindowsSmbMappingPort.cs" />
+    <Compile Include="AssemblyInfo.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Connector.Network\Connector.Network.csproj" />
+    <ProjectReference Include="..\Platform.Connector.Core\Platform.Connector.Core.csproj" />
+    <ProjectReference Include="..\..\..\connector-access\src\Connector.Access.Contracts\Connector.Access.Contracts.csproj" />
+  </ItemGroup>
+</Project>

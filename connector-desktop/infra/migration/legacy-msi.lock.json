@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "assets": [
+    {
+      "id": "structura-connector",
+      "installerName": "Connector.Desktop.Setup.msi",
+      "version": "1.0.31",
+      "productCode": "{8C16FFEC-F35D-45AF-BE71-65BB07533BF8}",
+      "upgradeCode": "{0E67CBE8-8F77-45EA-B89D-E58C8C554B37}",
+      "installerSha256": "47B5B3434CED41C3B9A71615906CBAF835B6CB45433554BE612E7BF2D88EF515",
+      "installerBytes": 114074894,
+      "releaseTag": "v1.0.31",
+      "releaseUrl": "https://github.com/PROBIM55/ServerConnector/releases/download/v1.0.31/Connector.Desktop.Setup.msi"
+    },
+    {
+      "id": "platform-connector",
+      "installerName": "Platform.Connector.Desktop.Setup.msi",
+      "version": "1.2.1",
+      "productCode": "{93CCDE79-6601-4232-8489-8A6435FD6D62}",
+      "upgradeCode": "{A7E5408C-1238-4A45-8A84-E3AE45107D7A}",
+      "installerSha256": "D6666FD1613B16879AB6FDA9912D3476D0BA0BE2A782A7F934772D9F89DEDC3D",
+      "installerBytes": 59929448,
+      "sourceNote": "Independent local MSI; pass its path explicitly when staging."
+    }
+  ]
+}

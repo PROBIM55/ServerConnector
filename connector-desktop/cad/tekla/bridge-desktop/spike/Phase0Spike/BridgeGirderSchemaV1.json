@@ -1,0 +1,101 @@
+{
+  "componentType": "BridgeGirder",
+  "schemaVersion": 1,
+  "tekla": {
+    "pluginName": "BridgeGirderPlugin",
+    "componentNumber": -100000,
+    "componentNumberConstant": "BaseComponent.PLUGIN_OBJECT_NUMBER",
+    "implementingClass": "Bridge.TeklaPlugin.BridgeGirderPlugin",
+    "implementingAssembly": "BridgeGirderPlugin.dll",
+    "deployedAt": "<TeklaInstall>\\Environments\\common\\Extensions\\BridgeComponent\\BridgeGirderPlugin.dll",
+    "minTeklaVersion": "2025.0"
+  },
+  "input": {
+    "modes": [
+      {
+        "kind": "manualCoords",
+        "placementMode": "MANUAL_COORDS",
+        "method": "ComponentInput.AddTwoInputPositions(start, end)",
+        "args": ["start: Point", "end: Point"]
+      },
+      {
+        "kind": "pickPoints",
+        "placementMode": "TEKLA_PICK_POINTS",
+        "method": "ComponentInput.AddTwoInputPositions(start, end)",
+        "args": ["start: Point", "end: Point"],
+        "note": "коордs приходят из interactive Picker; в payload — те же 2 точки"
+      },
+      {
+        "kind": "modelAxis",
+        "placementMode": "MODEL_AXIS",
+        "method": "ComponentInput.AddOneInputObject(new Identifier(axisObjectId))",
+        "args": ["axisSourceObjectId: int (Tekla object id)"]
+      }
+    ]
+  },
+  "fields": [
+    { "name": "start",              "teklaAttribute": "tb_start",              "type": "string",  "required": true,  "format": "x,y,z (mm)",                          "description": "axis start point" },
+    { "name": "end",                "teklaAttribute": "tb_end",                "type": "string",  "required": true,  "format": "x,y,z (mm)",                          "description": "axis end point" },
+    { "name": "placementMode",      "teklaAttribute": "tb_placementMode",      "type": "enum",    "required": true,  "default": "MANUAL_COORDS",                      "values": ["MANUAL_COORDS", "TEKLA_PICK_POINTS", "MODEL_AXIS"] },
+    { "name": "axisSourceObjectId", "teklaAttribute": "tb_axisSourceObjectId", "type": "string",  "required": false, "default": "0",                                  "description": "Tekla object id when placementMode=MODEL_AXIS" },
+    { "name": "h",                  "teklaAttribute": "tb_h",                  "type": "double",  "required": true,  "default": 2000.0,    "min": 100,    "max": 10000, "description": "beam height, mm" },
+    { "name": "heightMode",         "teklaAttribute": "tb_heightMode",         "type": "enum",    "required": true,  "default": "TO_TOP",                              "values": ["TO_TOP", "TO_BOTTOM"] },
+    { "name": "bottomRef",          "teklaAttribute": "tb_bottomRef",          "type": "enum",    "required": true,  "default": "TOP_LOCKED",                          "values": ["TOP_LOCKED", "BOTTOM_LOCKED"] },
+    { "name": "topRef",             "teklaAttribute": "tb_topRef",             "type": "enum",    "required": true,  "default": "TOP_LOCKED",                          "values": ["TOP_LOCKED", "BOTTOM_LOCKED"] },
+    { "name": "stressZone",         "teklaAttribute": "tb_stressZone",         "type": "enum",    "required": true,  "default": "BOTTOM_TENSION",                      "values": ["BOTTOM_TENSION", "TOP_TENSION"] },
+    { "name": "flange",             "teklaAttribute": "tb_flange",             "type": "string",  "required": true,  "format": "L,W,T|L,W,T|... (mm,mm,mm per segment)" },
+    { "name": "web",                "teklaAttribute": "tb_web",                "type": "string",  "required": true,  "format": "L,H,T|... (mm,mm,mm per segment)" },
+    { "name": "topMode",            "teklaAttribute": "tb_topMode",            "type": "enum",    "required": true,  "default": "TOP_FLANGE",                          "values": ["TOP_FLANGE", "DECK", "DECK_SLOPES"] },
+    { "name": "topData",            "teklaAttribute": "tb_topData",            "type": "string",  "required": false, "format": "L,W,T|... (when topMode=TOP_FLANGE)" },
+    { "name": "material",           "teklaAttribute": "tb_mat",                "type": "string",  "required": true,  "default": "S355" },
+    { "name": "bridgeName",         "teklaAttribute": "tb_name",               "type": "string",  "required": false, "default": "BRIDGE_COMPONENT" },
+    { "name": "ribSection",         "teklaAttribute": "tb_ribSection",         "type": "string",  "required": false, "default": "PLATE" },
+    { "name": "ribH",               "teklaAttribute": "tb_ribH",               "type": "string",  "required": false, "default": "300", "description": "rib height, mm (string)" },
+    { "name": "ribT",               "teklaAttribute": "tb_ribT",               "type": "string",  "required": false, "default": "12",  "description": "rib thickness, mm (string)" },
+    { "name": "ribBothSides",       "teklaAttribute": "tb_ribBothSides",       "type": "string",  "required": false, "default": "0",   "values": ["0", "1"] },
+    { "name": "ribStartLeft",       "teklaAttribute": "tb_ribStartLeft",       "type": "string",  "required": false, "default": "0" },
+    { "name": "ribLengthLeft",      "teklaAttribute": "tb_ribLengthLeft",      "type": "string",  "required": false, "description": "по умолчанию = длина оси" },
+    { "name": "ribStartRight",      "teklaAttribute": "tb_ribStartRight",      "type": "string",  "required": false, "default": "0" },
+    { "name": "ribLengthRight",     "teklaAttribute": "tb_ribLengthRight",     "type": "string",  "required": false, "description": "по умолчанию = длина оси" },
+    { "name": "ribStepsLeft",       "teklaAttribute": "tb_ribStepsLeft",       "type": "string",  "required": false, "default": "1500|1500|1500", "format": "step|step|... (mm)" },
+    { "name": "ribStepsRight",      "teklaAttribute": "tb_ribStepsRight",      "type": "string",  "required": false, "default": "1500|1500|1500", "format": "step|step|... (mm)" },
+    { "name": "webLongRibs",        "teklaAttribute": "tb_webLongRibs",        "type": "string",  "required": false, "default": "" },
+    { "name": "webTransRibs",       "teklaAttribute": "tb_webTransRibs",       "type": "string",  "required": false, "default": "" }
+  ],
+  "rebuild": {
+    "modifyAlgorithm": "SetAttribute + Modify() + CommitChanges()",
+    "deleteInsertRequired": false,
+    "tested": ["tb_h"],
+    "untested": ["tb_flange (segment count change)", "tb_web (segment count change)", "tb_placementMode (input scheme change)"]
+  },
+  "identifiers": {
+    "id": {
+      "source": "component.Identifier.ID",
+      "type": "int",
+      "stable": false,
+      "note": "runtime only, may change after model re-open"
+    },
+    "guid": {
+      "getter": "model.GetGUIDByIdentifier(component.Identifier)",
+      "setter": "model.GetIdentifierByGUID(guidString) → SelectModelObject",
+      "type": "string (UUID format)",
+      "stable": true,
+      "note": "persistent across model re-open; used as primary external key"
+    }
+  },
+  "children": {
+    "method": "component.GetChildren()",
+    "expectedTypesOnDefault": ["ControlPoint", "ContourPlate", "BooleanPart"],
+    "approxCountOnDefault": 108
+  },
+  "spikeTested": {
+    "date": "2026-05-10",
+    "teklaVersion": "2025.0",
+    "model": "Новая модель.db1",
+    "scenario": "MANUAL_COORDS axis (100m,-50m,0) → (124m,-50m,0); h: 2200 → modify → 2400",
+    "result": "PASS",
+    "componentIdAfterInsert": 5692,
+    "componentGuidAfterInsert": "70a4af8b-51aa-4371-9f0c-b21d77e6e19c",
+    "childrenCount": 108
+  }
+}

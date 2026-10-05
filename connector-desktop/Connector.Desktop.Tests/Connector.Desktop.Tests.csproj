@@ -17,6 +17,8 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
+    <PackageReference Include="Velopack" Version="1.2.161" />
+    <PackageReference Include="dnlib" Version="4.4.0" />
   </ItemGroup>
 
   <ItemGroup>
@@ -24,15 +26,37 @@
          not copy the desktop application's bundled Git/VPN payload. -->
     <Compile Include="..\Connector.Desktop\Services\UpdateService.cs"
              Link="Services\UpdateService.cs" />
+    <Compile Include="..\Connector.Desktop\Services\PackageUpdateService.cs"
+             Link="Services\PackageUpdateService.cs" />
+    <Compile Include="..\Connector.Desktop\Services\SignedManifestUpdateSource.cs"
+             Link="Services\SignedManifestUpdateSource.cs" />
     <Compile Include="..\Connector.Desktop\Services\TcpConnectivityProbe.cs"
              Link="Services\TcpConnectivityProbe.cs" />
     <Compile Include="..\Connector.Desktop\Services\VpnConfigComparer.cs"
              Link="Services\VpnConfigComparer.cs" />
+    <Compile Include="..\Connector.Desktop\Services\SettingsService.cs"
+             Link="Services\SettingsService.cs" />
+    <Compile Include="..\Connector.Desktop\Services\ManagedSmbMappingStore.cs" Link="Services\ManagedSmbMappingStore.cs" />
+    <Compile Include="..\Connector.Desktop\Services\LocalRuntimeIdentity.cs" Link="Services\LocalRuntimeIdentity.cs" />
+    <Compile Include="..\Connector.Desktop\Services\DesktopBackgroundAgent.cs" Link="Services\DesktopBackgroundAgent.cs" />
+    <Compile Include="..\Connector.Desktop\Services\IfcExportPatchService.cs" Link="Services\IfcExportPatchService.cs" />
+    <Compile Include="..\Connector.Desktop\Services\ModelSharingProvisioningService.cs" Link="Services\ModelSharingProvisioningService.cs" />
+    <Compile Include="..\Connector.Desktop\Services\CommonAccessRuntime.cs" Link="Services\CommonAccessRuntime.cs" />
+    <ProjectReference Include="..\src\Connector.Network\Connector.Network.csproj" />
+    <ProjectReference Include="..\src\Connector.CommonAccess.Runtime\Connector.CommonAccess.Runtime.csproj" />
+    <ProjectReference Include="..\src\Connector.SmbAccess\Connector.SmbAccess.csproj" />
+    <ProjectReference Include="..\..\connector-access\src\Connector.Access.Client\Connector.Access.Client.csproj" />
+    <Compile Include="..\Connector.Desktop\Models\AppSettings.cs"
+             Link="Models\AppSettings.cs" />
+    <Compile Include="..\Connector.Desktop\Features\GraphiteWeb\GraphiteRpcProtocol.cs" Link="GraphiteWeb\GraphiteRpcProtocol.cs" />
+    <Compile Include="..\Connector.Desktop\Features\GraphiteWeb\GraphiteRpcRequest.cs" Link="GraphiteWeb\GraphiteRpcRequest.cs" />
+    <Compile Include="..\Connector.Desktop\Features\GraphiteWeb\GraphiteWebSecurity.cs" Link="GraphiteWeb\GraphiteWebSecurity.cs" />
   </ItemGroup>
 
   <ItemGroup>
     <!-- C2b: вид-модель вкладки «Конвертер» без окна и без полезной нагрузки приложения. -->
     <ProjectReference Include="..\Connector.AgrConversion\Connector.AgrConversion.csproj" />
+    <ProjectReference Include="..\Connector.Platform\Connector.Platform.csproj" />
     <Compile Include="..\Connector.Desktop\Mvvm\ObservableObject.cs" Link="Mvvm\ObservableObject.cs" />
     <Compile Include="..\Connector.Desktop\Mvvm\RelayCommand.cs" Link="Mvvm\RelayCommand.cs" />
     <Compile Include="..\Connector.Desktop\Features\Converter\ConverterText.cs" Link="Converter\ConverterText.cs" />

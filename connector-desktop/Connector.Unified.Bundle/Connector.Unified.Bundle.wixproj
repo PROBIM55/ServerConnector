@@ -1,0 +1,17 @@
+<Project Sdk="WixToolset.Sdk/6.0.2">
+  <PropertyGroup>
+    <OutputType>Bundle</OutputType>
+    <OutputName>Structura.Connector.Installer</OutputName>
+    <DefineConstants>ProductVersion=$(ProductVersion);UnifiedSetupMsi=$(UnifiedSetupMsiPath);LaunchBridge=$(LaunchBridgePath)</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="WixToolset.BootstrapperApplications.wixext" Version="6.0.2" />
+  </ItemGroup>
+
+  <Target Name="ValidateUnifiedBundleInputs" BeforeTargets="Build">
+    <Error Condition="'$(ProductVersion)' == ''" Text="ProductVersion must be supplied as a three-part numeric version." />
+    <Error Condition="'$(UnifiedSetupMsiPath)' == '' or !Exists('$(UnifiedSetupMsiPath)')" Text="UnifiedSetupMsiPath must point to the built Connector.Unified.Setup.msi." />
+    <Error Condition="'$(LaunchBridgePath)' == '' or !Exists('$(LaunchBridgePath)')" Text="LaunchBridgePath must point to the published Connector.Upgrade.LaunchBridge.exe." />
+  </Target>
+</Project>

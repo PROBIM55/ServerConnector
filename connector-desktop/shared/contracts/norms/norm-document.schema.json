@@ -1,0 +1,204 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://platform/contracts/norms/norm-document.schema.json",
+  "title": "NormDocument",
+  "description": "Единое машиночитаемое представление нормативного документа (СП/ГОСТ/СНиП). Хранит ФУНКЦИОНАЛЬНОЕ содержание — параметры, формулы, таблицы, правила, термины, ссылки — а не дословный полный текст. Структура (дерево пунктов) отделена от сущностей (плоский, id-адресуемый пул для переиспользования расчётами).",
+  "type": "object",
+  "required": ["schemaVersion", "document", "structure", "entities", "provenance"],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": { "type": "string", "const": "1.0" },
+
+    "document": {
+      "type": "object",
+      "required": ["code", "title", "status", "lang"],
+      "additionalProperties": false,
+      "properties": {
+        "code": { "type": "string", "description": "Канонический код, напр. 'СП 35.13330.2011'" },
+        "title": { "type": "string" },
+        "edition": { "type": "string", "description": "Редакция / актуализация, напр. '2011 (с Изм. 1–4)'" },
+        "status": { "enum": ["active", "superseded", "draft"] },
+        "supersedes": { "type": "string" },
+        "approvedBy": { "type": "string" },
+        "approvedDate": { "type": "string" },
+        "officialSourceUrl": { "type": "string", "format": "uri" },
+        "lang": { "type": "string", "default": "ru" }
+      }
+    },
+
+    "structure": {
+      "type": "array",
+      "description": "Иерархия пунктов (дерево). Каждый узел ссылается на введённые им сущности по id.",
+      "items": { "$ref": "#/$defs/Clause" }
+    },
+
+    "entities": {
+      "type": "object",
+      "description": "Плоский, id-адресуемый пул переиспользуемых сущностей. Это то, что читает расчётный слой (checks/).",
+      "additionalProperties": false,
+      "properties": {
+        "parameters":   { "type": "array", "items": { "$ref": "#/$defs/Parameter" } },
+        "formulas":     { "type": "array", "items": { "$ref": "#/$defs/Formula" } },
+        "tables":       { "type": "array", "items": { "$ref": "#/$defs/Table" } },
+        "rules":        { "type": "array", "items": { "$ref": "#/$defs/Rule" } },
+        "coefficients": { "type": "array", "items": { "$ref": "#/$defs/Coefficient" } },
+        "terms":        { "type": "array", "items": { "$ref": "#/$defs/Term" } }
+      }
+    },
+
+    "provenance": {
+      "type": "object",
+      "required": ["verified"],
+      "additionalProperties": false,
+      "properties": {
+        "extractedBy": { "type": "string", "description": "Кто/что извлекло (агент, человек)" },
+        "extractedAt": { "type": "string" },
+        "sources": { "type": "array", "items": { "type": "string", "format": "uri" } },
+        "verified": { "type": "boolean", "description": "Сверено с официальным источником экспертом" },
+        "verifiedBy": { "type": "string" },
+        "notes": { "type": "string" }
+      }
+    }
+  },
+
+  "$defs": {
+    "Applicability": {
+      "type": "object",
+      "description": "Условия применимости — по ним расчётный слой выбирает нужную формулу/правило.",
+      "additionalProperties": false,
+      "properties": {
+        "material": { "enum": ["reinforced_concrete", "concrete", "steel", "composite", "soil", "any"] },
+        "sectionTypes": { "type": "array", "items": { "type": "string" }, "description": "rectangular, tee, box, circular, ring, i_beam, generic …" },
+        "limitState": { "enum": ["ULS", "SLS", "fatigue", "any"], "description": "1-я / 2-я группа пред. состояний" },
+        "action": { "type": "array", "items": { "enum": ["bending", "shear", "axial_compression", "axial_tension", "eccentric_compression", "torsion", "biaxial_bending", "crack_width", "deflection", "stability"] } },
+        "conditions": { "type": "array", "items": { "type": "string" }, "description": "Доп. условия как выражения, напр. 'x2 >= 2*a2'" },
+        "notes": { "type": "string" }
+      }
+    },
+
+    "SourceRef": {
+      "type": "object",
+      "required": ["clause"],
+      "additionalProperties": false,
+      "properties": {
+        "document": { "type": "string", "description": "Код документа, если отличается от родительского" },
+        "clause": { "type": "string", "description": "Номер пункта, напр. '7.62' или '8.1.8'" },
+        "subitem": { "type": "string", "description": "Формула/таблица/подпункт внутри клаузы" },
+        "url": { "type": "string", "format": "uri" }
+      }
+    },
+
+    "EntityBase": {
+      "type": "object",
+      "required": ["id", "source"],
+      "properties": {
+        "id": { "type": "string", "description": "Уникальный в документе machine-id, напр. 'formula:M_ult_rect_sp35_7_62'" },
+        "source": { "$ref": "#/$defs/SourceRef" },
+        "verified": { "type": "boolean", "default": false },
+        "confidence": { "enum": ["high", "medium", "low"], "description": "Уверенность извлечения до экспертной сверки" },
+        "notes": { "type": "string" }
+      }
+    },
+
+    "Clause": {
+      "type": "object",
+      "required": ["id", "number", "title"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "number": { "type": "string", "description": "'7', '7.62', '8.1.8'" },
+        "title": { "type": "string" },
+        "summary": { "type": "string", "description": "КРАТКИЙ пересказ требования (НЕ дословный текст СП)" },
+        "parent": { "type": ["string", "null"] },
+        "children": { "type": "array", "items": { "type": "string" }, "description": "id дочерних клауз" },
+        "introduces": { "type": "array", "items": { "type": "string" }, "description": "id сущностей (formula/table/rule/…), вводимых этим пунктом" }
+      }
+    },
+
+    "Parameter": {
+      "allOf": [{ "$ref": "#/$defs/EntityBase" }],
+      "required": ["symbol", "name"],
+      "properties": {
+        "symbol": { "type": "string", "description": "Машинный символ, напр. 'Rb', 'h0', 'xi_y'" },
+        "displaySymbol": { "type": "string", "description": "Для рендера, напр. 'R_b', 'ξ_y'" },
+        "name": { "type": "string" },
+        "unit": { "type": ["string", "null"], "description": "СИ-производная для расчётов: 'MPa','mm','N','N*mm', null — безразмерно" },
+        "kind": { "enum": ["material_property", "geometry", "force", "coefficient", "result", "derived", "other"] }
+      }
+    },
+
+    "Formula": {
+      "allOf": [{ "$ref": "#/$defs/EntityBase" }],
+      "required": ["result", "expression", "variables", "applicability"],
+      "properties": {
+        "title": { "type": "string" },
+        "result": { "type": "string", "description": "symbol результата, напр. 'M_ult'" },
+        "expression": { "type": "string", "description": "Вычислимое выражение в нотации, парсимой расчётным слоем, напр. 'Rb*b*x*(h0 - 0.5*x) + Rsc*As2*(h0 - a2)'" },
+        "variables": { "type": "array", "items": { "type": "string" }, "description": "symbol'ы параметров, входящих в expression" },
+        "units": { "type": "object", "additionalProperties": { "type": "string" }, "description": "ед. результата и/или переменных" },
+        "applicability": { "$ref": "#/$defs/Applicability" },
+        "latex": { "type": "string", "description": "Опционально — для красивого рендера во фронте" }
+      }
+    },
+
+    "Table": {
+      "allOf": [{ "$ref": "#/$defs/EntityBase" }],
+      "required": ["title", "columns", "rows"],
+      "properties": {
+        "title": { "type": "string" },
+        "keyColumns": { "type": "array", "items": { "type": "string" }, "description": "Колонки-ключи для lookup, напр. ['grade']" },
+        "columns": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "name"],
+            "additionalProperties": false,
+            "properties": {
+              "id": { "type": "string" },
+              "name": { "type": "string" },
+              "symbol": { "type": "string" },
+              "unit": { "type": ["string", "null"] }
+            }
+          }
+        },
+        "rows": { "type": "array", "items": { "type": "object" }, "description": "Объекты по column.id → значение" },
+        "applicability": { "$ref": "#/$defs/Applicability" }
+      }
+    },
+
+    "Rule": {
+      "allOf": [{ "$ref": "#/$defs/EntityBase" }],
+      "required": ["name", "predicate", "applicability"],
+      "properties": {
+        "name": { "type": "string" },
+        "predicate": { "type": "string", "description": "Логическое условие выполнения, напр. 'xi <= xi_y' или 'M <= M_ult'" },
+        "demand": { "type": "string", "description": "symbol/выражение нагрузочного эффекта (числитель ratio)" },
+        "capacity": { "type": "string", "description": "symbol/выражение несущей способности (знаменатель ratio)" },
+        "onFail": { "type": "string", "description": "Краткое сообщение, напр. 'сечение переармировано'" },
+        "refsFormulas": { "type": "array", "items": { "type": "string" }, "description": "id формул, которые надо вычислить для предиката" },
+        "applicability": { "$ref": "#/$defs/Applicability" }
+      }
+    },
+
+    "Coefficient": {
+      "allOf": [{ "$ref": "#/$defs/EntityBase" }],
+      "required": ["symbol", "name"],
+      "properties": {
+        "symbol": { "type": "string" },
+        "name": { "type": "string" },
+        "value": { "type": ["number", "null"], "description": "Если константа" },
+        "lookupTable": { "type": "string", "description": "id таблицы, если зависит от условий" },
+        "unit": { "type": ["string", "null"] }
+      }
+    },
+
+    "Term": {
+      "allOf": [{ "$ref": "#/$defs/EntityBase" }],
+      "required": ["term", "definition"],
+      "properties": {
+        "term": { "type": "string" },
+        "definition": { "type": "string", "description": "Краткое определение (пересказ)" }
+      }
+    }
+  }
+}

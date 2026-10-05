@@ -50,6 +50,9 @@ public sealed class PatchingViewModel : ObservableObject
     private bool _isBusy;
     public bool IsBusy { get => _isBusy; private set { if (SetProperty(ref _isBusy, value)) RaiseCanExec(); } }
 
+    private OperationOutcome _lastOperationOutcome;
+    public OperationOutcome LastOperationOutcome { get => _lastOperationOutcome; private set => SetProperty(ref _lastOperationOutcome, value); }
+
     private string _resultMessage = "";
     public string ResultMessage { get => _resultMessage; private set => SetProperty(ref _resultMessage, value); }
 
@@ -84,8 +87,10 @@ public sealed class PatchingViewModel : ObservableObject
                 ? "Tekla не найдена по указанному пути bin"
                 : s.Applied
                     ? $"Патч установлен (набор {s.SetVersion}, сборка {s.DetectedBuild})"
+                    : s.NeedsManualReview
+                        ? "Файлы Tekla отличаются от сохранённого состояния патча — нужна ручная проверка перед установкой или откатом"
                     : s.NeedsReapply
-                        ? "Патч был установлен, но файлы заменены обновлением Tekla — требуется переустановка"
+                        ? "Патч установлен частично; файлы и резервные копии проверены — доступна переустановка"
                         : $"Патч не установлен (сборка {s.DetectedBuild})";
         }
         catch (Exception ex) { StatusLine = "Ошибка проверки статуса: " + ex.Message; }
@@ -93,6 +98,7 @@ public sealed class PatchingViewModel : ObservableObject
 
     private Task DetectAsync()
     {
+        LastOperationOutcome = OperationOutcome.None;
         TeklaBin = _service.ResolveTeklaBin(string.IsNullOrWhiteSpace(TeklaBin) ? null : TeklaBin, null);
         RefreshStatus();
         return Task.CompletedTask;
@@ -100,15 +106,21 @@ public sealed class PatchingViewModel : ObservableObject
 
     private async Task ApplyAsync()
     {
+        LastOperationOutcome = OperationOutcome.Running;
         if (_service.IsTeklaRunning())
         {
             ResultMessage = "Сейчас запущена Tekla Structures. Закройте её и повторите.";
+            LastOperationOutcome = OperationOutcome.Rejected;
             return;
         }
         var confirm = ConfirmHandler?.Invoke(
             "Будут заменены системные файлы Tekla для расширения IFC-экспорта (с резервной копией для отката). " +
             "Tekla должна быть закрыта. Продолжить?") ?? true;
-        if (!confirm) return;
+        if (!confirm)
+        {
+            LastOperationOutcome = OperationOutcome.Cancelled;
+            return;
+        }
 
         IsBusy = true;
         try
@@ -116,15 +128,23 @@ public sealed class PatchingViewModel : ObservableObject
             var req = new IfcPatchRequest { TeklaBin = TeklaBin, StagingDir = StagingDir };
             var r = await Task.Run(() => _service.Apply(req));
             ResultMessage = r.Message + (r.TechnicalDetails.Length > 0 ? "\n[detail] " + r.TechnicalDetails : "");
+            LastOperationOutcome = r.IsSuccess ? OperationOutcome.Succeeded : OperationOutcome.Failed;
+        }
+        catch
+        {
+            LastOperationOutcome = OperationOutcome.Failed;
+            throw;
         }
         finally { IsBusy = false; RefreshStatus(); }
     }
 
     private async Task RollbackAsync()
     {
+        LastOperationOutcome = OperationOutcome.Running;
         if (_service.IsTeklaRunning())
         {
             ResultMessage = "Сейчас запущена Tekla Structures. Закройте её и повторите.";
+            LastOperationOutcome = OperationOutcome.Rejected;
             return;
         }
         IsBusy = true;
@@ -132,6 +152,12 @@ public sealed class PatchingViewModel : ObservableObject
         {
             var r = await Task.Run(() => _service.Rollback(TeklaBin));
             ResultMessage = r.Message + (r.TechnicalDetails.Length > 0 ? "\n[detail] " + r.TechnicalDetails : "");
+            LastOperationOutcome = r.IsSuccess ? OperationOutcome.Succeeded : OperationOutcome.Failed;
+        }
+        catch
+        {
+            LastOperationOutcome = OperationOutcome.Failed;
+            throw;
         }
         finally { IsBusy = false; RefreshStatus(); }
     }

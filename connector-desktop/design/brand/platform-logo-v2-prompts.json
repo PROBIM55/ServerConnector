@@ -1,0 +1,23 @@
+{
+  "mode": "built-in image_gen",
+  "transparent_background": true,
+  "stage": "Concept geometry for review, not final approved vector identity",
+  "supersedes": "Rejected literal portal / plan / section SVG directions",
+  "prompts": [
+    {
+      "key": "shell",
+      "name": "Складчатая оболочка",
+      "prompt": "Use case: logo-brand. Create one original, high-end minimalist emblem for an architecture and structural engineering design workspace called Platform. Symbol only, absolutely no letters or text. Concept: a folded architectural shell: three broad angular planes interlock into a distinctive sculptural silhouette with a carefully formed central negative-space atrium. Sophisticated spatial intelligence and architectural construction logic, an interesting memorable silhouette rather than a generic monogram. Asymmetric but optically balanced, restrained geometric complexity: 3 broad solid pieces and 2 intentional negative-space joints, consistent mass and crisp chamfered edges. Flat vector-looking graphic, two solid colors ONLY: cool pale silver #C8D8E5 and muted steel blue #77B8DD. Clean precise edges, all shapes filled, no hairline strokes. One large centered isolated emblem occupying about 70 percent of a square canvas, transparent background. Identity quality of a leading architecture practice / professional CAD tool, distinctive and readable as a small app icon. Avoid: P letters, Cyrillic П, letter-shaped frames, generic cube logos, house-roof pictograms, bar-chart skylines, network nodes, circular AI swirl motifs, infinity loops, gradients, glow, drop shadow, metallic material, bevel rendering, textures, mockup boards, typography, watermarks. Richness must come from the geometry and negative space, not extra detail."
+    },
+    {
+      "key": "joint",
+      "name": "Пространственный узел",
+      "prompt": "Use case: logo-brand. One original sophisticated minimalist emblem for a professional architectural/BIM design platform. Symbol only, no lettering or text. Concept: a spatial construction joint, three thick precision-cut structural members joining around a clear central opening. An architecturally meaningful woven assembly using 60/120-degree geometry, with deliberate over/under interruptions built ONLY with crisp negative space. Strong uncommon silhouette, expressive carefully balanced geometric form, interesting enough to become an official long-term application identity. Visually coherent, compact, three solid elements maximum, meaningful negative-space cuts, no tiny detail, no decorative micro-lines. Flat graphic with TWO solid colors ONLY, pale cool silver #C8D8E5 and restrained steel blue #77B8DD. Large isolated centered emblem on transparent background, occupies 70 percent of a square canvas, meticulous vector-like contours. Should feel architect-designed and engineered, not a stock corporate logo. Avoid generic cube/hexagon badges, simple alphabet letters, house pictogram, neural-network diagrams, AI sparkle/star, flower/rosette, overlapping thin lines, glossy 3D, bevels, gradients, glows, shadows, text, product mockups or watermarks. The silhouette and the interaction of solid/void must create the sophistication."
+    },
+    {
+      "key": "space",
+      "name": "План и пространство",
+      "prompt": "Use case: logo-brand. Design a fresh original minimalist emblem for a workspace used by architects and structural engineers designing buildings and infrastructure. Symbol only, no words or letters. Concept: a plan becoming space, an architectural floorplate rises into a stepped spatial section. Two or three broad interlocking open surfaces organize a striking negative-space courtyard, giving a subtle feeling of depth using pure flat geometry, without photorealism. Distinctive editorial-quality symbol, not a literal house or building skyline. Carefully tuned proportions and unusual but quiet silhouette; each edge should be necessary, simple enough for an app icon at small sizes, more conceptually interesting than a basic monogram. Use a crisp two-color vector graphic: cool pale silver #C8D8E5 and muted steel blue #77B8DD. Isolated centered symbol at 70% of square canvas, transparent background, no text. Avoid P/П/C/E letter shapes, generic 3D cube, bar chart, clip-art roof, network nodes, AI swirl, infinity loop, ornamental complexity, rounded UI icon styling, thin strokes, gradients, glow, rendered metal, drop shadow, branding presentation boards, mockups and watermarks."
+    }
+  ]
+}

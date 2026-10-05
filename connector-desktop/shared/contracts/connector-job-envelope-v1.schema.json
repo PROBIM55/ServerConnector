@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://platform.local/schemas/connector-job-envelope-v1.json",
+  "title": "ConnectorJobEnvelopeV1",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "requestId",
+    "moduleId",
+    "provider",
+    "operation",
+    "payload",
+    "createdAtUtc"
+  ],
+  "properties": {
+    "schemaVersion": { "type": "integer", "const": 1 },
+    "requestId": { "type": "string", "minLength": 1 },
+    "moduleId": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+    "provider": { "type": "string", "enum": ["autocad", "tekla"] },
+    "operation": { "type": "string", "enum": ["build", "read", "apply", "rebuild", "export", "healthcheck"] },
+    "payload": { "type": "object" },
+    "createdAtUtc": { "type": "string", "format": "date-time" },
+    "correlationId": { "type": ["string", "null"] }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <LangVersion>10.0</LangVersion>
+    <Nullable>enable</Nullable>
+    <AssemblyName>Platform.Fachwerk.Geometry</AssemblyName>
+    <RootNamespace>Platform.Fachwerk.Geometry</RootNamespace>
+  </PropertyGroup>
+
+</Project>

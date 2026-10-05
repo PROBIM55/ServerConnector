@@ -1,0 +1,1396 @@
+{
+  "plan": {
+    "capabilities": {
+      "assembly": false,
+      "beam": false,
+      "bend": false,
+      "boltGroup": false,
+      "booleanPart": true,
+      "contourArcEdges": false,
+      "contourChamfer": false,
+      "contourPlate": false,
+      "developedPlate": true,
+      "developedPlatePolyBeamStationFrameV1": true,
+      "edgeChamfer": false,
+      "fitting": false,
+      "loftedPlate": false,
+      "polyBeam": true,
+      "polyBeamArcSegments": false,
+      "polygonWeld": false,
+      "reinforcement": false,
+      "roundHole": false,
+      "slottedHole": false,
+      "udaStamp": true,
+      "weld": false
+    },
+    "commands": [
+      {
+        "commandId": "element:flange:create-poly-beam",
+        "dependsOn": [],
+        "developedPlate": {
+          "developedContour": {
+            "edges": [
+              {
+                "endVertexId": "v1",
+                "id": "e0",
+                "kind": "line",
+                "startVertexId": "v0"
+              },
+              {
+                "endVertexId": "v2",
+                "id": "e1",
+                "kind": "line",
+                "startVertexId": "v1"
+              },
+              {
+                "endVertexId": "v3",
+                "id": "e2",
+                "kind": "line",
+                "startVertexId": "v2"
+              },
+              {
+                "endVertexId": "v4",
+                "id": "e3",
+                "kind": "line",
+                "startVertexId": "v3"
+              },
+              {
+                "endVertexId": "v5",
+                "id": "e4",
+                "kind": "line",
+                "startVertexId": "v4"
+              },
+              {
+                "endVertexId": "v0",
+                "id": "e5",
+                "kind": "line",
+                "startVertexId": "v5"
+              }
+            ],
+            "id": "development",
+            "vertices": [
+              {
+                "id": "v0",
+                "point": [
+                  0,
+                  -150
+                ]
+              },
+              {
+                "id": "v1",
+                "point": [
+                  1900,
+                  -150
+                ]
+              },
+              {
+                "id": "v2",
+                "point": [
+                  2000,
+                  -50
+                ]
+              },
+              {
+                "id": "v3",
+                "point": [
+                  2000,
+                  50
+                ]
+              },
+              {
+                "id": "v4",
+                "point": [
+                  1900,
+                  150
+                ]
+              },
+              {
+                "id": "v5",
+                "point": [
+                  0,
+                  150
+                ]
+              }
+            ]
+          },
+          "stationFrame": {
+            "stations": [
+              {
+                "frame": {
+                  "axisX": [
+                    0,
+                    1,
+                    0
+                  ],
+                  "axisY": [
+                    0,
+                    0,
+                    1
+                  ],
+                  "axisZ": [
+                    1,
+                    0,
+                    0
+                  ],
+                  "origin": [
+                    0,
+                    0,
+                    0
+                  ]
+                },
+                "id": "station0",
+                "spineNodeId": "n0",
+                "stationMm": 0
+              },
+              {
+                "frame": {
+                  "axisX": [
+                    0,
+                    1,
+                    0
+                  ],
+                  "axisY": [
+                    0,
+                    0,
+                    1
+                  ],
+                  "axisZ": [
+                    1,
+                    0,
+                    0
+                  ],
+                  "origin": [
+                    1000,
+                    0,
+                    0
+                  ]
+                },
+                "id": "station1",
+                "spineNodeId": "n1",
+                "stationMm": 1000
+              },
+              {
+                "frame": {
+                  "axisX": [
+                    0,
+                    1,
+                    0
+                  ],
+                  "axisY": [
+                    0,
+                    0,
+                    1
+                  ],
+                  "axisZ": [
+                    1,
+                    0,
+                    0
+                  ],
+                  "origin": [
+                    2000,
+                    0,
+                    0
+                  ]
+                },
+                "id": "station2",
+                "spineNodeId": "n2",
+                "stationMm": 2000
+              }
+            ],
+            "version": 1
+          },
+          "stockWidthMm": 300,
+          "thicknessMm": 20,
+          "transverseOffsetMm": 0
+        },
+        "kind": "create-poly-beam",
+        "material": {
+          "grade": "S355",
+          "id": "steel"
+        },
+        "owner": {
+          "entityId": "panel",
+          "moduleId": "bridge"
+        },
+        "ownership": {
+          "documentSourceHash": "input",
+          "generationId": "g",
+          "moduleId": "bridge",
+          "moduleVariantId": "v",
+          "namespace": "bimplatforma",
+          "revisionId": "rev",
+          "sourceId": "flange",
+          "sourceKind": "element",
+          "stableKey": "flange"
+        },
+        "path": {
+          "id": "spine",
+          "nodes": [
+            {
+              "id": "n0",
+              "point": [
+                0,
+                0,
+                0
+              ]
+            },
+            {
+              "id": "n1",
+              "point": [
+                1000,
+                0,
+                0
+              ]
+            },
+            {
+              "id": "n2",
+              "point": [
+                2000,
+                0,
+                0
+              ]
+            }
+          ],
+          "segments": [
+            {
+              "endNodeId": "n1",
+              "id": "s0",
+              "kind": "line",
+              "startNodeId": "n0"
+            },
+            {
+              "endNodeId": "n2",
+              "id": "s1",
+              "kind": "line",
+              "startNodeId": "n1"
+            }
+          ]
+        },
+        "phase": "base-parts",
+        "profile": {
+          "kind": "plate",
+          "thicknessMm": 20,
+          "widthMm": 300
+        },
+        "revisionProvenance": {
+          "adapterId": "test",
+          "adapterVersion": "1",
+          "revisionId": "rev",
+          "sourceHash": "input"
+        },
+        "source": {
+          "id": "flange",
+          "kind": "element",
+          "role": "flange",
+          "sourceLayer": "generated",
+          "stableKey": "flange"
+        }
+      },
+      {
+        "commandId": "element:flange:development-cut/e1",
+        "cutter": {
+          "contour": {
+            "edges": [
+              {
+                "endVertexId": "flange/development-cut/e1/vertex-2",
+                "id": "flange/development-cut/e1/edge-1",
+                "kind": "line",
+                "startVertexId": "flange/development-cut/e1/vertex-1"
+              },
+              {
+                "endVertexId": "flange/development-cut/e1/vertex-3",
+                "id": "flange/development-cut/e1/edge-2",
+                "kind": "line",
+                "startVertexId": "flange/development-cut/e1/vertex-2"
+              },
+              {
+                "endVertexId": "flange/development-cut/e1/vertex-1",
+                "id": "flange/development-cut/e1/edge-3",
+                "kind": "line",
+                "startVertexId": "flange/development-cut/e1/vertex-3"
+              }
+            ],
+            "id": "flange/development-cut/e1",
+            "vertices": [
+              {
+                "id": "flange/development-cut/e1/vertex-1",
+                "point": [
+                  1900,
+                  -150
+                ]
+              },
+              {
+                "id": "flange/development-cut/e1/vertex-2",
+                "point": [
+                  2000,
+                  -150
+                ]
+              },
+              {
+                "id": "flange/development-cut/e1/vertex-3",
+                "point": [
+                  2000,
+                  -50
+                ]
+              }
+            ]
+          },
+          "extrusionSide": "symmetric",
+          "kind": "through-contour",
+          "plane": {
+            "axisX": [
+              1,
+              0,
+              0
+            ],
+            "axisY": [
+              0,
+              1,
+              0
+            ],
+            "axisZ": [
+              0,
+              0,
+              1
+            ],
+            "origin": [
+              0,
+              0,
+              0
+            ]
+          },
+          "thicknessMm": 20
+        },
+        "dependsOn": [
+          "element:flange:create-poly-beam"
+        ],
+        "kind": "apply-boolean-cut",
+        "owner": {
+          "entityId": "panel",
+          "moduleId": "bridge"
+        },
+        "ownership": {
+          "documentSourceHash": "input",
+          "generationId": "g",
+          "moduleId": "bridge",
+          "moduleVariantId": "v",
+          "namespace": "bimplatforma",
+          "revisionId": "rev",
+          "sourceId": "flange",
+          "sourceKind": "element",
+          "stableKey": "flange"
+        },
+        "phase": "boolean-cuts",
+        "revisionProvenance": {
+          "adapterId": "test",
+          "adapterVersion": "1",
+          "revisionId": "rev",
+          "sourceHash": "input"
+        },
+        "source": {
+          "id": "flange",
+          "kind": "element",
+          "role": "flange",
+          "sourceLayer": "generated",
+          "stableKey": "flange"
+        },
+        "target": {
+          "elementId": "flange",
+          "role": "part"
+        }
+      },
+      {
+        "commandId": "element:flange:development-cut/e3",
+        "cutter": {
+          "contour": {
+            "edges": [
+              {
+                "endVertexId": "flange/development-cut/e3/vertex-2",
+                "id": "flange/development-cut/e3/edge-1",
+                "kind": "line",
+                "startVertexId": "flange/development-cut/e3/vertex-1"
+              },
+              {
+                "endVertexId": "flange/development-cut/e3/vertex-3",
+                "id": "flange/development-cut/e3/edge-2",
+                "kind": "line",
+                "startVertexId": "flange/development-cut/e3/vertex-2"
+              },
+              {
+                "endVertexId": "flange/development-cut/e3/vertex-1",
+                "id": "flange/development-cut/e3/edge-3",
+                "kind": "line",
+                "startVertexId": "flange/development-cut/e3/vertex-3"
+              }
+            ],
+            "id": "flange/development-cut/e3",
+            "vertices": [
+              {
+                "id": "flange/development-cut/e3/vertex-1",
+                "point": [
+                  2000,
+                  50
+                ]
+              },
+              {
+                "id": "flange/development-cut/e3/vertex-2",
+                "point": [
+                  2000,
+                  150
+                ]
+              },
+              {
+                "id": "flange/development-cut/e3/vertex-3",
+                "point": [
+                  1900,
+                  150
+                ]
+              }
+            ]
+          },
+          "extrusionSide": "symmetric",
+          "kind": "through-contour",
+          "plane": {
+            "axisX": [
+              1,
+              0,
+              0
+            ],
+            "axisY": [
+              0,
+              1,
+              0
+            ],
+            "axisZ": [
+              0,
+              0,
+              1
+            ],
+            "origin": [
+              0,
+              0,
+              0
+            ]
+          },
+          "thicknessMm": 20
+        },
+        "dependsOn": [
+          "element:flange:create-poly-beam"
+        ],
+        "kind": "apply-boolean-cut",
+        "owner": {
+          "entityId": "panel",
+          "moduleId": "bridge"
+        },
+        "ownership": {
+          "documentSourceHash": "input",
+          "generationId": "g",
+          "moduleId": "bridge",
+          "moduleVariantId": "v",
+          "namespace": "bimplatforma",
+          "revisionId": "rev",
+          "sourceId": "flange",
+          "sourceKind": "element",
+          "stableKey": "flange"
+        },
+        "phase": "boolean-cuts",
+        "revisionProvenance": {
+          "adapterId": "test",
+          "adapterVersion": "1",
+          "revisionId": "rev",
+          "sourceHash": "input"
+        },
+        "source": {
+          "id": "flange",
+          "kind": "element",
+          "role": "flange",
+          "sourceLayer": "generated",
+          "stableKey": "flange"
+        },
+        "target": {
+          "elementId": "flange",
+          "role": "part"
+        }
+      }
+    ],
+    "diagnostics": [],
+    "executable": true,
+    "mappings": [
+      {
+        "commandIds": [
+          "element:flange:create-poly-beam",
+          "element:flange:development-cut/e1",
+          "element:flange:development-cut/e3"
+        ],
+        "expectedNativeKinds": [
+          "PolyBeam",
+          "BooleanPart",
+          "BooleanPart"
+        ],
+        "ownershipStableKey": "flange",
+        "source": {
+          "id": "flange",
+          "kind": "element",
+          "role": "flange",
+          "sourceLayer": "generated",
+          "stableKey": "flange"
+        },
+        "strategy": "native-composite"
+      }
+    ],
+    "schemaVersion": 1,
+    "source": {
+      "address": {
+        "moduleId": "bridge",
+        "moduleVariantId": "v",
+        "projectId": "p",
+        "revisionId": "rev"
+      },
+      "constructiveContentHash": "sha256:d358cc92d43759f7b09b7cc439f46a04faaefc10826b86325371a7c499f5e61c",
+      "constructiveSchemaVersion": 1,
+      "generationId": "g",
+      "sourceHash": "input"
+    },
+    "target": {
+      "adapterId": "native",
+      "adapterVersion": "1",
+      "teklaVersion": "2025.0"
+    }
+  },
+  "rawFaces": [
+    {
+      "normal": {
+        "x": 0,
+        "y": -1,
+        "z": 0
+      },
+      "loops": [
+        [
+          {
+            "x": 0,
+            "y": -150,
+            "z": 10
+          },
+          {
+            "x": 0,
+            "y": -150,
+            "z": -10
+          },
+          {
+            "x": 2000,
+            "y": -150,
+            "z": -10
+          }
+        ]
+      ]
+    },
+    {
+      "normal": {
+        "x": 0,
+        "y": 0,
+        "z": -1
+      },
+      "loops": [
+        [
+          {
+            "x": 0,
+            "y": 150,
+            "z": -10
+          },
+          {
+            "x": 2000,
+            "y": -150,
+            "z": -10
+          },
+          {
+            "x": 0,
+            "y": -150,
+            "z": -10
+          }
+        ]
+      ]
+    },
+    {
+      "normal": {
+        "x": -1,
+        "y": 0,
+        "z": 0
+      },
+      "loops": [
+        [
+          {
+            "x": 0,
+            "y": -150,
+            "z": 10
+          },
+          {
+            "x": 0,
+            "y": 150,
+            "z": 10
+          },
+          {
+            "x": 0,
+            "y": -150,
+            "z": -10
+          }
+        ]
+      ]
+    },
+    {
+      "normal": {
+        "x": 0,
+        "y": 0,
+        "z": 1
+      },
+      "loops": [
+        [
+          {
+            "x": 0,
+            "y": 150,
+            "z": 10
+          },
+          {
+            "x": 0,
+            "y": -150,
+            "z": 10
+          },
+          {
+            "x": 2000,
+            "y": -150,
+            "z": 10
+          }
+        ]
+      ]
+    },
+    {
+      "normal": {
+        "x": -1,
+        "y": 0,
+        "z": 0
+      },
+      "loops": [
+        [
+          {
+            "x": 0,
+            "y": 150,
+            "z": 10
+          },
+          {
+            "x": 0,
+            "y": 150,
+            "z": -10
+          },
+          {
+            "x": 0,
+            "y": -150,
+            "z": -10
+          }
+        ]
+      ]
+    },
+    {
+      "normal": {
+        "x": 0,
+        "y": 1,
+        "z": 0
+      },
+      "loops": [
+        [
+          {
+            "x": 0,
+            "y": 150,
+            "z": 10
+          },
+          {
+            "x": 2000,
+            "y": 150,
+            "z": 10
+          },
+          {
+            "x": 0,
+            "y": 150,
+            "z": -10
+          }
+        ]
+      ]
+    },
+    {
+      "normal": {
+        "x": 1,
+        "y": 0,
+        "z": 0
+      },
+      "loops": [
+        [
+          {
+            "x": 2000,
+            "y": -150,
+            "z": 10
+          },
+          {
+            "x": 2000,
+            "y": -150,
+            "z": -10
+          },
+          {
+            "x": 2000,
+            "y": 150,
+            "z": -10
+          }
+        ]
+      ]
+    },
+    {
+      "normal": {
+        "x": 0,
+        "y": -1,
+        "z": 0
+      },
+      "loops": [
+        [
+          {
+            "x": 2000,
+            "y": -150,
+            "z": 10
+          },
+          {
+            "x": 0,
+            "y": -150,
+            "z": 10
+          },
+          {
+            "x": 2000,
+            "y": -150,
+            "z": -10
+          }
+        ]
+      ]
+    },
+    {
+      "normal": {
+        "x": 0,
+        "y": 0,
+        "z": -1
+      },
+      "loops": [
+        [
+          {
+            "x": 2000,
+            "y": 150,
+            "z": -10
+          },
+          {
+            "x": 2000,
+            "y": -150,
+            "z": -10
+          },
+          {
+            "x": 0,
+            "y": 150,
+            "z": -10
+          }
+        ]
+      ]
+    },
+    {
+      "normal": {
+        "x": 0,
+        "y": 1,
+        "z": 0
+      },
+      "loops": [
+        [
+          {
+            "x": 2000,
+            "y": 150,
+            "z": 10
+          },
+          {
+            "x": 2000,
+            "y": 150,
+            "z": -10
+          },
+          {
+            "x": 0,
+            "y": 150,
+            "z": -10
+          }
+        ]
+      ]
+    },
+    {
+      "normal": {
+        "x": 0,
+        "y": 0,
+        "z": 1
+      },
+      "loops": [
+        [
+          {
+            "x": 2000,
+            "y": 150,
+            "z": 10
+          },
+          {
+            "x": 0,
+            "y": 150,
+            "z": 10
+          },
+          {
+            "x": 2000,
+            "y": -150,
+            "z": 10
+          }
+        ]
+      ]
+    },
+    {
+      "normal": {
+        "x": 1,
+        "y": 0,
+        "z": 0
+      },
+      "loops": [
+        [
+          {
+            "x": 2000,
+            "y": 150,
+            "z": 10
+          },
+          {
+            "x": 2000,
+            "y": -150,
+            "z": 10
+          },
+          {
+            "x": 2000,
+            "y": 150,
+            "z": -10
+          }
+        ]
+      ]
+    }
+  ],
+  "finalFaces": [
+    {
+      "normal": {
+        "x": 0,
+        "y": 0,
+        "z": -1
+      },
+      "loops": [
+        [
+          {
+            "x": 0,
+            "y": -150,
+            "z": -10
+          },
+          {
+            "x": 0,
+            "y": 150,
+            "z": -10
+          },
+          {
+            "x": 1900,
+            "y": -150,
+            "z": -10
+          }
+        ]
+      ]
+    },
+    {
+      "normal": {
+        "x": -1,
+        "y": 0,
+        "z": 0
+      },
+      "loops": [
+        [
+          {
+            "x": 0,
+            "y": -150,
+            "z": -10
+          },
+          {
+            "x": 0,
+            "y": -150,
+            "z": 10
+          },
+          {
+            "x": 0,
+            "y": 150,
+            "z": 10
+          }
+        ]
+      ]
+    },
+    {
+      "normal": {
+        "x": 0,
+        "y": -1,
+        "z": 0
+      },
+      "loops": [
+        [
+          {
+            "x": 0,
+            "y": -150,
+            "z": -10
+          },
+          {
+            "x": 1900,
+            "y": -150,
+            "z": 10
+          },
+          {
+            "x": 0,
+            "y": -150,
+            "z": 10
+          }
+        ]
+      ]
+    },
+    {
+      "normal": {
+        "x": 0,
+        "y": 0,
+        "z": 1
+      },
+      "loops": [
+        [
+          {
+            "x": 0,
+            "y": -150,
+            "z": 10
+          },
+          {
+            "x": 2000,
+            "y": -50,
+            "z": 10
+          },
+          {
+            "x": 0,
+            "y": 150,
+            "z": 10
+          }
+        ]
+      ]
+    },
+    {
+      "normal": {
+        "x": -1,
+        "y": 0,
+        "z": 0
+      },
+      "loops": [
+        [
+          {
+            "x": 0,
+            "y": -150,
+            "z": -10
+          },
+          {
+            "x": 0,
+            "y": 150,
+            "z": 10
+          },
+          {
+            "x": 0,
+            "y": 150,
+            "z": -10
+          }
+        ]
+      ]
+    },
+    {
+      "normal": {
+        "x": 0,
+        "y": 1,
+        "z": 0
+      },
+      "loops": [
+        [
+          {
+            "x": 0,
+            "y": 150,
+            "z": -10
+          },
+          {
+            "x": 0,
+            "y": 150,
+            "z": 10
+          },
+          {
+            "x": 1900,
+            "y": 150,
+            "z": -10
+          }
+        ]
+      ]
+    },
+    {
+      "normal": {
+        "x": 0,
+        "y": -1,
+        "z": 0
+      },
+      "loops": [
+        [
+          {
+            "x": 0,
+            "y": -150,
+            "z": -10
+          },
+          {
+            "x": 1900,
+            "y": -150,
+            "z": -10
+          },
+          {
+            "x": 1900,
+            "y": -150,
+            "z": 10
+          }
+        ]
+      ]
+    },
+    {
+      "normal": {
+        "x": 0,
+        "y": 0,
+        "z": -1
+      },
+      "loops": [
+        [
+          {
+            "x": 1900,
+            "y": -150,
+            "z": -10
+          },
+          {
+            "x": 2000,
+            "y": 50,
+            "z": -10
+          },
+          {
+            "x": 2000,
+            "y": -50,
+            "z": -10
+          }
+        ]
+      ]
+    },
+    {
+      "normal": {
+        "x": 0,
+        "y": 0,
+        "z": 1
+      },
+      "loops": [
+        [
+          {
+            "x": 0,
+            "y": -150,
+            "z": 10
+          },
+          {
+            "x": 1900,
+            "y": -150,
+            "z": 10
+          },
+          {
+            "x": 2000,
+            "y": -50,
+            "z": 10
+          }
+        ]
+      ]
+    },
+    {
+      "normal": {
+        "x": 1,
+        "y": 0,
+        "z": 0
+      },
+      "loops": [
+        [
+          {
+            "x": 2000,
+            "y": -50,
+            "z": -10
+          },
+          {
+            "x": 2000,
+            "y": 50,
+            "z": 10
+          },
+          {
+            "x": 2000,
+            "y": -50,
+            "z": 10
+          }
+        ]
+      ]
+    },
+    {
+      "normal": {
+        "x": 0,
+        "y": 0,
+        "z": -1
+      },
+      "loops": [
+        [
+          {
+            "x": 0,
+            "y": 150,
+            "z": -10
+          },
+          {
+            "x": 1900,
+            "y": 150,
+            "z": -10
+          },
+          {
+            "x": 1900,
+            "y": -150,
+            "z": -10
+          }
+        ]
+      ]
+    },
+    {
+      "normal": {
+        "x": 0,
+        "y": 0,
+        "z": -1
+      },
+      "loops": [
+        [
+          {
+            "x": 1900,
+            "y": -150,
+            "z": -10
+          },
+          {
+            "x": 1900,
+            "y": 150,
+            "z": -10
+          },
+          {
+            "x": 2000,
+            "y": 50,
+            "z": -10
+          }
+        ]
+      ]
+    },
+    {
+      "normal": {
+        "x": 1,
+        "y": 0,
+        "z": 0
+      },
+      "loops": [
+        [
+          {
+            "x": 2000,
+            "y": -50,
+            "z": -10
+          },
+          {
+            "x": 2000,
+            "y": 50,
+            "z": -10
+          },
+          {
+            "x": 2000,
+            "y": 50,
+            "z": 10
+          }
+        ]
+      ]
+    },
+    {
+      "normal": {
+        "x": 0,
+        "y": 0,
+        "z": 1
+      },
+      "loops": [
+        [
+          {
+            "x": 0,
+            "y": 150,
+            "z": 10
+          },
+          {
+            "x": 2000,
+            "y": -50,
+            "z": 10
+          },
+          {
+            "x": 2000,
+            "y": 50,
+            "z": 10
+          }
+        ]
+      ]
+    },
+    {
+      "normal": {
+        "x": 0,
+        "y": 1,
+        "z": 0
+      },
+      "loops": [
+        [
+          {
+            "x": 0,
+            "y": 150,
+            "z": 10
+          },
+          {
+            "x": 1900,
+            "y": 150,
+            "z": 10
+          },
+          {
+            "x": 1900,
+            "y": 150,
+            "z": -10
+          }
+        ]
+      ]
+    },
+    {
+      "normal": {
+        "x": 0,
+        "y": 0,
+        "z": 1
+      },
+      "loops": [
+        [
+          {
+            "x": 0,
+            "y": 150,
+            "z": 10
+          },
+          {
+            "x": 2000,
+            "y": 50,
+            "z": 10
+          },
+          {
+            "x": 1900,
+            "y": 150,
+            "z": 10
+          }
+        ]
+      ]
+    },
+    {
+      "normal": {
+        "x": 0.7071067811865475,
+        "y": -0.7071067811865475,
+        "z": 0
+      },
+      "loops": [
+        [
+          {
+            "x": 1900,
+            "y": -150,
+            "z": -10
+          },
+          {
+            "x": 2000,
+            "y": -50,
+            "z": -10
+          },
+          {
+            "x": 2000,
+            "y": -50,
+            "z": 10
+          }
+        ]
+      ]
+    },
+    {
+      "normal": {
+        "x": 0.7071067811865475,
+        "y": -0.7071067811865475,
+        "z": 0
+      },
+      "loops": [
+        [
+          {
+            "x": 1900,
+            "y": -150,
+            "z": -10
+          },
+          {
+            "x": 2000,
+            "y": -50,
+            "z": 10
+          },
+          {
+            "x": 1900,
+            "y": -150,
+            "z": 10
+          }
+        ]
+      ]
+    },
+    {
+      "normal": {
+        "x": 0.7071067811865475,
+        "y": 0.7071067811865475,
+        "z": 0
+      },
+      "loops": [
+        [
+          {
+            "x": 2000,
+            "y": 50,
+            "z": -10
+          },
+          {
+            "x": 1900,
+            "y": 150,
+            "z": -10
+          },
+          {
+            "x": 1900,
+            "y": 150,
+            "z": 10
+          }
+        ]
+      ]
+    },
+    {
+      "normal": {
+        "x": 0.7071067811865475,
+        "y": 0.7071067811865475,
+        "z": 0
+      },
+      "loops": [
+        [
+          {
+            "x": 2000,
+            "y": 50,
+            "z": 10
+          },
+          {
+            "x": 2000,
+            "y": 50,
+            "z": -10
+          },
+          {
+            "x": 1900,
+            "y": 150,
+            "z": 10
+          }
+        ]
+      ]
+    }
+  ]
+}

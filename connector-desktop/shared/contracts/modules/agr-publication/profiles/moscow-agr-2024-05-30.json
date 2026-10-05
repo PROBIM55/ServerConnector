@@ -1,0 +1,70 @@
+{
+  "id": "moscow-agr/2024-05-30",
+  "title": "Требования АГР с изменениями от 30.05.2024",
+  "maturity": "transcribed",
+  "sources": [
+    {
+      "id": "provided-requirements-2024-05-30",
+      "title": "Предоставленное распоряжение с требованиями к НПМ и ВПМ",
+      "effectiveDate": "2024-05-30",
+      "notes": "Архивный профиль для воспроизведения ранее выданных требований."
+    }
+  ],
+  "fbxFormatVersion": "7.4",
+  "fbxCompatibilityVersion": "2014",
+  "metersPerUnit": 1,
+  "allowedShaders": ["standard-legacy", "principled-bsdf"],
+  "lowPoly": {
+    "archiveMaxBytes": 1000000000,
+    "minOksFiles": 1,
+    "maxOksFiles": 20,
+    "requiredGroundFiles": 1,
+    "oksTriangleMax": 150000,
+    "groundTriangleMax": 180000,
+    "maxTransparentMaterials": 7,
+    "maxGeometryObjects": 40,
+    "maxOpaqueGeometryObjects": 20,
+    "maxTransparentGeometryObjects": 20,
+    "maxOksTextureSets": 1,
+    "maxGroundTextureSets": 22,
+    "minGroundTextureDensityPxPerSquareMeter": 10,
+    "maxGroundTextureDensityPxPerSquareMeter": 40,
+    "requiredTextureKinds": ["diffuse"],
+    "texture": {
+      "allowedDimensions": [128, 256, 512, 1024, 2048],
+      "allowAlpha": false,
+      "minPaddingByDimension": { "128": 8, "256": 8, "512": 8, "1024": 8, "2048": 8 },
+      "storage": "embedded"
+    }
+  },
+  "highPoly": {
+    "oksArchiveMaxBytes": 500000000,
+    "groundArchiveMaxBytes": 500000000,
+    "oksTriangleMax": 2000000,
+    "groundTriangleBands": [
+      { "maxAreaHa": null, "maxTriangles": 2000000 }
+    ],
+    "maxMaterialsPerGeometry": 7,
+    "minTextureFiles": 3,
+    "maxTextureFiles": 2100,
+    "minTexelDensityPxPerMeter": 512,
+    "maxTexelDensityPxPerMeter": 1706,
+    "maxUdimTilesPerMaterial": 100,
+    "udimTileMin": 1001,
+    "udimTileMax": 1100,
+    "requiredTextureKinds": ["diffuse", "erm", "normal"],
+    "texture": {
+      "allowedDimensions": [2048, 4096],
+      "allowAlpha": true,
+      "bitsPerChannel": 8,
+      "minPaddingByDimension": { "2048": 16, "4096": 32 },
+      "storage": "external"
+    },
+    "collision": {
+      "smallModelTriangleThreshold": 50000,
+      "smallModelTriangleMax": 15000,
+      "largeModelRatio": 0.05
+    },
+    "maxLightingObjects": 50
+  }
+}

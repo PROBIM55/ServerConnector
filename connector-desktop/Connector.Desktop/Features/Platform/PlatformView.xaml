@@ -1,0 +1,39 @@
+<UserControl x:Class="Connector.Desktop.Features.Platform.PlatformView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Background="Transparent">
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <Border Style="{StaticResource CardStyle}" Margin="12,10,12,12">
+            <StackPanel>
+                <TextBlock Text="Подключение к Platform" FontSize="19" FontWeight="SemiBold" />
+                <TextBlock Text="Подключение к bimplatforma.ru выполняется только по кнопке. Токен Platform отделён от токена Structura Connector."
+                           Margin="0,6,0,14" Foreground="#A9BBD3" TextWrapping="Wrap" />
+                <Grid Margin="0,0,0,14">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="150"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                    <Label Content="Токен Platform" VerticalAlignment="Center" />
+                    <PasswordBox x:Name="PlatformTokenPasswordBox" Grid.Column="1" PasswordChanged="TokenChanged" />
+                </Grid>
+                <WrapPanel Margin="0,0,0,14">
+                    <Button Style="{StaticResource SecondaryButton}" Content="Импортировать прежние настройки" Command="{Binding ImportSettingsCommand}" />
+                    <Button Style="{StaticResource PrimaryButton}" Command="{Binding ConnectCommand}">
+                        <TextBlock Text="Подключить" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                    </Button>
+                    <Button Style="{StaticResource DangerButton}" Content="Отключить" Command="{Binding DisconnectCommand}" />
+                </WrapPanel>
+                <Expander Header="Расширенные параметры подключения" Margin="0,0,0,14">
+                    <Grid Margin="0,10,0,0">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="150"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                        <Label Content="URL Platform" VerticalAlignment="Center" />
+                        <TextBox Grid.Column="1" Text="{Binding ServerUrl, UpdateSourceTrigger=PropertyChanged}" />
+                    </Grid>
+                </Expander>
+                <TextBlock Text="Статус подключения" FontWeight="SemiBold" />
+                <TextBlock Text="{Binding RuntimeStatus}" Foreground="#A9BBD3" Margin="0,4,0,10" TextWrapping="Wrap" />
+                <TextBlock Text="Состояние задания" FontWeight="SemiBold" />
+                <TextBlock Text="{Binding JobStatus}" Foreground="#A9BBD3" Margin="0,4,0,10" TextWrapping="Wrap" />
+                <TextBlock Text="Защита обновления" FontWeight="SemiBold" />
+                <TextBlock Text="{Binding RestartBlockReason}" Foreground="#A9BBD3" Margin="0,4,0,0" TextWrapping="Wrap" />
+            </StackPanel>
+        </Border>
+    </ScrollViewer>
+</UserControl>

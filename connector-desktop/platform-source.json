@@ -1,0 +1,6 @@
+{
+  "repository": "https://github.com/PROBIM55/platform",
+  "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+  "role": "Historical import provenance only; local sources are authoritative and this repository builds without the Platform checkout",
+  "manifest": "source-provenance.json"
+}

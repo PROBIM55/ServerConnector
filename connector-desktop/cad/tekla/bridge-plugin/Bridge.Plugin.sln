@@ -1,0 +1,62 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{987E3549-874F-442D-AE8C-9721028BF52E}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TeklaBridge", "src\TeklaBridge\TeklaBridge.csproj", "{0B5D1443-1A99-4444-8270-398B37B8A6A4}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BridgeGirderPlugin", "src\BridgeGirderPlugin\BridgeGirderPlugin.csproj", "{361A11AF-02B7-4635-9823-7D675A7B08EF}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BridgeMvpPlugin", "src\BridgeMvpPlugin\BridgeMvpPlugin.csproj", "{A1B2C3D4-5E6F-7081-92A3-B4C5D6E7F801}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CrossMemberPlugin", "src\CrossMemberPlugin\CrossMemberPlugin.csproj", "{CC7CF048-6F95-455E-88E2-D0AAE23D13F9}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FachwerkColumnPlugin", "src\FachwerkColumnPlugin\FachwerkColumnPlugin.csproj", "{6FEF95B1-92B4-4F97-91E8-8A664EAA1776}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ControlledNumberingTool", "src\ControlledNumberingTool\ControlledNumberingTool.csproj", "{29CBD224-60EE-45BE-9EB9-C552B0707E34}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{0B5D1443-1A99-4444-8270-398B37B8A6A4}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0B5D1443-1A99-4444-8270-398B37B8A6A4}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0B5D1443-1A99-4444-8270-398B37B8A6A4}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0B5D1443-1A99-4444-8270-398B37B8A6A4}.Release|Any CPU.Build.0 = Release|Any CPU
+		{361A11AF-02B7-4635-9823-7D675A7B08EF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{361A11AF-02B7-4635-9823-7D675A7B08EF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{361A11AF-02B7-4635-9823-7D675A7B08EF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{361A11AF-02B7-4635-9823-7D675A7B08EF}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A1B2C3D4-5E6F-7081-92A3-B4C5D6E7F801}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A1B2C3D4-5E6F-7081-92A3-B4C5D6E7F801}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A1B2C3D4-5E6F-7081-92A3-B4C5D6E7F801}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A1B2C3D4-5E6F-7081-92A3-B4C5D6E7F801}.Release|Any CPU.Build.0 = Release|Any CPU
+		{CC7CF048-6F95-455E-88E2-D0AAE23D13F9}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{CC7CF048-6F95-455E-88E2-D0AAE23D13F9}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{CC7CF048-6F95-455E-88E2-D0AAE23D13F9}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{CC7CF048-6F95-455E-88E2-D0AAE23D13F9}.Release|Any CPU.Build.0 = Release|Any CPU
+		{6FEF95B1-92B4-4F97-91E8-8A664EAA1776}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6FEF95B1-92B4-4F97-91E8-8A664EAA1776}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6FEF95B1-92B4-4F97-91E8-8A664EAA1776}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6FEF95B1-92B4-4F97-91E8-8A664EAA1776}.Release|Any CPU.Build.0 = Release|Any CPU
+		{29CBD224-60EE-45BE-9EB9-C552B0707E34}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{29CBD224-60EE-45BE-9EB9-C552B0707E34}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{29CBD224-60EE-45BE-9EB9-C552B0707E34}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{29CBD224-60EE-45BE-9EB9-C552B0707E34}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{0B5D1443-1A99-4444-8270-398B37B8A6A4} = {987E3549-874F-442D-AE8C-9721028BF52E}
+		{361A11AF-02B7-4635-9823-7D675A7B08EF} = {987E3549-874F-442D-AE8C-9721028BF52E}
+		{A1B2C3D4-5E6F-7081-92A3-B4C5D6E7F801} = {987E3549-874F-442D-AE8C-9721028BF52E}
+		{CC7CF048-6F95-455E-88E2-D0AAE23D13F9} = {987E3549-874F-442D-AE8C-9721028BF52E}
+		{6FEF95B1-92B4-4F97-91E8-8A664EAA1776} = {987E3549-874F-442D-AE8C-9721028BF52E}
+		{29CBD224-60EE-45BE-9EB9-C552B0707E34} = {987E3549-874F-442D-AE8C-9721028BF52E}
+	EndGlobalSection
+EndGlobal

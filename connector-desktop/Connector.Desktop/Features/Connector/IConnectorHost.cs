@@ -3,6 +3,45 @@ using Connector.Desktop.Models;
 
 namespace Connector.Desktop.Features.Connector;
 
+// Only non-secret native selections cross the Graphite boundary. Empty paths
+// mean "keep the saved value"; passwords and tokens never enter this DTO.
+public sealed record DesktopPreferences(
+    string? TeklaFirmLocalPath,
+    string? TeklaExtensionsLocalPath,
+    string? TeklaLibrariesLocalPath,
+    string? ModelSharingTeklaBin,
+    string? IfcPatchingTeklaBin,
+    string? IfcPatchingStagingDir,
+    bool? AutoStart,
+    int? HeartbeatSeconds,
+    string? ConverterOutputDirectory = null,
+    string? TeklaPublishSourcePath = null,
+    string? TeklaExtensionsPublishSourcePath = null,
+    string? TeklaLibrariesPublishSourcePath = null);
+
+// IPC carries only target selection and the publication comment. Native source
+// paths stay in AppSettings and are resolved by the existing Tekla publisher.
+public sealed record TeklaPublicationRequest(
+    bool PublishFirm,
+    bool PublishExtensions,
+    bool PublishLibraries,
+    string Comment);
+
+// Native-only actions exposed to the Graphite boundary. Implementations must keep
+// download and apply separate: applying an update remains the existing drain path.
+public enum DesktopSupportAction
+{
+    DownloadPendingUpdate,
+    ShowReleaseNotes,
+    OpenApplicationJournal,
+    ClearApplicationJournal,
+    ExportDiagnostics,
+    OpenLogFolder,
+    SyncTeklaFirm,
+    SyncTeklaExtensions,
+    SyncTeklaLibraries
+}
+
 // The seam between the lifted "Коннектор" TAB (ConnectorView — the login/heartbeat front-end) and the shell
 // (MainWindow). UNLIKE the Стандарт migration, the ENGINE STAYS in MainWindow: ConnectByTokenInternalAsync,
 // SendHeartbeatSafeAsync, Timer_Tick, the heartbeat/update timers, CheckUpdatesAsync, InstallPendingUpdateAsync,
@@ -11,6 +50,31 @@ namespace Connector.Desktop.Features.Connector;
 // MainWindow implements it. Keep this surface MINIMAL — exactly what the moved handlers touch.
 public interface IConnectorHost
 {
+    // Read only: a completed connect Task alone is not proof of a live session.
+    bool IsConnected => false;
+    bool CanControlBackgroundConnection => false;
+    Task StartBackgroundConnectionAsync(CancellationToken cancellationToken) =>
+        Task.FromException(new NotSupportedException("Фоновое подключение недоступно."));
+    Task StopBackgroundConnectionAsync(CancellationToken cancellationToken) =>
+        Task.FromException(new NotSupportedException("Приостановка подключения недоступна."));
+    Task DisconnectAsync() => Task.FromException(new NotSupportedException("Отключение недоступно."));
+    Task SavePreferencesAsync(bool autoStart, int heartbeatSeconds) =>
+        Task.FromException(new NotSupportedException("Сохранение настроек недоступно."));
+    Task SaveDesktopPreferencesAsync(DesktopPreferences preferences) =>
+        Task.FromException(new NotSupportedException("Сохранение native-настроек недоступно."));
+    bool CanPublishTekla => false;
+    Task ValidateTeklaPublicationAsync(TeklaPublicationRequest request, CancellationToken cancellationToken) =>
+        Task.FromException(new NotSupportedException("Проверка публикации Tekla недоступна."));
+    Task PublishTeklaAsync(TeklaPublicationRequest request, CancellationToken cancellationToken) =>
+        Task.FromException(new NotSupportedException("Публикация Tekla недоступна."));
+    Task EnsureVpnReadyAsync() =>
+        Task.FromException(new NotSupportedException("Подготовка VPN недоступна."));
+    Task MountVpnShareAsync(string drive) =>
+        Task.FromException(new NotSupportedException("Подключение общей папки недоступно."));
+    Task UnmountVpnShareAsync(string drive) =>
+        Task.FromException(new NotSupportedException("Отключение общей папки недоступно."));
+    Task ExecuteSupportActionAsync(DesktopSupportAction action, CancellationToken cancellationToken) =>
+        Task.FromException(new NotSupportedException($"Native-действие {action} недоступно."));
     // ===== Engine entry points the moved handlers invoke (the engine itself is unchanged) =================
 
     // The login/heartbeat SPINE. ConnectByToken_Click calls this. Satisfied by: MainWindow's
