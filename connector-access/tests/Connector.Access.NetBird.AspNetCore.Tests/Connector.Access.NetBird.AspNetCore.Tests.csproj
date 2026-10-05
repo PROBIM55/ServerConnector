@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.0" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.8.0" />
+    <PackageReference Include="xunit" Version="2.5.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.5.3" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Connector.Access.NetBird.AspNetCore\Connector.Access.NetBird.AspNetCore.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="..\..\migrations\sqlite\0001_device_access_enrollment.sql"
+          Link="migrations\0001_device_access_enrollment.sql"
+          CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\migrations\sqlite\0002_enrollment_recovery_and_provider_outbox.sql"
+          Link="migrations\0002_enrollment_recovery_and_provider_outbox.sql"
+          CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\migrations\sqlite\0003_provider_dispatch_fencing.sql"
+          Link="migrations\0003_provider_dispatch_fencing.sql"
+          CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+  <ItemGroup><Using Include="Xunit" /></ItemGroup>
+</Project>
