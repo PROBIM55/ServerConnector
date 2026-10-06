@@ -5,6 +5,7 @@ on:
     branches:
       - master
     paths:
+      - '.gitattributes'
       - 'connector-access/**'
       - 'connector-desktop/**'
       - 'connector/server/app.py'
@@ -17,6 +18,7 @@ on:
     branches:
       - master
     paths:
+      - '.gitattributes'
       - 'connector-access/**'
       - 'connector-desktop/**'
       - 'connector/server/app.py'
