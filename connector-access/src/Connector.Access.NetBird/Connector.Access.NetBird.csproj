@@ -4,7 +4,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <PackageId>Connector.Access.NetBird</PackageId>
-    <Version>0.2.7</Version>
+    <Version>0.2.8</Version>
     <Authors>Structura</Authors>
   </PropertyGroup>
   <ItemGroup>

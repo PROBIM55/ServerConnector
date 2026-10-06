@@ -11,6 +11,7 @@ public sealed class NetBirdOptions
     public TimeSpan MaximumPeerLastSeenAge { get; init; } = TimeSpan.FromMinutes(2);
     public TimeSpan ManagementRequestTimeout { get; init; } = TimeSpan.FromSeconds(15);
     public IReadOnlyList<NetBirdAccessBinding> AccessBindings { get; init; } = [];
+    public string? DnsDistributionGroupId { get; init; }
 
     internal ValidatedNetBirdOptions Validate()
     {
@@ -43,7 +44,13 @@ public sealed class NetBirdOptions
             throw new ArgumentOutOfRangeException(nameof(ManagementRequestTimeout));
         }
 
+        var dnsDistributionGroupId = string.IsNullOrWhiteSpace(DnsDistributionGroupId) ? null : DnsDistributionGroupId.Trim();
         var bindings = AccessBindings.Select(binding => binding.Validate()).ToArray();
+        if (dnsDistributionGroupId is not null && bindings.Any(binding =>
+                string.Equals(binding.DestinationGroupId, dnsDistributionGroupId, StringComparison.Ordinal)))
+        {
+            throw new ArgumentException("The DNS distribution group cannot be a NetBird traffic-policy destination.", nameof(DnsDistributionGroupId));
+        }
         return new ValidatedNetBirdOptions(
             new Uri(ManagementUri.AbsoluteUri.TrimEnd('/') + "/", UriKind.Absolute),
             AccessToken,
@@ -51,7 +58,8 @@ public sealed class NetBirdOptions
             checked((int)SetupKeyLifetime.TotalSeconds),
             MaximumPeerLastSeenAge,
             ManagementRequestTimeout,
-            bindings);
+            bindings,
+            dnsDistributionGroupId);
     }
 }
 
@@ -111,7 +119,8 @@ internal sealed record ValidatedNetBirdOptions(
     int SetupKeyLifetimeSeconds,
     TimeSpan MaximumPeerLastSeenAge,
     TimeSpan ManagementRequestTimeout,
-    IReadOnlyList<ValidatedNetBirdAccessBinding> AccessBindings);
+    IReadOnlyList<ValidatedNetBirdAccessBinding> AccessBindings,
+    string? DnsDistributionGroupId);
 
 internal sealed record ValidatedNetBirdAccessBinding(
     ConnectorProduct? Product,
