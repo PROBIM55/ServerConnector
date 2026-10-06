@@ -63,6 +63,8 @@ def main():
     cliRedirectURIs:
       - "http://localhost:53000/"
   reverseProxy:
+    trustedPeers:
+      - "{proxy_ip}/32"
     trustedHTTPProxies:
       - "{proxy_ip}/32"
   store:

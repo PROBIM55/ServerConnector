@@ -1,6 +1,7 @@
 # Сервер управления NetBird для Structura
 
-Состояние: подготовлен локальный Compose-пакет; production не менялся. При
+Состояние: 06.10.2026 сервер управления впервые запущен в приватном режиме;
+публичные маршруты и регистрация устройств ещё выключены. При
 проверке только на чтение 06.10.2026 на Linux VPS `structura-prod` NetBird
 отсутствовал, Traefik 2.11 обслуживал TCP 80/443 и наблюдал метки Docker через
 `bim_web`. За файлом `/dynamic.yml` следит отдельный файловый источник
@@ -35,8 +36,15 @@ Digest сверены с официальным Docker Hub 06.10.2026. Разм�
 схеме конфигурации исходного NetBird Server `v0.78.2`. Он создаёт три независимых
 криптографических секрета, `config.yaml` и `dashboard.env` вне Git, с режимами
 каталога `0700` и файлов `0600`. Скрипт не скачивает код, не запускает Compose и
-отказывается перезаписывать существующие файлы. Генерируйте runtime только после
-появления DNS и принятого плана окна запуска:
+отказывается перезаписывать существующие файлы. Решение 06.10.2026 заменяет прежнее
+требование ждать DNS перед любой подготовкой: runtime и loopback-only bootstrap
+можно выполнить заранее. Для этого сервер управления запускается с
+`NETBIRD_PUBLIC_ENABLED=false`, панель и подключение узлов выключены.
+Публичный запуск требует DNS, TLS и последующей сетевой приёмки.
+Проверенный IP Traefik задаётся отдельно в `trustedPeers` для gRPC и
+`trustedHTTPProxies` для HTTP: NetBird не должен доверять IP-заголовкам от
+произвольного отправителя. После смены IP контейнера Traefik эти значения
+нужно адресно обновить до подключения клиентов.
 
 ```bash
 repo=/opt/structura-netbird/source
@@ -46,7 +54,7 @@ sudo python3 "$repo/connector-desktop/infra/netbird/server/prepare-runtime.py" \
   --domain netbird.structura-most.ru --traefik-ip "$traefik_ip" \
   --stun-port 3479 --output-dir /etc/structura/netbird
 sudo stat -c '%a %n' /etc/structura/netbird /etc/structura/netbird/config.yaml /etc/structura/netbird/dashboard.env
-sudo grep -E 'exposedAddress|stunPorts|trustedHTTPProxies' /etc/structura/netbird/config.yaml
+sudo grep -E 'exposedAddress|stunPorts|trustedPeers|trustedHTTPProxies' /etc/structura/netbird/config.yaml
 ```
 
 Перед запуском `compose up` проверьте, что адреса и STUN-порт совпадают с DNS и
