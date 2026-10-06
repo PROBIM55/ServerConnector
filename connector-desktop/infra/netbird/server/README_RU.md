@@ -1,37 +1,38 @@
-# NetBird control plane для Structura
+# Сервер управления NetBird для Structura
 
 Состояние: подготовлен локальный Compose-пакет; production не менялся. При
-read-only проверке 06.10.2026 на Linux VPS `structura-prod` NetBird отсутствовал,
-Traefik 2.11 обслуживал TCP 80/443 и наблюдал Docker labels через `bim_web`.
-Отдельный file-provider следит за `/dynamic.yml`; этот пакет использует только
-Docker provider и не меняет конфигурацию Traefik.
+проверке только на чтение 06.10.2026 на Linux VPS `structura-prod` NetBird
+отсутствовал, Traefik 2.11 обслуживал TCP 80/443 и наблюдал метки Docker через
+`bim_web`. За файлом `/dynamic.yml` следит отдельный файловый источник
+конфигурации; этот пакет использует только источник Docker и не меняет настройки
+Traefik.
 
 ## Перед первым запуском
 
 Публичные A-записи `netbird.structura-most.ru` и
 `connector-access.structura-most.ru` через корпоративный DNS `192.168.100.1`
-пока отвечают NXDOMAIN. Запросите их добавление на `109.73.194.38` у владельца
-DNS зоны. Wildcard не нужен для базового control plane; он требуется только
-если отдельно включать необязательный NetBird Proxy. Proxy в этом пакете не
-включён.
+пока отвечают NXDOMAIN. Попросите владельца DNS-зоны добавить их на
+`109.73.194.38`. Подстановочная запись DNS не нужна для базового сервера
+управления; она требуется, только если отдельно включать необязательный NetBird
+Proxy. В этом пакете Proxy выключен.
 
 На Linux VPS UDP 3478 занят `nextcloud-talk-hpb` (TCP и UDP), менять его нельзя.
 UDP 3479 на момент проверки не имел слушателя, но UFW включён с политикой
-`deny incoming` и разрешает 3478, не 3479. До запуска владелец инфраструктуры
-должен отдельно разрешить входящий UDP 3479 в host/provider firewall и проверить
-его снаружи. Старые пользователи продолжают использовать текущий публичный SMB
-445 через Windows Connector.
+`deny incoming` и разрешает 3478, но не 3479. До запуска владелец инфраструктуры
+должен отдельно разрешить входящий UDP 3479 в брандмауэрах сервера и провайдера
+и проверить его извне. Старые пользователи продолжают использовать текущий
+публичный SMB 445 через Windows Connector.
 
 Свободно около 15 GB из 154 GB на Linux VPS. Образы закреплены по релизным
-тегам и manifest digest: NetBird Server `0.78.2`, Dashboard `v2.94.0`.
-Digest'ы сверены с официальным Docker Hub 06.10.2026. Логи ограничены Compose
-rotation; persistent SQLite/data volume создаётся отдельно и не удаляется при
-обычном `up` или `stop`.
+тегам и digest манифеста: NetBird Server `0.78.2`, Dashboard `v2.94.0`.
+Digest сверены с официальным Docker Hub 06.10.2026. Размер журналов ограничен
+ротацией Compose; постоянный том SQLite/данных создаётся отдельно и не удаляется
+при обычных командах `up` или `stop`.
 
 ## Защищённая подготовка конфигурации
 
-Скрипт `prepare-runtime.py` — небольшой renderer только подтверждённой схемы
-конфигурации upstream NetBird Server `v0.78.2`. Он создаёт три независимых
+Скрипт `prepare-runtime.py` — небольшой формирователь файлов по проверенной
+схеме конфигурации исходного NetBird Server `v0.78.2`. Он создаёт три независимых
 криптографических секрета, `config.yaml` и `dashboard.env` вне Git, с режимами
 каталога `0700` и файлов `0600`. Скрипт не скачивает код, не запускает Compose и
 отказывается перезаписывать существующие файлы. Генерируйте runtime только после
@@ -48,25 +49,28 @@ sudo stat -c '%a %n' /etc/structura/netbird /etc/structura/netbird/config.yaml /
 sudo grep -E 'exposedAddress|stunPorts|trustedHTTPProxies' /etc/structura/netbird/config.yaml
 ```
 
-Перед `compose up` проверьте, что адреса и STUN-порт совпадают с DNS и сетевым
-планом; секреты не выводите. Если runtime-файлы нужно заменить, сначала
+Перед запуском `compose up` проверьте, что адреса и STUN-порт совпадают с DNS и
+сетевым планом; не выводите секреты. Если файлы runtime нужно заменить, сначала
 согласуйте сохранение/ротацию состояния, затем вручную переместите старые файлы
 в защищённое хранилище. Не копируйте runtime конфигурацию в Git checkout.
 
-## Первичный owner bootstrap
+## Первичная настройка владельца
 
-Compose по умолчанию ставит `traefik.enable=false` на обоих сервисах: публичных
-Traefik routers нет. Management API временно опубликован только на
-`127.0.0.1:18080`; dashboard при bootstrap не запускается. Официальный
-NetBird v0.78.2 регистрирует unauthenticated `GET /api/instance` и `POST
-/api/setup`; второй создаёт первого owner только пока setup required. PAT
-выдаётся лишь при `NB_SETUP_PAT_ENABLED=true` и `create_pat:true`. Скрипт
-`bootstrap-owner.py` сначала проверяет статус, запрашивает пароль без echo,
-отправляет только локальный loopback API, сохраняет одноразовый однодневный PAT
-под root с режимом `0600`, затем проверяет `setup_required=false` и
-авторизованный `GET /api/users`. Он не печатает пароль, PAT или тело ответа.
+По умолчанию Compose задаёт обоим сервисам метку `traefik.enable=false`, поэтому
+публичных маршрутизаторов Traefik нет. На время начальной настройки API
+управления доступен только через `127.0.0.1:18080`; панель управления не
+запускается. В NetBird v0.78.2 запросы `GET /api/instance` и `POST /api/setup`
+не требуют аутентификации; второй создаёт первого владельца, только пока
+требуется настройка экземпляра. PAT выдаётся только при
+`NB_SETUP_PAT_ENABLED=true` и `create_pat:true`. Скрипт `bootstrap-owner.py`
+сначала проверяет состояние, запрашивает пароль без отображения, обращается
+только к локальному API, сохраняет одноразовый PAT со сроком действия один день
+в root-файл с режимом `0600`, затем проверяет `setup_required=false` и успешный
+аутентифицированный запрос `GET /api/users`. Пароль, PAT и тело ответа скрипт
+не выводит.
 
-Сначала поднимите только management с внешней публикацией выключенной. Это не
+Сначала поднимите только сервер управления, оставив внешнюю публикацию
+выключенной. Это не
 перезапускает соседние сервисы:
 
 ```bash
@@ -79,17 +83,17 @@ sudo python3 "$repo/connector-desktop/infra/netbird/server/bootstrap-owner.py"
 sudo stat -c '%a %n' /etc/structura/netbird/bootstrap-owner.pat
 ```
 
-При успехе `stat` должен показать `600`. Сохраните PAT в закрытый менеджер
-секретов, затем удалите локальную копию после подтверждённой передачи; токен
-истекает через сутки. Если скрипт сообщает, что setup уже завершён, он намеренно
-ничего не сбрасывает и не создаёт нового owner/PAT. Остановитесь и используйте
-существующую owner учётную запись. Если скрипт не смог сохранить PAT после
-успешного `/api/setup`, повторный вызов не восстановит его: owner уже создан,
-выпустите новый PAT после входа существующим owner.
+При успехе `stat` должен показать `600`. Сохраните PAT в защищённом хранилище
+секретов и удалите локальную копию после подтверждённой передачи; срок действия
+токена — одни сутки. Если скрипт сообщает, что настройка уже завершена, он ничего
+не сбрасывает и не создаёт нового владельца или PAT. Остановитесь и используйте
+существующую учётную запись владельца. Если после успешного `/api/setup` скрипт
+не смог сохранить PAT, повторный вызов его не восстановит: владелец уже создан,
+войдите под существующей учётной записью и выпустите новый PAT.
 
-Публичные routes включайте только после кода возврата 0 bootstrap скрипта и
-проверки его успешных instance/API проверок. В той же Compose project/volume
-выключите setup PAT и запустите оба сервиса с routes on:
+Публичные маршруты включайте только если скрипт настройки вернул код 0 и прошёл
+проверки состояния/API. В том же проекте и с тем же томом Compose выключите
+выдачу setup PAT и запустите оба сервиса с публичными маршрутами:
 
 ```bash
 sudo env NB_SETUP_PAT_ENABLED=false NETBIRD_PUBLIC_ENABLED=true \
@@ -97,16 +101,32 @@ sudo env NB_SETUP_PAT_ENABLED=false NETBIRD_PUBLIC_ENABLED=true \
   -f "$compose" up -d netbird-server dashboard
 ```
 
-Это пересоздаёт только NetBird services, не сбрасывает named volume, owner или
-публичный токен. Локальная петля `127.0.0.1:18080` остаётся ограниченной loopback;
-`/api/setup` снаружи после включения routes вернёт отказ `setup already
-completed`, поскольку первый owner уже есть, а PAT issuance выключен.
+Это пересоздаёт только службы NetBird и не сбрасывает именованный том,
+владельца или PAT. Локальный адрес `127.0.0.1:18080` остаётся доступен только
+с самого сервера;
+После включения маршрутов внешний запрос к `/api/setup` будет отклонён как
+`setup already completed`: первый владелец уже создан, а выдача PAT выключена.
+
+## Обязательная настройка политики доступа до подключения узлов
+
+В новом экземпляре NetBird создаётся начальная политика `All → All`, разрешающая
+обмен трафиком между всеми узлами. До создания первого ключа подключения и до
+регистрации любого узла владелец должен проверить политики и группы в панели
+управления или через API и отключить только эту начальную политику «все ко всем».
+Затем настройте необходимые группы, ограничительные политики доступа, маршруты и
+привязку шлюза, проверьте, что разрешённый доступ соответствует требуемому, а
+неразрешённый трафик блокируется. Нельзя считать, что провайдер NetBird настроит
+это автоматически: автоматическая конфигурация в данном пакете не реализована.
+До завершения этой проверки не выдавайте ключи и не подключайте клиентские или
+шлюзовые узлы. Это обязательное условие до фактического подключения клиентов.
+См. официальные рекомендации по
+[управлению доступом к сети](https://docs.netbird.io/manage/access-control/manage-network-access).
 
 ## Адресная выкладка
 
-Первый раз создайте отдельный checkout репозитория ServerConnector; последующие
-обновления забирают master только в этом checkout. Не используйте checkout
-`/root/structura`, который содержит основной Structura stack.
+При первом запуске создайте отдельную рабочую копию репозитория ServerConnector;
+последующие обновления выполняйте только в ней. Не используйте рабочую копию
+`/root/structura`, в которой находится основной стек Structura.
 
 ```bash
 sudo git clone --branch master --single-branch https://github.com/PROBIM55/ServerConnector.git /opt/structura-netbird/source
@@ -125,15 +145,16 @@ sudo docker compose --project-name structura-netbird --project-directory "$(dirn
 sudo docker compose --project-name structura-netbird --project-directory "$(dirname "$compose")" -f "$compose" pull netbird-server dashboard
 ```
 
-Then follow “Первичный owner bootstrap” before any public route is enabled. The
-infrastructure owner must add the narrowly scoped UDP 3479 allow rule and confirm
-it is reachable from the Internet before client enrollment. Compose only starts
-the named NetBird services; it does not restart Traefik, Nextcloud, or the rest
-of the stack. Traefik's running Docker provider reads the labels dynamically.
+Затем выполните раздел «Первичная настройка владельца» до включения любого
+публичного маршрута. До подключения клиентов владелец инфраструктуры должен
+добавить узкое правило, разрешающее UDP 3479, и проверить доступность порта из
+Интернета. Compose запускает только указанные службы NetBird и не перезапускает
+Traefik, Nextcloud или остальные службы. Работающий Docker provider Traefik
+динамически считывает метки контейнеров.
 
-## Smoke and rollback
+## Проверка и откат
 
-After `up`, inspect only this project and the public NetBird readiness endpoint:
+После `up` проверьте только этот проект и публичный адрес готовности NetBird:
 
 ```bash
 sudo docker compose --project-name structura-netbird --project-directory "$(dirname "$compose")" -f "$compose" ps
@@ -142,46 +163,49 @@ curl -fsS https://netbird.structura-most.ru/oauth2/.well-known/openid-configurat
 sudo ss -H -lun | grep ':3479'
 ```
 
-Sign in as the owner created by the loopback API, then enroll a test Windows peer
-and a Windows server gateway peer. Verify management connectivity,
-peer-to-peer or relay behavior, routing to the intended SMB destination, and
-access-policy revoke before enabling any client config. This service alone does
-not provide SMB authorization or a trusted Connector device issuer.
+Войдите под владельцем, созданным через локальный API, затем зарегистрируйте
+тестовый Windows-узел и Windows-узел-шлюз. Проверьте связь с сервером управления,
+прямое соединение между узлами или работу ретранслятора, маршрут к нужному
+SMB-ресурсу и отзыв политики доступа до включения любой конфигурации клиента.
+Сам по себе этот сервис не предоставляет авторизацию SMB и доверенный
+издатель сертификатов устройств Connector.
 
-For an initial rollback, stop only these two services and keep their data:
+Для первичного отката остановите только эти две службы, сохранив их данные:
 
 ```bash
 sudo docker compose --project-name structura-netbird --project-directory "$(dirname "$compose")" -f "$compose" stop netbird-server dashboard
 ```
 
-Do not use `down --volumes`; it deletes the persisted NetBird identity, peers,
-policies and database. No Caddy/Traefik restart is part of this runbook.
+Не используйте `down --volumes`: команда удалит сохранённые данные NetBird —
+идентификатор, узлы, политики и базу. Этот порядок действий не предусматривает
+перезапуск Caddy или Traefik.
 
-## Connector mTLS remains a separate gate
+## Для Connector mTLS требуется отдельный этап
 
-The Windows Connector API currently sits behind Caddy TLS termination. Initial
-one-time-token enrollment uses normal HTTPS without a client certificate; resume,
-recovery and registered-device API calls require a client certificate delivered
-by native Kestrel TLS. The implementation reads
-`HttpContext.Connection.GetClientCertificateAsync` and rejects forwarded
-`X-Client-Cert` headers. Caddy HTTP proxying therefore cannot carry the required
-identity.
+API Windows Connector сейчас находится за TLS-терминацией Caddy. Первичная
+регистрация по одноразовому токену использует обычный HTTPS без сертификата
+клиента; продолжение сессии, восстановление и запросы зарегистрированных
+устройств требуют сертификат клиента, переданный нативным TLS Kestrel. Реализация
+читает `HttpContext.Connection.GetClientCertificateAsync` и отклоняет заголовки
+`X-Client-Cert`, переданные через прокси. Поэтому HTTP-проксирование Caddy не
+может передать нужную идентичность.
 
-The path to preserve the existing public client port is a separate SNI hostname
-(`connector-access.structura-most.ru`) on Linux Traefik TCP/443 with TLS
-passthrough to a dedicated Kestrel mTLS listener on Windows. A small TCP relay
-container on `bim_web` can target that dedicated backend port while a Traefik
-Docker TCP router matches the hostname; the Windows listener must be restricted
-to the Linux proxy source. No such route/listener/firewall rule is installed or
-accepted yet. The hostname's public TLS certificate must terminate on Windows,
-with unattended renewal and the private key protected for the Platform process.
-DNS-01 automation needs access to the DNS provider API; HTTP-01 cannot be assumed
-because existing port 80/443 owners serve other products. The public HTTPS server
-certificate, the Connector device issuer CA and Authenticode package signing
-are three separate keys/trust chains. Code-signing purchase is not a requirement
-for Windows to trust a publicly issued HTTPS server certificate.
+Чтобы сохранить используемый клиентами публичный порт, выделите имя SNI
+(`connector-access.structura-most.ru`) и настройте на Linux Traefik TCP/443
+передачу TLS без терминации к отдельному mTLS listener Kestrel на Windows. Небольшой
+TCP relay контейнер в `bim_web` может направлять соединение на этот backend-порт,
+а TCP router Traefik выбирает его по имени. Доступ к Windows listener нужно
+ограничить IP-адресом Linux-прокси. Пока такой маршрут, listener и firewall rule
+не установлены и не приняты. Публичный TLS-сертификат этого имени должен
+завершаться на Windows; его обновление должно выполняться без оператора, а
+закрытый ключ должен быть защищён для процесса Platform. Для автоматизации
+DNS-01 необходим доступ к API DNS-провайдера. Нельзя заранее рассчитывать на
+HTTP-01, так как порты 80/443 обслуживают другие продукты. Публичный HTTPS
+сертификат сервера, CA для сертификатов устройств Connector и подпись пакета
+Authenticode — это три разных ключа и цепочки доверия. Для доверия Windows к
+публичному HTTPS-сертификату покупка сертификата code-sign не требуется.
 
-Until that route and renewal are accepted, leave
-`Connector.Desktop/connector-access.json` disabled and all production feed/API
-configuration unset. A public `:24443` listener is not a substitute for the
-requested port-443 client route.
+Пока маршрут и автоматическое обновление не проверены и не приняты, оставьте
+`Connector.Desktop/connector-access.json` выключенным, а настройки API и ленты
+обновлений production — не заполненными. Публичный listener `:24443` не заменяет
+маршрут клиентских запросов через порт 443.

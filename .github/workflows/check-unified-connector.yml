@@ -4,7 +4,6 @@ on:
   pull_request:
     branches:
       - master
-      - codex/unified-connector-release
     paths:
       - 'connector-access/**'
       - 'connector-desktop/**'
@@ -17,7 +16,6 @@ on:
   push:
     branches:
       - master
-      - codex/unified-connector-release
     paths:
       - 'connector-access/**'
       - 'connector-desktop/**'
