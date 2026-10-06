@@ -330,12 +330,15 @@ foreach ($protectedDirectory in @($packageDirectory, $helperPublishDirectory, $b
     [void](Assert-ProtectedOutputRoot $protectedDirectory)
 }
 
-$packageArgs = @(
-    '-PackVersion', $PackVersion, '-Channel', $Channel, '-FeedUrl', $feedUri.AbsoluteUri,
-    '-IfcWorkerPath', $workerPath, '-UpdateSigningKeyPemPath', $updateKey,
-    '-PackageOutputDir', $packageDirectory
-)
-& $script:BuildPackageUpdate @packageArgs
+$packageParameters = @{
+    PackVersion = $PackVersion
+    Channel = $Channel
+    FeedUrl = $feedUri.AbsoluteUri
+    IfcWorkerPath = $workerPath
+    UpdateSigningKeyPemPath = $updateKey
+    PackageOutputDir = $packageDirectory
+}
+& $script:BuildPackageUpdate @packageParameters
 if (!$?) { throw 'build_package_update.ps1 failed.' }
 
 $assetsPath = Join-Path $packageDirectory "assets.$Channel.json"
@@ -387,8 +390,8 @@ $signaturePath = Join-Path $manifestStageDirectory 'helper-release.sig'
 [void](Assert-ExistingRegularFile $manifestPath 'Signed helper release manifest')
 [void](Assert-ExistingRegularFile $signaturePath 'Detached helper release signature')
 
-# The manifest pins the protected stage copies; WiX consumes the original publish/package
-# paths. Confirm the three installer sources still have exactly those pinned bytes.
+# The manifest pins the protected stage copies; WiX consumes staged Setup.exe and
+# the original helper/caller publish paths. Confirm all inputs have the pinned bytes.
 if ((Get-Sha256 $stagedHelper) -cne (Get-Sha256 $helperExe) -or
     (Get-Sha256 $stagedSetup) -cne (Get-Sha256 $setupSource) -or
     (Get-Sha256 $bootstrapperExe) -cne $signedCallerHash -or
@@ -400,7 +403,7 @@ $wixProperties = @(
     "-p:ProductVersion=$InstallerVersion",
     "-p:BootstrapperPublishDir=$bootstrapperPublishDirectory",
     "-p:MachineHelperPublishDir=$helperPublishDirectory",
-    "-p:SetupExePath=$setupSource",
+    "-p:SetupExePath=$stagedSetup",
     "-p:HelperReleaseManifestPath=$manifestPath",
     "-p:HelperReleaseSignaturePath=$signaturePath",
     "-p:NetBirdMsiPath=$netBirdPath",
