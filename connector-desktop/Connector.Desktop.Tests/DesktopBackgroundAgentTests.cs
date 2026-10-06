@@ -154,6 +154,10 @@ public sealed class DesktopBackgroundAgentTests
         agent.Start(heartbeatEnabled: true);
         clock.Advance(TimeSpan.FromSeconds(1));
         await firstUpdate.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        // The callback signal can arrive before the scheduler finishes this
+        // tick and registers its next delay. Keep manual time and mode fixed
+        // until that delay exists so the next tick cannot be lost.
+        await clock.WaitForScheduledDelayAsync().WaitAsync(TimeSpan.FromSeconds(2));
         Assert.Equal((0, 1, 0), (heartbeatCount, updateCount, teklaSyncCount));
 
         legacyMode = true;
@@ -295,6 +299,7 @@ public sealed class DesktopBackgroundAgentTests
     {
         private readonly object _gate = new();
         private readonly List<Waiter> _waiters = new();
+        private TaskCompletionSource _delayRegistered = NewSignal();
         private DateTimeOffset _utcNow = DateTimeOffset.UnixEpoch;
 
         public DateTimeOffset UtcNow
@@ -314,10 +319,17 @@ public sealed class DesktopBackgroundAgentTests
             {
                 waiter.DueUtc = _utcNow + delay;
                 _waiters.Add(waiter);
+                _delayRegistered.TrySetResult();
             }
 
             _ = cancellationToken.Register(() => Cancel(waiter, cancellationToken));
             return waiter.Signal.Task;
+        }
+
+        public Task WaitForScheduledDelayAsync()
+        {
+            lock (_gate)
+                return _waiters.Count > 0 ? Task.CompletedTask : _delayRegistered.Task;
         }
 
         public void Advance(TimeSpan elapsed)
@@ -330,6 +342,7 @@ public sealed class DesktopBackgroundAgentTests
                 _utcNow += elapsed;
                 ready = _waiters.Where(item => item.DueUtc <= _utcNow).ToList();
                 foreach (var waiter in ready) _waiters.Remove(waiter);
+                if (_waiters.Count == 0) _delayRegistered = NewSignal();
             }
 
             foreach (var waiter in ready) waiter.Signal.TrySetResult();
@@ -337,7 +350,11 @@ public sealed class DesktopBackgroundAgentTests
 
         private void Cancel(Waiter waiter, CancellationToken cancellationToken)
         {
-            lock (_gate) _waiters.Remove(waiter);
+            lock (_gate)
+            {
+                if (_waiters.Remove(waiter) && _waiters.Count == 0)
+                    _delayRegistered = NewSignal();
+            }
             waiter.Signal.TrySetCanceled(cancellationToken);
         }
 
