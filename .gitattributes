@@ -1,2 +1,7 @@
 # Full upstream license texts are shipped byte-for-byte on every checkout.
 connector-desktop/Connector.Desktop/ThirdPartyLicenses/** -text
+
+# These files are checked against byte-level SHA-256 release trust pins.
+connector-desktop/scripts/netbird_windows_preflight.ps1 -text
+connector-desktop/scripts/verify_netbird_installer.ps1 -text
+connector-desktop/infra/netbird/v0.79.0-windows-x64.lock.json -text
