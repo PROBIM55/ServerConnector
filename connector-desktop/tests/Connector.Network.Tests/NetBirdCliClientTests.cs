@@ -251,21 +251,49 @@ public sealed class NetBirdCliClientTests : IDisposable
             "WindowsPowerShell", "v1.0", "powershell.exe");
         var script = Path.Combine(_root, "sleep.ps1");
         var pidFile = Path.Combine(_root, "child.pid");
+        var temporaryPidFile = Path.Combine(_root, "child.pid.tmp");
         File.WriteAllText(script,
-            "$PID | Set-Content -LiteralPath '" + pidFile.Replace("'", "''", StringComparison.Ordinal) +
-            "' -NoNewline\nStart-Sleep -Seconds 30\n");
+            "$PID | Set-Content -LiteralPath '" + temporaryPidFile.Replace("'", "''", StringComparison.Ordinal) +
+            "' -NoNewline\nMove-Item -LiteralPath '" + temporaryPidFile.Replace("'", "''", StringComparison.Ordinal) +
+            "' -Destination '" + pidFile.Replace("'", "''", StringComparison.Ordinal) +
+            "'\nStart-Sleep -Seconds 30\n");
         using var cancellation = new CancellationTokenSource();
         var runner = new NetBirdCommandRunner();
         var running = runner.RunAsync(powerShell, ["-NoProfile", "-File", script], null,
             TimeSpan.FromSeconds(40), cancellation.Token).AsTask();
 
-        Assert.True(SpinWait.SpinUntil(() => File.Exists(pidFile), TimeSpan.FromSeconds(5)),
-            "The owned child never started.");
-        var childPid = int.Parse(File.ReadAllText(pidFile), System.Globalization.CultureInfo.InvariantCulture);
+        int? childPid = null;
         try
         {
+            var startupTimer = Stopwatch.StartNew();
+            while (!File.Exists(pidFile) && !running.IsCompleted && startupTimer.Elapsed < TimeSpan.FromSeconds(20))
+                await Task.Delay(25);
+
+            Assert.True(File.Exists(pidFile), "The owned child never started before the bounded startup deadline.");
+            childPid = int.Parse(File.ReadAllText(pidFile), System.Globalization.CultureInfo.InvariantCulture);
             cancellation.Cancel();
             await Assert.ThrowsAnyAsync<OperationCanceledException>(() => running);
+            AssertOwnedChildExited(childPid.Value);
+        }
+        finally
+        {
+            cancellation.Cancel();
+            try
+            {
+                try { await running.WaitAsync(TimeSpan.FromSeconds(5)); }
+                catch (OperationCanceledException) { }
+            }
+            finally
+            {
+                if (childPid is int pid) TerminateOwnedChildIfRunning(pid);
+            }
+        }
+    }
+
+    private static void AssertOwnedChildExited(int childPid)
+    {
+        try
+        {
             using var child = Process.GetProcessById(childPid);
             Assert.True(child.WaitForExit(5000), "Cancellation left the owned child running.");
         }
@@ -273,15 +301,16 @@ public sealed class NetBirdCliClientTests : IDisposable
         {
             // Process.GetProcessById throws if the child already exited, which is the expected outcome.
         }
-        finally
+    }
+
+    private static void TerminateOwnedChildIfRunning(int childPid)
+    {
+        try
         {
-            try
-            {
-                using var child = Process.GetProcessById(childPid);
-                if (!child.HasExited) child.Kill(entireProcessTree: true);
-            }
-            catch (ArgumentException) { }
+            using var child = Process.GetProcessById(childPid);
+            if (!child.HasExited) child.Kill(entireProcessTree: true);
         }
+        catch (ArgumentException) { }
     }
 
     public void Dispose() => Directory.Delete(_root, true);

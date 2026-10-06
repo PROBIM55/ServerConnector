@@ -6,7 +6,7 @@
 
 Windows-продукт для удалённой работы с BIM-инфраструктурой. GitHub: `PROBIM55/ServerConnector`.
 
-> ⚠️ **Активная ветка — `master`, не `main`.** `main` на GitHub помечен как default, но содержит только Initial commit с голым README.md. Весь код, история релизов и теги (v1.0.1…v1.0.20) живут на `master`. После `git clone` сразу делать `git checkout master`.
+> **Активная и default-ветка — `master`** (проверено 06.10.2026). Старую ветку `main` не использовать как источник выпуска.
 
 Состоит из двух частей:
 
@@ -82,6 +82,13 @@ Managed firewall ports: `80, 443, 445, 1238, 3389`.
 
 ### 4a. Desktop клиент (MSI)
 
+Ниже описан сохранённый выпуск старого клиента. Единый Connector использует
+отдельный `.github/workflows/build-unified-connector-candidate.yml`: он создаёт
+кандидат, но сам не публикует выпуск и не меняет legacy feed. Состояние единого
+выпуска ведётся в `connector-desktop/docs/UNIFIED_CONNECTOR_CHECKLIST_RU.md`.
+До приёмки установленного клиента и рабочего доступа оставлять legacy
+`/updates/latest.json` на версии `1.0.31`.
+
 Триггер — push семвер-тега `v*` в `master`.
 
 1. Локально собрать MSI (опционально, для проверки): `powershell -NoProfile -ExecutionPolicy Bypass -File "connector-desktop/build_msi.ps1"`
@@ -99,8 +106,8 @@ Managed firewall ports: `80, 443, 445, 1238, 3389`.
 3. `git push origin master`.
 4. GitHub Actions (`.github/workflows/deploy-connector-server.yml`):
    - Job **`test`**: setup Python 3.11, ставит `requirements-dev.txt`, гоняет `pytest -v`. Без green test'а deploy не пускается.
-   - Job **`deploy`** (нужен test): SSH на `62.113.36.107` под `opwork_admin`, запускает `C:\Connector\src\scripts\server_deploy_step.ps1 -CommitSha $github.sha`. Скрипт делает: `git fetch + reset --hard origin/master`, `pip install -r requirements.txt`, verified PostgreSQL dump (или SQLite snapshot в legacy-конфигурации), `python run_migrations.py`, рестарт Scheduled Task `ConnectorApi`, smoke `GET /health` (проверяет 200 + `version` совпадает с deployed SHA).
-   - **Auto-rollback** при провале любого шага: `git reset --hard <prevSha>`, рестарт Task'а.
+   - Job **`deploy`** (нужен test): SSH на `62.113.36.107` под `opwork_admin`, запускает `C:\Connector\src\scripts\server_deploy_step.ps1 -CommitSha $github.sha`. Скрипт проверяет чистое дерево и полный SHA, выполняет fetch и fast-forward к точному коммиту из `origin/master`, затем `pip install -r requirements.txt`, verified PostgreSQL dump (или SQLite snapshot в legacy-конфигурации), `python run_migrations.py`, рестарт Scheduled Task `ConnectorApi`, smoke `GET /health` (200 + точная версия).
+   - **Auto-rollback** после продвижения source: только при чистом дереве и неизменном текущем SHA; checkout предыдущего коммита в detached HEAD без force/reset и адресный рестарт Task. При чужих изменениях откат останавливается, сохраняя дерево для ручного восстановления.
 5. Concurrency group `deploy-connector-server` гарантирует один деплой за раз.
 
 **Скрипты `scripts/remote_deploy_connector.ps1` / `remote_finish_connector_deploy.ps1` — DEPRECATED.** Они относятся к старой архитектуре копирования из `C:\Users\opwork_admin\connector\server` и могли уничтожить `connector.db`. Не использовать.
