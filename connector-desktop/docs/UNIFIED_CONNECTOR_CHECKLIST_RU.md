@@ -1234,8 +1234,10 @@
   ровно 49 согласованных файлов и семь проверенных NuGet-пакетов.
   Конфликт с новым `main` разрешён в отдельном Git index, сохранив оба набора
   endpoint и NormsStore; shared working tree не переключался.
-  Независимое ревью принято. Неизменяемая build-only сборка ещё выполняется;
-  server deploy Platform и живые права не приняты.
+  Независимое ревью принято. Build-only сборка `37441106639` завершилась,
+  манифест точного SHA `9b295907` проверен; сохранение кандидата остановлено
+  чтением версии DLL через reflection. Исправление чтения PE metadata проходит
+  отдельное ревью; server deploy Platform и живые права ещё не приняты.
 - [~] Проверить настоящую Release-сборку MSI/Burn, рабочую конфигурацию
   подключения и живой сервер NetBird. Эти результаты не подменяются
   прежними тестами LocalOnly или синтетической конфигурацией.
@@ -1261,24 +1263,41 @@
   установщик; при выданном праве чтение обязательно. PlatformAccess 51/51,
   независимое ревью принято. Дополнительно прошли UserJournal 19/19,
   OriginalUserMachineAdapter 13/13, Bootstrapper 10/10 и Composition 3/3.
-- [~] Развернуть отсутствующий NetBird control plane. Read-only аудит
-  подтвердил отсутствие NetBird на Windows и Linux VPS. На Linux порт
-  3478 уже занят Nextcloud Talk и должен сохраниться. DNS-записей
-  `netbird.structura-most.ru` / `connector-access.structura-most.ru` нет;
-  пользователь поручил создание записей. DNS обслуживается Cloudflare;
-  доступного API-токена не найдено. Chrome доступен, но Cloudflare Dashboard
-  открыт на странице входа; пользователю передана вкладка и запрошен вход
-  либо путь к API-токену. NetBird bootstrap исправлен после
-  P1 ревью: публичные маршруты выключены до создания owner; независимая
-  проверка принята, включая WSL-проверку режима 0600 для PAT и отказ
-  перезаписи/повторного bootstrap. Для mTLS готовится маршрут через публичный
-  443 с передачей TLS до Kestrel: обычное завершение TLS в Caddy не подходит.
+- [~] Завершить живое подключение NetBird и Connector gateway. DNS подготовлен,
+  публичный control plane включён; регистрация устройств, ограничительные
+  политики, private DNS, Windows gateway и живые VPN/SMB ещё не приняты.
+  Порт Nextcloud Talk 3478 сохранён. Внешний STUN-запрос на 3479 завершился
+  таймаутом; доступность UDP требует отдельной проверки. Для Connector API
+  остаётся публичный 443 с TLS passthrough до Windows Kestrel.
+- [x] Создать две DNS-only A-записи в Cloudflare: `netbird.structura-most.ru`
+  и `connector-access.structura-most.ru` → `109.73.194.38`.
+  Сохранение подтверждено в Dashboard и ответами DNS `1.1.1.1`.
+- [x] Установить официальный NetBird 0.79.0 на Windows-сервер без подключения
+  узла и перезагрузки: MSI hash/Authenticode проверены, установка вернула 0,
+  сервис Running/Auto и NeedsLogin. Независимый readback подтвердил сохранение
+  AmneziaWG, UDP 9994 и прежнего маршрута. Это установленный клиент, не VPN.
+- [~] Подготовить автоматическое продление публичного TLS Windows gateway:
+  ограниченный Cloudflare-токен настроен на одну зону, IP Windows-сервера
+  и один год; ожидает обязательного подтверждения создания доступа в браузере.
+  Токен и живой сертификат пока не созданы. Исходный renewal hook принят после
+  исправления ACL/rollback, общей deadline, DER SAN и точного Task `-File`;
+  целевые fixture прошли также в Windows PowerShell 5.1.
+- [x] Ужесточить SMB runner до любых изменений: принять только SYSTEM,
+  Administrators и подтверждённые SID локальных пользователей, неизвестные
+  и групповые Allow ACE отклонять; проверять прямое и вложенное членство
+  управляемого пользователя в Administrators. Новая учётка включается после
+  проверок и выдачи ACL. Независимое ревью и fixture PS7/PS5.1 приняты.
+  В живой `BIM_Models` обнаружены шесть неразрешимых SID; они сохранены,
+  новая reconciliation остановится до мутаций, пока они адресно не разобраны.
 - [x] Выполнить приватный первый запуск NetBird на Linux: отдельная Git-копия
   `master`, закреплённый образ 0.78.2, API только `127.0.0.1:18080`.
   Технический owner создан штатным setup API; пароль/PAT хранятся вне Git
   в root-only каталоге. Исходная политика `All → All` выключена с проверкой
-  полного readback; peers и setup keys — 0. Публичные маршруты и setup PAT
-  выключены. Это подготовленный control plane, не работающий клиентский VPN.
+  полного readback; peers и setup keys — 0. Setup PAT выключен.
+  Первый запуск был закрытым; после DNS 06.10 публичные маршруты включены
+  только для NetBird. Dashboard и instance — HTTPS 200 с доверенным TLS,
+  users без авторизации — 401, setup_required=false. Neighbor ID/StartedAt
+  сохранены; независимая приёмка публичного запуска продолжается.
 - [x] Независимо проверить TLS passthrough на изолированном стенде:
   Traefik 2.11 → закреплённый HAProxy → TLS backend. Сертификат клиента
   дошёл побайтно; защищённый запрос с ним — 200, без него — 403; enrollment
@@ -1303,11 +1322,12 @@
 - [x] Создать GitHub Actions secrets для двух независимых P-256 signing keys.
   Private keys остаются вне Git и tool-output; рабочая конфигурация подключения
   ещё не выдана. Hosted candidate и публичный выпуск этим не подтверждаются.
-- [~] Устранить сбой build-only CI Platform PR №73: Web task достиг
-  лимита 20 минут. Базовый failure log не содержит стадии npm/Vite;
-  штатный Web probe остановлен проверкой несовпадения dependency marker,
-  retained diagnostics не содержат сохранённых task outputs. Нельзя сливать
-  PR или обходить gate; требуется адресная диагностика сборочного шага.
+- [~] Завершить build-only CI Platform PR №73: общий dependency key и
+  ограниченные diagnostics исправлены и приняты, пакет `9b295907` отправлен.
+  Сборка прошла за 14 минут, но candidate Store остановлен ошибкой чтения
+  AssemblyInformationalVersion через reflection при отсутствующей зависимости.
+  Исправляется чтение PE metadata с сохранением проверки framework identity
+  и точного SHA. Required gate не обходится; merge и deploy остаются открытыми.
 
 **2 октября 2026: локальный preview 1.1.0-preview.11.**
 Portable / Setup: `artifacts/package-update/preview/617bf425eab74327b2793a42e52362ab/`.

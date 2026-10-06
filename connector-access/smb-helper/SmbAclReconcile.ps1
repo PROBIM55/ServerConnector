@@ -9,6 +9,7 @@ function Get-CanonicalResource {
     }
     $root = [IO.Path]::GetFullPath($rootItem.FullName).TrimEnd('\')
     $share = Get-SmbShare -Name ([string]$Resource.shareName) -ErrorAction Stop
+    Assert-SafeShareAcl $share
     $shareItem = Get-Item -LiteralPath ([string]$share.Path) -Force
     if (-not $shareItem.PSIsContainer -or ($shareItem.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
         throw 'Configured SMB share target is not a plain directory.'
@@ -23,6 +24,69 @@ function Get-CanonicalResource {
         rootPath = $root
         permission = [string]$Resource.permission
     }
+}
+
+function Assert-SafeShareAcl {
+    param($Share)
+    $administratorSid = 'S-1-5-32-544'
+    $systemSid = 'S-1-5-18'
+    try {
+        $descriptor = [Security.AccessControl.RawSecurityDescriptor]::new([string]$Share.SecurityDescriptor)
+        $rules = $descriptor.DiscretionaryAcl
+    } catch {
+        throw 'SMB share security descriptor could not be validated.'
+    }
+    if ($null -eq $rules) { throw 'SMB share has a null or missing DACL.' }
+
+    foreach ($rule in $rules) {
+        if ($rule -isnot [Security.AccessControl.CommonAce] -or $null -eq $rule.SecurityIdentifier) {
+            throw 'SMB share contains an unsupported ACL entry.'
+        }
+        $sid = $rule.SecurityIdentifier
+        if ($sid.Value -eq $administratorSid -or $sid.Value -eq $systemSid) { continue }
+        try { $localUser = Get-LocalUser -SID $sid -ErrorAction Stop }
+        catch { throw 'SMB share ACL contains an unresolved principal.' }
+        if ($null -eq $localUser -or $null -eq $localUser.SID -or $localUser.SID.Value -ne $sid.Value) {
+            throw 'SMB share ACL contains a non-user or unresolved principal.'
+        }
+    }
+}
+
+function Test-LocalGroupContainsSid {
+    param(
+        [Security.Principal.SecurityIdentifier]$GroupSid,
+        [Security.Principal.SecurityIdentifier]$UserSid,
+        [Collections.Generic.HashSet[string]]$Visited
+    )
+    if (-not $Visited.Add($GroupSid.Value)) { return $false }
+    $members = @(Get-LocalGroupMember -SID $GroupSid -ErrorAction Stop)
+    $localAuthority = $UserSid.Value -replace '-\d+$', ''
+    foreach ($member in $members) {
+        if ($null -eq $member.SID) { throw 'Local group membership contains an unresolved principal.' }
+        $memberSid = [Security.Principal.SecurityIdentifier]::new($member.SID.Value)
+        if ($memberSid.Value -eq $UserSid.Value) { return $true }
+        if ($member.ObjectClass -notin @('User', 'Group')) {
+            throw 'Local group membership contains an unresolved principal type.'
+        }
+        $isBuiltinGroup = $memberSid.Value -match '^S-1-5-32-\d+$'
+        $isLocalGroup = $memberSid.Value.StartsWith($localAuthority + '-', [StringComparison]::Ordinal)
+        if ($member.ObjectClass -eq 'Group' -and ($isBuiltinGroup -or $isLocalGroup) -and
+            (Test-LocalGroupContainsSid $memberSid $UserSid $Visited)) { return $true }
+    }
+    return $false
+}
+
+function Assert-ManagedUserNotElevated {
+    param([Security.Principal.SecurityIdentifier]$Sid)
+    $isAdministrator = $false
+    try {
+        $memberships = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+        $administratorSid = [Security.Principal.SecurityIdentifier]::new('S-1-5-32-544')
+        $isAdministrator = Test-LocalGroupContainsSid $administratorSid $Sid $memberships
+    } catch {
+        throw 'Managed local user group membership could not be verified.'
+    }
+    if ($isAdministrator) { throw 'Managed local user belongs to the local Administrators group.' }
 }
 
 function Remove-OwnedAcl {
@@ -117,10 +181,15 @@ try {
     if ($shouldEnable) {
         $secure = ConvertTo-SecureString ([string]$request.password) -AsPlainText -Force
         if ($null -eq $user) {
-            New-LocalUser -Name $userName -Password $secure -Description $ownerMarker -AccountNeverExpires -PasswordNeverExpires -UserMayNotChangePassword | Out-Null
+            New-LocalUser -Name $userName -Password $secure -Description $ownerMarker -AccountNeverExpires -PasswordNeverExpires -UserMayNotChangePassword -Disabled | Out-Null
+            $user = Get-LocalUser -Name $userName -ErrorAction Stop
+            if (-not [string]::Equals([string]$user.Description, $ownerMarker, [StringComparison]::Ordinal)) {
+                throw 'Managed local user ownership marker changed.'
+            }
         } else {
+            # Check group-derived access before changing or enabling an existing identity.
+            Assert-ManagedUserNotElevated ([Security.Principal.SecurityIdentifier]::new($user.SID.Value))
             Set-LocalUser -Name $userName -Password $secure -PasswordNeverExpires $true
-            Enable-LocalUser -Name $userName
         }
         $user = Get-LocalUser -Name $userName -ErrorAction Stop
         if (-not [string]::Equals([string]$user.Description, $ownerMarker, [StringComparison]::Ordinal)) {
@@ -133,12 +202,14 @@ try {
             [Security.Principal.SecurityIdentifier]::new([string]$request.expectedLocalUserSid)
         } else { $null }
     if ($null -ne $sid) {
+        Assert-ManagedUserNotElevated $sid
         $account = "$env:COMPUTERNAME\$userName"
         foreach ($resource in $resources) { Remove-OwnedAcl $resource $account $sid }
         if ($shouldEnable) {
             foreach ($resource in $resources | Where-Object { $_.permission -ne 'none' }) {
                 Add-OwnedAcl $resource $account $sid
             }
+            Enable-LocalUser -Name $userName
         } else {
             Close-OwnedSessions $userName
             if ($null -ne $user) { Disable-LocalUser -Name $userName }
