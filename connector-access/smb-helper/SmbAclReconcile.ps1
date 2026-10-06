@@ -1,5 +1,156 @@
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
+function Assert-SmbSshDenyPolicy {
+    param(
+        [Parameter(Mandatory)][string]$UserName,
+        [Parameter(Mandatory)][string]$SshdPath,
+        [Parameter(Mandatory)][string]$ConfigPath,
+        [Parameter(Mandatory)][datetime]$ServiceStartTime,
+        [Parameter(Mandatory)][string]$EffectiveOutput
+    )
+    $expectedBinary = Join-Path $env:WINDIR 'System32\OpenSSH\sshd.exe'
+    if (-not [IO.Path]::IsPathRooted($SshdPath) -or
+        -not [string]::Equals([IO.Path]::GetFullPath($SshdPath), [IO.Path]::GetFullPath($expectedBinary), [StringComparison]::OrdinalIgnoreCase)) {
+        throw 'Windows OpenSSH service binary could not be verified.'
+    }
+    $config = Get-Item -LiteralPath $ConfigPath -ErrorAction Stop
+    if ($config.PSIsContainer) { throw 'OpenSSH configuration path is not a file.' }
+    $defaultConfig = [IO.Path]::GetFullPath((Join-Path $env:ProgramData 'ssh\sshd_config'))
+    if (-not [string]::Equals([IO.Path]::GetFullPath($config.FullName), $defaultConfig, [StringComparison]::OrdinalIgnoreCase)) {
+        throw 'OpenSSH configuration path is not the Windows service default.'
+    }
+    if ([IO.File]::ReadAllText($config.FullName) -match '(?im)^\s*Include\s+') {
+        throw 'OpenSSH configuration uses Include directives and cannot be safely bound to the running service.'
+    }
+    if ($ServiceStartTime -le $config.LastWriteTime) {
+        throw 'OpenSSH service may have loaded configuration before its latest change.'
+    }
+    if ([string]::IsNullOrWhiteSpace($EffectiveOutput)) { throw 'Effective OpenSSH policy is unavailable.' }
+    $denyLine = @($EffectiveOutput -split "`r?`n" | Where-Object { $_ -match '^denyusers\s+' })
+    if ($denyLine.Count -ne 1) { throw 'Effective OpenSSH DenyUsers policy is missing or ambiguous.' }
+    $names = @($denyLine[0] -split '\s+' | Select-Object -Skip 1)
+    $exactDeny = $names -contains $UserName
+    $ownedFamilyDeny = $UserName -match '^scn_[A-Za-z0-9_]+$' -and $names -contains 'scn_*'
+    if (-not $exactDeny -and -not $ownedFamilyDeny) { throw 'Effective OpenSSH DenyUsers policy does not explicitly deny the managed account.' }
+}
+
+function Assert-SmbSshCanonicalCommandLine {
+    param(
+        [Parameter(Mandatory)][AllowEmptyString()][string]$CommandLine,
+        [Parameter(Mandatory)][string]$ExpectedBinary
+    )
+    $expected = [IO.Path]::GetFullPath($ExpectedBinary)
+    $command = $CommandLine.Trim()
+    $quotedExpected = '"' + $expected + '"'
+    if (-not [string]::Equals($command, $expected, [StringComparison]::OrdinalIgnoreCase) -and
+        -not [string]::Equals($command, $quotedExpected, [StringComparison]::OrdinalIgnoreCase)) {
+        throw 'OpenSSH service command line is not the canonical sshd executable without arguments.'
+    }
+    return $expected
+}
+
+function Get-SmbSshEffectivePolicy {
+    param([Parameter(Mandatory)][string]$SshdPath, [Parameter(Mandatory)][string]$UserName)
+    $effective = @(& $SshdPath -T -C "user=$UserName,host=localhost,addr=127.0.0.1" 2>$null)
+    if ($LASTEXITCODE -ne 0) { throw 'OpenSSH effective policy evaluation failed.' }
+    return ($effective -join "`n")
+}
+
+function Get-SmbSshServicePolicy {
+    param([Parameter(Mandatory)][string]$UserName)
+    $service = Get-CimInstance Win32_Service -Filter "Name='sshd'" -ErrorAction Stop
+    if ($null -eq $service -or [int]$service.ProcessId -le 0) { throw 'OpenSSH service is not running with a verifiable process.' }
+    $expectedBinary = Join-Path $env:WINDIR 'System32\OpenSSH\sshd.exe'
+    $sshdPath = Assert-SmbSshCanonicalCommandLine -CommandLine ([string]$service.PathName) -ExpectedBinary $expectedBinary
+    $serviceProcess = Get-CimInstance Win32_Process -Filter "ProcessId=$([int]$service.ProcessId)" -ErrorAction Stop
+    if ($null -eq $serviceProcess -or [int]$serviceProcess.ProcessId -ne [int]$service.ProcessId) {
+        throw 'OpenSSH service process could not be verified.'
+    }
+    $processBinary = [string]$serviceProcess.ExecutablePath
+    if (-not [string]::Equals([IO.Path]::GetFullPath($processBinary), [IO.Path]::GetFullPath($expectedBinary), [StringComparison]::OrdinalIgnoreCase)) {
+        throw 'OpenSSH service process executable could not be verified.'
+    }
+    [void](Assert-SmbSshCanonicalCommandLine -CommandLine ([string]$serviceProcess.CommandLine) -ExpectedBinary $expectedBinary)
+    $configPath = Join-Path $env:ProgramData 'ssh\sshd_config'
+    $process = Get-Process -Id ([int]$service.ProcessId) -ErrorAction Stop
+    $effective = Get-SmbSshEffectivePolicy -SshdPath $sshdPath -UserName $UserName
+    Assert-SmbSshDenyPolicy -UserName $UserName -SshdPath $sshdPath -ConfigPath $configPath -ServiceStartTime $process.StartTime -EffectiveOutput $effective
+}
+
+function Invoke-SmbLsaRightsOperation {
+    param([ValidateSet('Read','Add')][string]$Operation, [Security.Principal.SecurityIdentifier]$Sid, [string[]]$Rights)
+    if (-not ('SmbServiceIdentity.NativeLsa' -as [type])) {
+        Add-Type -TypeDefinition @'
+            using System;
+            using System.Runtime.InteropServices;
+            namespace SmbServiceIdentity {
+                public static class NativeLsa {
+                    [StructLayout(LayoutKind.Sequential)] public struct LSA_OBJECT_ATTRIBUTES { public uint Length; public IntPtr RootDirectory; public IntPtr ObjectName; public uint Attributes; public IntPtr SecurityDescriptor; public IntPtr SecurityQualityOfService; }
+                    [StructLayout(LayoutKind.Sequential)] public struct LSA_UNICODE_STRING { public ushort Length; public ushort MaximumLength; public IntPtr Buffer; }
+                    [DllImport("advapi32.dll")] public static extern uint LsaOpenPolicy(IntPtr SystemName, ref LSA_OBJECT_ATTRIBUTES ObjectAttributes, uint DesiredAccess, out IntPtr PolicyHandle);
+                    [DllImport("advapi32.dll")] public static extern uint LsaAddAccountRights(IntPtr PolicyHandle, IntPtr AccountSid, LSA_UNICODE_STRING[] UserRights, uint CountOfRights);
+                    [DllImport("advapi32.dll")] public static extern uint LsaEnumerateAccountRights(IntPtr PolicyHandle, IntPtr AccountSid, out IntPtr UserRights, out uint CountOfRights);
+                    [DllImport("advapi32.dll")] public static extern uint LsaFreeMemory(IntPtr Buffer);
+                    [DllImport("advapi32.dll")] public static extern uint LsaClose(IntPtr PolicyHandle);
+                    [DllImport("advapi32.dll")] public static extern uint LsaNtStatusToWinError(uint Status);
+                }
+            }
+'@
+    }
+    $sidBytes = New-Object byte[] $Sid.BinaryLength
+    $Sid.GetBinaryForm($sidBytes, 0)
+    $sidPtr = [Runtime.InteropServices.Marshal]::AllocHGlobal($sidBytes.Length)
+    $policy = [IntPtr]::Zero
+    $buffer = [IntPtr]::Zero
+    try {
+        [Runtime.InteropServices.Marshal]::Copy($sidBytes, 0, $sidPtr, $sidBytes.Length)
+        $attributes = New-Object SmbServiceIdentity.NativeLsa+LSA_OBJECT_ATTRIBUTES
+        $attributes.Length = [uint32][Runtime.InteropServices.Marshal]::SizeOf($attributes)
+        $status = [SmbServiceIdentity.NativeLsa]::LsaOpenPolicy([IntPtr]::Zero, [ref]$attributes, 0x800, [ref]$policy)
+        if ($status -ne 0) { throw [ComponentModel.Win32Exception]::new([int][SmbServiceIdentity.NativeLsa]::LsaNtStatusToWinError($status)) }
+        if ($Operation -eq 'Add') {
+            $native = @()
+            try {
+                foreach ($right in $Rights) {
+                    $ptr = [Runtime.InteropServices.Marshal]::StringToHGlobalUni($right)
+                    $u = New-Object SmbServiceIdentity.NativeLsa+LSA_UNICODE_STRING
+                    $u.Buffer = $ptr; $u.Length = [uint16]($right.Length * 2); $u.MaximumLength = [uint16](($right.Length + 1) * 2)
+                    $native += $u
+                }
+                $status = [SmbServiceIdentity.NativeLsa]::LsaAddAccountRights($policy, $sidPtr, $native, [uint32]$native.Count)
+                if ($status -ne 0) { throw [ComponentModel.Win32Exception]::new([int][SmbServiceIdentity.NativeLsa]::LsaNtStatusToWinError($status)) }
+            } finally { foreach ($u in $native) { if ($u.Buffer -ne [IntPtr]::Zero) { [Runtime.InteropServices.Marshal]::FreeHGlobal($u.Buffer) } } }
+        }
+        $count = [uint32]0
+        $status = [SmbServiceIdentity.NativeLsa]::LsaEnumerateAccountRights($policy, $sidPtr, [ref]$buffer, [ref]$count)
+        if ($status -eq [uint32]3221225524) { return @() } # STATUS_OBJECT_NAME_NOT_FOUND: account has no assigned rights yet.
+        if ($status -ne 0) { throw [ComponentModel.Win32Exception]::new([int][SmbServiceIdentity.NativeLsa]::LsaNtStatusToWinError($status)) }
+        $size = [Runtime.InteropServices.Marshal]::SizeOf([type][SmbServiceIdentity.NativeLsa+LSA_UNICODE_STRING])
+        $observed = @()
+        for ($i = 0; $i -lt $count; $i++) {
+            $entry = [Runtime.InteropServices.Marshal]::PtrToStructure([IntPtr]::Add($buffer, $i * $size), [type][SmbServiceIdentity.NativeLsa+LSA_UNICODE_STRING])
+            $observed += [Runtime.InteropServices.Marshal]::PtrToStringUni($entry.Buffer, [int]($entry.Length / 2))
+        }
+        return ,$observed
+    } finally {
+        if ($buffer -ne [IntPtr]::Zero) { [void][SmbServiceIdentity.NativeLsa]::LsaFreeMemory($buffer) }
+        if ($policy -ne [IntPtr]::Zero) { [void][SmbServiceIdentity.NativeLsa]::LsaClose($policy) }
+        [Runtime.InteropServices.Marshal]::FreeHGlobal($sidPtr)
+    }
+}
+
+function Ensure-SmbServiceIdentityRights {
+    param([Parameter(Mandatory)][Security.Principal.SecurityIdentifier]$Sid)
+    $required = @('SeDenyInteractiveLogonRight', 'SeDenyRemoteInteractiveLogonRight')
+    $observed = @(Invoke-SmbLsaRightsOperation -Operation Read -Sid $Sid -Rights $required)
+    $missing = @($required | Where-Object { $observed -notcontains $_ })
+    if ($missing.Count -gt 0) { Invoke-SmbLsaRightsOperation -Operation Add -Sid $Sid -Rights $missing | Out-Null }
+    $observed = @(Invoke-SmbLsaRightsOperation -Operation Read -Sid $Sid -Rights $required)
+    foreach ($right in $required) { if ($observed -notcontains $right) { throw 'SMB service identity logon restrictions failed readback.' } }
+}
+
+$newUserNameToDisable = $null
+$newUserOwnerMarker = $null
 
 function Get-CanonicalResource {
     param($Resource)
@@ -179,22 +330,27 @@ try {
     }
     $shouldEnable = $request.action -eq 'apply' -and @($request.grants).Count -gt 0
     if ($shouldEnable) {
+        $createdNow = $false
+        # Validate the effective, currently loaded sshd policy before credentials or ACLs change.
+        Get-SmbSshServicePolicy -UserName $userName
+        if ($null -ne $user) { Assert-ManagedUserNotElevated ([Security.Principal.SecurityIdentifier]::new($user.SID.Value)) }
         $secure = ConvertTo-SecureString ([string]$request.password) -AsPlainText -Force
         if ($null -eq $user) {
+            $newUserNameToDisable = $userName
+            $newUserOwnerMarker = $ownerMarker
             New-LocalUser -Name $userName -Password $secure -Description $ownerMarker -AccountNeverExpires -PasswordNeverExpires -UserMayNotChangePassword -Disabled | Out-Null
+            $createdNow = $true
             $user = Get-LocalUser -Name $userName -ErrorAction Stop
             if (-not [string]::Equals([string]$user.Description, $ownerMarker, [StringComparison]::Ordinal)) {
                 throw 'Managed local user ownership marker changed.'
             }
-        } else {
-            # Check group-derived access before changing or enabling an existing identity.
-            Assert-ManagedUserNotElevated ([Security.Principal.SecurityIdentifier]::new($user.SID.Value))
-            Set-LocalUser -Name $userName -Password $secure -PasswordNeverExpires $true
         }
         $user = Get-LocalUser -Name $userName -ErrorAction Stop
         if (-not [string]::Equals([string]$user.Description, $ownerMarker, [StringComparison]::Ordinal)) {
             throw 'Managed local user ownership marker changed.'
         }
+        Ensure-SmbServiceIdentityRights ([Security.Principal.SecurityIdentifier]::new($user.SID.Value))
+        if (-not $createdNow) { Set-LocalUser -Name $userName -Password $secure -PasswordNeverExpires $true }
     }
 
     $sid = if ($null -ne $user) { [Security.Principal.SecurityIdentifier]::new($user.SID.Value) }
@@ -254,6 +410,14 @@ try {
     }
     $response | ConvertTo-Json -Depth 8 -Compress
 } catch {
+    if ($null -ne $newUserNameToDisable) {
+        try {
+            $failedUser = Get-LocalUser -Name $newUserNameToDisable -ErrorAction Stop
+            if ([string]::Equals([string]$failedUser.Description, $newUserOwnerMarker, [StringComparison]::Ordinal)) {
+                Disable-LocalUser -Name $newUserNameToDisable -ErrorAction Stop
+            }
+        } catch { }
+    }
     [Console]::Error.WriteLine('SMB reconciliation failed.')
     exit 1
 }

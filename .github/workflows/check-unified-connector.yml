@@ -70,6 +70,20 @@ jobs:
         shell: pwsh
         run: ./connector-desktop/scripts/tests/publish_unified_feed.tests.ps1
 
+      - name: Test Windows access and certificate guards in PowerShell 5.1
+        shell: pwsh
+        run: |
+          $scripts = @(
+            'connector-access/smb-helper/tests/ShareBoundaryGuard.Tests.ps1',
+            'connector-access/smb-helper/tests/SmbServiceIdentity.Tests.ps1',
+            'connector-desktop/infra/connector-access-tls/test-renew-platform-connector-certificate.ps1',
+            'connector-desktop/infra/connector-access-tls/test-cloudflare-fixed-zone-dns01.ps1'
+          )
+          foreach ($script in $scripts) {
+            & powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $script
+            if ($LASTEXITCODE -ne 0) { throw "Windows access guard fixture failed: $script" }
+          }
+
       - name: Test desktop and upgrade components sequentially
         shell: pwsh
         run: |
@@ -90,3 +104,11 @@ jobs:
             dotnet test $project --configuration Release --verbosity minimal
             if ($LASTEXITCODE -ne 0) { throw "Targeted suite failed: $project" }
           }
+
+  stun-forward-fixture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test exact NetBird STUN rule with fake iptables
+        run: sudo bash connector-desktop/infra/netbird/server/tests/test-allow-stun-forward.sh
