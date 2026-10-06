@@ -71,6 +71,27 @@ $temp = Join-Path ([IO.Path]::GetTempPath()) ('connector-tls-test-' + [Guid]::Ne
 New-Item -ItemType Directory -Path $temp | Out-Null
 $testSid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
 $script:testSid = $testSid
+$secretName = 'PLATFORM_CONNECTOR_ACCESS_SERVER_CERT_PASSWORD'
+$secretDir = Join-Path $temp 'runtime\connector-access'
+New-Item -ItemType Directory -Path $secretDir -Force | Out-Null
+$secretFile = Join-Path $secretDir 'service-secrets.json'
+[IO.File]::WriteAllText($secretFile,'{}',(New-Object Text.UTF8Encoding($false)))
+function Set-FixtureProtectedDirectory([string]$Path) {
+    $acl = [Security.AccessControl.DirectorySecurity]::new()
+    $acl.SetAccessRuleProtection($true,$false)
+    foreach ($sidText in @('S-1-5-18','S-1-5-32-544',$testSid)) {
+        $rule = [Security.AccessControl.FileSystemAccessRule]::new([Security.Principal.SecurityIdentifier]::new($sidText),'FullControl','ContainerInherit,ObjectInherit','None','Allow')
+        [void]$acl.AddAccessRule($rule)
+    }
+    Set-Acl -LiteralPath $Path -AclObject $acl
+}
+$script:aclFixtureMockPath = ''
+$script:aclFixtureMock = $null
+function Get-Acl {
+    param([string]$LiteralPath)
+    if ($script:aclFixtureMockPath -and [string]::Equals($LiteralPath,$script:aclFixtureMockPath,[StringComparison]::OrdinalIgnoreCase)) { return $script:aclFixtureMock }
+    Microsoft.PowerShell.Security\Get-Acl -LiteralPath $LiteralPath
+}
 $tempAcl = [Security.AccessControl.DirectorySecurity]::new()
 $tempAcl.SetAccessRuleProtection($true, $false)
 foreach ($sidText in @('S-1-5-18','S-1-5-32-544',$testSid)) {
@@ -78,7 +99,104 @@ foreach ($sidText in @('S-1-5-18','S-1-5-32-544',$testSid)) {
     [void]$tempAcl.AddAccessRule($rule)
 }
 Set-Acl -LiteralPath $temp -AclObject $tempAcl
+Set-FixtureProtectedDirectory $secretDir
+Set-PrivateFileAcl $secretFile -AdditionalAllowedSid @($testSid) -FullControlSid @($testSid)
 try {
+    if (-not (Test-Path -LiteralPath $secretDir -PathType Container)) { throw 'Secret fixture directory was not created.' }
+    $fixtureSecret = 'fixture-json-password-3f5a'
+    function Write-SecretFixture([string]$Json) {
+        [IO.File]::WriteAllText($secretFile,$Json,(New-Object Text.UTF8Encoding($false)))
+        Set-PrivateFileAcl $secretFile -AdditionalAllowedSid @($testSid) -FullControlSid @($testSid)
+    }
+    Write-SecretFixture ('{"' + $secretName + '":"' + $fixtureSecret + '","OTHER_SERVICE_PASSWORD":"not-selected"}')
+    $jsonPassword = Get-ConnectorAccessCertificatePassword -SecretFilePath $secretFile -SecretName $secretName -Root $temp -AllowedSid @($testSid)
+    if ($jsonPassword -cne $fixtureSecret) { throw 'Protected JSON secret lookup returned the wrong fixture value.' }
+    $jsonPassword = $null
+
+    # Reproduce the foreign explicit trustee left after CREATOR OWNER-style
+    # inheritance materializes on a file; /inheritance:r alone leaves it.
+    & (Join-Path $env:SystemRoot 'System32\icacls.exe') $secretFile '/grant' '*S-1-5-32-545:R' | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw 'Could not prepare foreign creator-derived ACL fixture.' }
+    $creatorOwnerSid = 'S-1-5-32-545'
+    if (-not (@((Get-Acl -LiteralPath $secretFile).Access | Where-Object {
+        $_.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value -eq $creatorOwnerSid
+    }).Count)) { throw 'Foreign creator-derived fixture ACE was not present before ACL reset.' }
+    Set-PrivateFileAcl $secretFile -AdditionalAllowedSid @($testSid) -FullControlSid @($testSid)
+    $repairedAcl = Get-Acl -LiteralPath $secretFile
+    if ($repairedAcl.Access.Count -ne 3 -or @($repairedAcl.Access | Where-Object {
+        $_.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value -eq $creatorOwnerSid
+    }).Count) { throw 'Exact ACL reset retained the foreign creator-derived fixture ACE.' }
+
+    foreach ($badCase in @(
+        [pscustomobject]@{ Json='{}'; Code='SERVICE_SECRET_REQUIRED_VALUE_MISSING' },
+        [pscustomobject]@{ Json=('{"' + $secretName + '":42}'); Code='SERVICE_SECRET_REQUIRED_VALUE_INVALID' },
+        [pscustomobject]@{ Json='{"broken-json":"fixture-json-password-3f5a"'; Code='SERVICE_SECRET_JSON_INVALID' },
+        [pscustomobject]@{ Json=(' ' * 70000); Code='SERVICE_SECRET_JSON_INVALID' }
+    )) {
+        Write-SecretFixture $badCase.Json
+        try { [void](Get-ConnectorAccessCertificatePassword -SecretFilePath $secretFile -SecretName $secretName -Root $temp -AllowedSid @($testSid)); throw 'Invalid service secret fixture was accepted.' }
+        catch {
+            if ($_.Exception.Message -notmatch [regex]::Escape($badCase.Code) -or $_.Exception.Message.Contains('fixture-json-password-3f5a')) { throw 'Invalid service secret did not fail closed with a generic non-secret error.' }
+        }
+    }
+    try { [void](Get-ConnectorAccessCertificatePassword -SecretFilePath $secretFile -SecretName 'UNSUPPORTED_PASSWORD_NAME' -Root $temp -AllowedSid @($testSid)); throw 'Unsupported secret name was accepted.' }
+    catch { if ($_.Exception.Message -notmatch 'Unsupported certificate secret name') { throw } }
+    try { [void](Get-ConnectorAccessCertificatePassword -SecretFilePath (Join-Path $temp 'other-secret.json') -SecretName $secretName -Root $temp -AllowedSid @($testSid)); throw 'Noncanonical secret path was accepted.' }
+    catch { if ($_.Exception.Message -notmatch 'SERVICE_SECRET_PATH_OR_ACL_INVALID') { throw } }
+    $traversalSecretPath = Join-Path $temp 'runtime\connector-access\..\connector-access\service-secrets.json'
+    try { [void](Get-ConnectorAccessCertificatePassword -SecretFilePath $traversalSecretPath -SecretName $secretName -Root $temp -AllowedSid @($testSid)); throw 'Noncanonical traversal path was accepted.' }
+    catch { if ($_.Exception.Message -notmatch 'SERVICE_SECRET_PATH_OR_ACL_INVALID') { throw } }
+
+    $reparseRoot = Join-Path $temp 'reparse-secret-root'
+    New-Item -ItemType Directory -Path $reparseRoot | Out-Null
+    $runtimeJunction = Join-Path $reparseRoot 'runtime'
+    [void](New-Item -ItemType Junction -Path $runtimeJunction -Target (Join-Path $temp 'runtime'))
+    try { [void](Get-ConnectorAccessCertificatePassword -SecretFilePath (Join-Path $reparseRoot 'runtime\connector-access\service-secrets.json') -SecretName $secretName -Root $reparseRoot -AllowedSid @($testSid)); throw 'Reparse parent in the service secret path was accepted.' }
+    catch { if ($_.Exception.Message -notmatch 'SERVICE_SECRET_PATH_OR_ACL_INVALID') { throw } }
+
+    Write-SecretFixture ('{"' + $secretName + '":"' + $fixtureSecret + '"}')
+    & (Join-Path $env:SystemRoot 'System32\icacls.exe') $secretFile '/grant' '*S-1-1-0:RX' | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw 'Could not prepare untrusted-read fixture.' }
+    try { [void](Assert-PrivateFileAcl $secretFile -AdditionalAllowedSid @($testSid)); throw 'Untrusted read access to service secrets was accepted.' }
+    catch { if ($_.Exception.Message -notmatch 'unapproved identity') { throw } }
+    Set-PrivateFileAcl $secretFile -AdditionalAllowedSid @($testSid) -FullControlSid @($testSid)
+    $unapprovedOwnerAcl = [Security.AccessControl.FileSecurity]::new()
+    $unapprovedOwnerAcl.SetSecurityDescriptorSddlForm('O:S-1-5-32-545',[Security.AccessControl.AccessControlSections]::Owner)
+    $unapprovedOwnerAcl.SetSecurityDescriptorSddlForm('D:(A;;FA;;;SY)(A;;FA;;;BA)',[Security.AccessControl.AccessControlSections]::Access)
+    $script:aclFixtureMockPath = $secretFile
+    $script:aclFixtureMock = $unapprovedOwnerAcl
+    try {
+        $unapprovedOwnerRejected = $false
+        try { [void](Assert-PrivateFileAcl $secretFile) }
+        catch {
+            if ($_.Exception.Message -cne 'Certificate file owner is not an approved runtime identity.') { throw }
+            $unapprovedOwnerRejected = $true
+        }
+        if (-not $unapprovedOwnerRejected) { throw 'Unapproved owner for service secrets was accepted.' }
+    } finally { $script:aclFixtureMockPath = ''; $script:aclFixtureMock = $null }
+
+    $readOnlyDirectory = Join-Path $temp 'readonly-parent-fixture'
+    New-Item -ItemType Directory -Path $readOnlyDirectory | Out-Null
+    & (Join-Path $env:SystemRoot 'System32\icacls.exe') $readOnlyDirectory '/grant' '*S-1-5-32-545:(OI)(CI)RX' | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw 'Could not prepare parent read-only fixture.' }
+    Assert-NoUnapprovedWriteAcl $readOnlyDirectory @($testSid,'S-1-5-18','S-1-5-32-544')
+    & (Join-Path $env:SystemRoot 'System32\icacls.exe') $readOnlyDirectory '/grant' '*S-1-5-32-545:(OI)(CI)M' | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw 'Could not prepare parent writer fixture.' }
+    try { Assert-NoUnapprovedWriteAcl $readOnlyDirectory @($testSid,'S-1-5-18','S-1-5-32-544'); throw 'Unapproved write ACL was accepted.' }
+    catch { if ($_.Exception.Message -notmatch 'Unapproved write access') { throw } }
+
+    $nullFileAcl = [Security.AccessControl.FileSecurity]::new()
+    $nullFileAcl.SetSecurityDescriptorSddlForm('D:NO_ACCESS_CONTROL',[Security.AccessControl.AccessControlSections]::Access)
+    $script:aclFixtureMockPath = $secretFile; $script:aclFixtureMock = $nullFileAcl
+    try { Assert-PrivateFileAcl $secretFile -AdditionalAllowedSid @($testSid); throw 'Null DACL on a secret file was accepted.' }
+    catch { if ($_.Exception.Message -notmatch 'null DACL') { throw } }
+    $nullDirectoryAcl = [Security.AccessControl.DirectorySecurity]::new()
+    $nullDirectoryAcl.SetSecurityDescriptorSddlForm('D:NO_ACCESS_CONTROL',[Security.AccessControl.AccessControlSections]::Access)
+    $script:aclFixtureMockPath = $readOnlyDirectory; $script:aclFixtureMock = $nullDirectoryAcl
+    try { Assert-NoUnapprovedWriteAcl $readOnlyDirectory @($testSid,'S-1-5-18','S-1-5-32-544'); throw 'Null DACL on a protected parent was accepted.' }
+    catch { if ($_.Exception.Message -notmatch 'null DACL') { throw } }
+    $script:aclFixtureMockPath = ''; $script:aclFixtureMock = $null
+
     $unsafeDirectory = Join-Path $temp 'untrusted-write-fixture'
     New-Item -ItemType Directory -Path $unsafeDirectory | Out-Null
     $unsafeAcl = Get-Acl -LiteralPath $unsafeDirectory
