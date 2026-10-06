@@ -330,12 +330,15 @@ foreach ($protectedDirectory in @($packageDirectory, $helperPublishDirectory, $b
     [void](Assert-ProtectedOutputRoot $protectedDirectory)
 }
 
-$packageArgs = @(
-    '-PackVersion', $PackVersion, '-Channel', $Channel, '-FeedUrl', $feedUri.AbsoluteUri,
-    '-IfcWorkerPath', $workerPath, '-UpdateSigningKeyPemPath', $updateKey,
-    '-PackageOutputDir', $packageDirectory
-)
-& $script:BuildPackageUpdate @packageArgs
+$packageParameters = @{
+    PackVersion = $PackVersion
+    Channel = $Channel
+    FeedUrl = $feedUri.AbsoluteUri
+    IfcWorkerPath = $workerPath
+    UpdateSigningKeyPemPath = $updateKey
+    PackageOutputDir = $packageDirectory
+}
+& $script:BuildPackageUpdate @packageParameters
 if (!$?) { throw 'build_package_update.ps1 failed.' }
 
 $assetsPath = Join-Path $packageDirectory "assets.$Channel.json"
