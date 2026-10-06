@@ -112,6 +112,21 @@ try {
     $jsonPassword = Get-ConnectorAccessCertificatePassword -SecretFilePath $secretFile -SecretName $secretName -Root $temp -AllowedSid @($testSid)
     if ($jsonPassword -cne $fixtureSecret) { throw 'Protected JSON secret lookup returned the wrong fixture value.' }
     $jsonPassword = $null
+
+    # Reproduce the foreign explicit trustee left after CREATOR OWNER-style
+    # inheritance materializes on a file; /inheritance:r alone leaves it.
+    & (Join-Path $env:SystemRoot 'System32\icacls.exe') $secretFile '/grant' '*S-1-5-32-545:R' | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw 'Could not prepare foreign creator-derived ACL fixture.' }
+    $creatorOwnerSid = 'S-1-5-32-545'
+    if (-not (@((Get-Acl -LiteralPath $secretFile).Access | Where-Object {
+        $_.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value -eq $creatorOwnerSid
+    }).Count)) { throw 'Foreign creator-derived fixture ACE was not present before ACL reset.' }
+    Set-PrivateFileAcl $secretFile -AdditionalAllowedSid @($testSid) -FullControlSid @($testSid)
+    $repairedAcl = Get-Acl -LiteralPath $secretFile
+    if ($repairedAcl.Access.Count -ne 3 -or @($repairedAcl.Access | Where-Object {
+        $_.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value -eq $creatorOwnerSid
+    }).Count) { throw 'Exact ACL reset retained the foreign creator-derived fixture ACE.' }
+
     foreach ($badCase in @(
         [pscustomobject]@{ Json='{}'; Code='SERVICE_SECRET_REQUIRED_VALUE_MISSING' },
         [pscustomobject]@{ Json=('{"' + $secretName + '":42}'); Code='SERVICE_SECRET_REQUIRED_VALUE_INVALID' },

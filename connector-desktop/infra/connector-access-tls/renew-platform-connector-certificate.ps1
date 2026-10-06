@@ -144,14 +144,53 @@ function Set-PrivateFileAcl([string]$Path, [string[]]$AdditionalAllowedSid = @()
     $icacls = Join-Path $env:SystemRoot 'System32\icacls.exe'
     & $icacls $Path '/reset' | Out-Null
     if ($LASTEXITCODE -ne 0) { throw 'Could not reset the protected certificate file ACL.' }
-    $arguments = @('/inheritance:r','/grant:r')
-    foreach ($sidText in (@('S-1-5-18', 'S-1-5-32-544') + $AdditionalAllowedSid | Select-Object -Unique)) {
+    & $icacls $Path '/inheritance:r' | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw 'Could not disable inheritance on the protected certificate file ACL.' }
+
+    # /inheritance:r removes inherited ACEs but can leave an explicit ACE
+    # materialized for CREATOR OWNER (or another inherited trustee). Remove
+    # every ACE principal before granting the exact approved set. icacls only
+    # updates the DACL, so the existing owner and SACL remain untouched.
+    $allowedSid = @('S-1-5-18', 'S-1-5-32-544') + $AdditionalAllowedSid | Select-Object -Unique
+    foreach ($sidText in $FullControlSid) {
+        if ($sidText -notin $allowedSid) { throw 'A FullControl identity is not in the approved protected-file ACL set.' }
+    }
+    $existingSids = @((Get-Acl -LiteralPath $Path).Access | ForEach-Object {
+        try { $sidText = $_.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value }
+        catch { throw 'Could not resolve an existing protected-file ACL identity.' }
+        $sidText
+    } | Select-Object -Unique)
+    foreach ($sidText in $existingSids) {
+        & $icacls $Path '/remove' ('*' + $sidText) | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw 'Could not remove an existing protected-file ACL identity.' }
+    }
+
+    $arguments = @('/grant')
+    foreach ($sidText in $allowedSid) {
         if ([string]$sidText -notmatch '^S-1-\d+(?:-\d+)+$') { throw 'A protected file ACL identity did not resolve to a SID.' }
         $rights = if ($sidText -in (@('S-1-5-18','S-1-5-32-544') + $FullControlSid)) { 'F' } else { 'RX' }
         $arguments += ('*' + $sidText + ':' + $rights)
     }
     & $icacls $Path @arguments | Out-Null
     if ($LASTEXITCODE -ne 0) { throw 'Could not apply the protected certificate file ACL.' }
+
+    $expected = @{}
+    foreach ($sidText in $allowedSid) {
+        $expected[$sidText] = if ($sidText -in (@('S-1-5-18','S-1-5-32-544') + $FullControlSid)) {
+            [int64][Security.AccessControl.FileSystemRights]::FullControl
+        } else { [int64][Security.AccessControl.FileSystemRights]::ReadAndExecute }
+    }
+    $finalAcl = Get-Acl -LiteralPath $Path
+    if ($finalAcl.AreAccessRulesProtected -ne $true -or $finalAcl.Access.Count -ne $expected.Count) {
+        throw 'Protected certificate file ACL did not match the exact expected DACL.'
+    }
+    foreach ($ace in $finalAcl.Access) {
+        $sidText = $ace.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value
+        if (-not $expected.ContainsKey($sidText) -or $ace.AccessControlType -ne [Security.AccessControl.AccessControlType]::Allow -or
+            $ace.IsInherited -or [int64]$ace.FileSystemRights -ne $expected[$sidText]) {
+            throw 'Protected certificate file ACL did not match the exact expected DACL.'
+        }
+    }
     Assert-PrivateFileAcl $Path -AdditionalAllowedSid $AdditionalAllowedSid
 }
 
