@@ -24,6 +24,21 @@ try {
 
     Assert-SmbSshDenyPolicy -UserName 'scn_test' -SshdPath $binary -ConfigPath $configPath -ServiceStartTime $now -EffectiveOutput "port 22`ndenyusers scn_test"
     Assert-SmbSshDenyPolicy -UserName 'scn_test' -SshdPath $binary -ConfigPath $configPath -ServiceStartTime $now -EffectiveOutput "denyusers scn_*"
+    Assert-SmbSshDenyPolicy -UserName 'cnb_0123456789abcdef' -SshdPath $binary -ConfigPath $configPath -ServiceStartTime $now -EffectiveOutput "denyusers cnb_*"
+    Assert-SmbSshDenyPolicy -UserName 'cnb_0123456789abcdef' -SshdPath $binary -ConfigPath $configPath -ServiceStartTime $now -EffectiveOutput "denyusers scn_*`ndenyusers cnb_*"
+    Assert-SmbSshDenyPolicy -UserName 'cnb_0123456789abcdef' -SshdPath $binary -ConfigPath $configPath -ServiceStartTime $now -EffectiveOutput "denyusers cnb_*`ndenyusers cnb_*"
+    $wrongConnectorFamilyDenied=$false
+    try { Assert-SmbSshDenyPolicy -UserName 'cnb_0123456789abcdef' -SshdPath $binary -ConfigPath $configPath -ServiceStartTime $now -EffectiveOutput "denyusers scn_*" } catch { $wrongConnectorFamilyDenied=$true }
+    if(-not $wrongConnectorFamilyDenied){throw 'Connector account was accepted by the legacy scn family wildcard.'}
+    $malformedConnectorNameDenied=$false
+    try { Assert-SmbSshDenyPolicy -UserName 'cnb_0123456789abcdeF' -SshdPath $binary -ConfigPath $configPath -ServiceStartTime $now -EffectiveOutput "denyusers cnb_*" } catch { $malformedConnectorNameDenied=$true }
+    if(-not $malformedConnectorNameDenied){throw 'Malformed connector account was accepted by the cnb family wildcard.'}
+    $emptyDenyRowDenied=$false
+    try { Assert-SmbSshDenyPolicy -UserName 'cnb_0123456789abcdef' -SshdPath $binary -ConfigPath $configPath -ServiceStartTime $now -EffectiveOutput "denyusers`ndenyusers cnb_*" } catch { $emptyDenyRowDenied=$true }
+    if(-not $emptyDenyRowDenied){throw 'An empty effective DenyUsers row was accepted.'}
+    $caseMismatchDenyDenied=$false
+    try { Assert-SmbSshDenyPolicy -UserName 'cnb_0123456789abcdef' -SshdPath $binary -ConfigPath $configPath -ServiceStartTime $now -EffectiveOutput "denyusers CNB_*" } catch { $caseMismatchDenyDenied=$true }
+    if(-not $caseMismatchDenyDenied){throw 'A case-mismatched connector wildcard was accepted.'}
     $missingPolicyDenied = $false
     try { Assert-SmbSshDenyPolicy -UserName 'scn_test' -SshdPath $binary -ConfigPath $configPath -ServiceStartTime $now -EffectiveOutput "port 22`ndenyusers other_user" }
     catch { $missingPolicyDenied = $true }

@@ -26,12 +26,23 @@ function Assert-SmbSshDenyPolicy {
         throw 'OpenSSH service may have loaded configuration before its latest change.'
     }
     if ([string]::IsNullOrWhiteSpace($EffectiveOutput)) { throw 'Effective OpenSSH policy is unavailable.' }
-    $denyLine = @($EffectiveOutput -split "`r?`n" | Where-Object { $_ -match '^denyusers\s+' })
-    if ($denyLine.Count -ne 1) { throw 'Effective OpenSSH DenyUsers policy is missing or ambiguous.' }
-    $names = @($denyLine[0] -split '\s+' | Select-Object -Skip 1)
-    $exactDeny = $names -contains $UserName
-    $ownedFamilyDeny = $UserName -match '^scn_[A-Za-z0-9_]+$' -and $names -contains 'scn_*'
-    if (-not $exactDeny -and -not $ownedFamilyDeny) { throw 'Effective OpenSSH DenyUsers policy does not explicitly deny the managed account.' }
+    $denyLines = @($EffectiveOutput -split "`r?`n" | Where-Object { $_ -match '^\s*denyusers(?:\s|$)' })
+    if ($denyLines.Count -eq 0) { throw 'Effective OpenSSH DenyUsers policy is missing.' }
+    $names = @()
+    foreach ($denyLine in $denyLines) {
+        if ($denyLine -notmatch '^\s*denyusers(?:\s+(.+?))?\s*$' -or [string]::IsNullOrWhiteSpace($Matches[1])) {
+            throw 'Effective OpenSSH DenyUsers policy contains an empty or malformed row.'
+        }
+        $rowNames = @($Matches[1] -split '\s+' | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+        if ($rowNames.Count -eq 0) { throw 'Effective OpenSSH DenyUsers policy contains an empty row.' }
+        foreach ($rowName in $rowNames) {
+            if ($names -cnotcontains $rowName) { $names += $rowName }
+        }
+    }
+    $exactDeny = $names -ccontains $UserName
+    $ownedFamilyDeny = $UserName -cmatch '^scn_[A-Za-z0-9_]+$' -and $names -ccontains 'scn_*'
+    $ownedConnectorDeny = $UserName -cmatch '^cnb_[0-9a-f]{16}$' -and $names -ccontains 'cnb_*'
+    if (-not $exactDeny -and -not $ownedFamilyDeny -and -not $ownedConnectorDeny) { throw 'Effective OpenSSH DenyUsers policy does not explicitly deny the managed account.' }
 }
 
 function Assert-SmbSshCanonicalCommandLine {

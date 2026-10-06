@@ -16,6 +16,7 @@ Contents:
   9. fast_obj (part of gltfpack.exe)
   10. sdefl (part of gltfpack.exe)
   11. Microsoft Visual C++ Redistributable (runtime for Assimp64.dll)
+  12. IFC optimizer worker and Platform Connector rollback components
 
 ==============================================================================
 1. Open Asset Import Library (Assimp)
@@ -587,3 +588,47 @@ Copyright (c) Microsoft Corporation. All rights reserved.
 License: distributed under the Microsoft Visual Studio license terms as "Distributable Code"
 (redistributable code listed in redist.txt of Visual Studio). Only the unmodified object code
 of these files is distributed, as part of Structura Connector.
+
+
+==============================================================================
+12. IFC optimizer worker and Platform Connector rollback components
+==============================================================================
+
+The following notices and full license texts accompany the frozen IFC optimizer
+worker and Platform Connector rollback MSI. Full texts are included under
+ThirdPartyLicenses/ and are copied beside the application in published output.
+The runtime assets are separately versioned release assets. Bundled copies
+retain the hashes listed below.
+
+Frozen IFC optimizer worker
+Asset: structura-ifc-optimizer.exe, version 0.1.2
+SHA-256: 677D524416581F21DB7213AD40A540DC478DB0186FA2D2F34E95942D6E74CBA5
+Component notices and license texts:
+  - IfcOpenShell 0.8.5: LGPL-3.0-or-later; see
+    ThirdPartyLicenses/ifcopenshell-0.8.5/COPYING.LESSER and COPYING.
+  - NumPy 2.5.1: BSD-3-Clause, 0BSD, MIT, Zlib, and CC0-1.0; see
+    ThirdPartyLicenses/numpy-2.5.1/ and its included component license files.
+  - Shapely 2.1.2: BSD-3-Clause; see
+    ThirdPartyLicenses/worker-native/Shapely-2.1.2-BSD-3-Clause.txt.
+  - GEOS 3.13.1: LGPL-2.1; see
+    ThirdPartyLicenses/worker-native/GEOS-3.13.1-COPYING-LGPL-2.1.txt.
+  - OpenSSL 3.0.16: Apache-2.0; see
+    ThirdPartyLicenses/worker-native/OpenSSL-3.0.16-Apache-2.0.txt.
+  - CPython 3.12, Expat, SQLite, libffi ABI-8, and the PyInstaller bootloader:
+    see the corresponding files in ThirdPartyLicenses/worker-native/.
+
+The reviewed support archive includes the worker source snapshot, PyInstaller
+specification, replacement/rebuild directions, and the official IfcOpenShell
+0.8.5 tag source archive:
+https://github.com/PROBIM55/ServerConnector/releases/download/connector-runtime-assets-20261006/runtime-assets-support-20261006.zip
+The source archive is a versioned upstream reference, not evidence that it is
+the exact source/build input of the frozen IfcOpenShell wheel. The exact wheel
+build provenance and complete native link set remain unverified; no bit-for-bit
+source correspondence or relinkable form is claimed here.
+
+Platform Connector rollback MSI
+Asset: Platform.Connector.Desktop.Setup.msi
+SHA-256: D6666FD1613B16879AB6FDA9912D3476D0BA0BE2A782A7F934772D9F89DEDC3D
+The MSI contains .NET Runtime 8.0.28 and System.Security.Cryptography.ProtectedData
+8.0.0. See the full Microsoft runtime and package notices and license texts in
+ThirdPartyLicenses/platform-1.2.1/.
