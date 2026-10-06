@@ -22,6 +22,7 @@ from urllib.request import Request as UrlRequest, urlopen
 from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from pydantic import BaseModel
+from unified_updates import create_unified_update_router
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -1841,6 +1842,8 @@ def load_github_update_manifest(cfg: dict) -> dict:
         raise HTTPException(status_code=502, detail="Invalid JSON from GitHub release API") from exc
 
     raw_tag = str(payload.get("tag_name", "")).strip()
+    if not re.fullmatch(r"v\d+\.\d+\.\d+", raw_tag):
+        raise HTTPException(status_code=502, detail="GitHub release tag is not a legacy vX.Y.Z tag")
     version = normalize_release_version(raw_tag)
     if not version:
         raise HTTPException(status_code=502, detail="GitHub release does not contain tag_name")
@@ -1856,13 +1859,7 @@ def load_github_update_manifest(cfg: dict) -> dict:
                 break
 
     if selected_asset is None:
-        for asset in assets:
-            if str(asset.get("name", "")).strip().lower().endswith(".msi"):
-                selected_asset = asset
-                break
-
-    if selected_asset is None:
-        raise HTTPException(status_code=502, detail="GitHub release does not contain an MSI asset")
+        raise HTTPException(status_code=502, detail="GitHub release does not contain the configured MSI asset")
 
     msi_url = str(selected_asset.get("browser_download_url", "")).strip()
     if not msi_url:
@@ -2031,6 +2028,7 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(title="Connector API", lifespan=lifespan)
+app.include_router(create_unified_update_router(CONFIG_PATH.parent / "unified-updates"))
 
 
 @app.get("/health")
