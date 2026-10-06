@@ -3,6 +3,7 @@ param(
     [string]$SourcePfxPath = 'C:\Platform\runtime\connector-access\renewed-server.pfx',
     [string]$ActivePfxPath = 'C:\Platform\runtime\connector-access\server.pfx',
     [string]$PasswordEnvironmentVariable = 'PLATFORM_CONNECTOR_SERVER_PFX_PASSWORD',
+    [string]$SecretFilePath = '',
     [string]$DeployRoot = 'C:\Platform',
     [int]$HealthPort = 24443,
     [ValidateRange(10, 300)][int]$TimeoutSeconds = 90,
@@ -30,6 +31,7 @@ function Assert-NoReparsePath([string]$Path, [switch]$MayNotExist) {
 function Assert-PrivateFileAcl([string]$Path, [string[]]$AdditionalAllowedSid = @(), [string[]]$RequireFullControlSid = @()) {
     if ($env:OS -ne 'Windows_NT') { return }
     $acl = Get-Acl -LiteralPath $Path
+    Assert-NonNullDacl $acl 'Certificate file'
     $allowed = @('S-1-5-18', 'S-1-5-32-544') + $AdditionalAllowedSid
     $ownerSid = $acl.Owner
     try { if ($ownerSid -notmatch '^S-1-' ) { $ownerSid = ([Security.Principal.NTAccount]::new($ownerSid).Translate([Security.Principal.SecurityIdentifier])).Value } }
@@ -46,10 +48,18 @@ function Assert-PrivateFileAcl([string]$Path, [string[]]$AdditionalAllowedSid = 
     foreach ($sid in $RequireFullControlSid) { if (-not $granted.ContainsKey($sid)) { throw 'A required file ACL identity lacks FullControl.' } }
 }
 
+function Assert-NonNullDacl([object]$Acl, [string]$Description) {
+    try {
+        $sddl = $Acl.GetSecurityDescriptorSddlForm([Security.AccessControl.AccessControlSections]::Access)
+        $raw = [Security.AccessControl.RawSecurityDescriptor]::new($sddl)
+    } catch { throw "$Description ACL cannot be inspected safely." }
+    if ($null -eq $raw.DiscretionaryAcl) { throw "$Description ACL must not be a null DACL." }
+}
+
 function Assert-NoUnapprovedWriteAcl([string]$Path, [string[]]$AllowedSid) {
     if ($env:OS -ne 'Windows_NT') { return }
-    $writeMask = [Security.AccessControl.FileSystemRights]::Write -bor [Security.AccessControl.FileSystemRights]::Modify -bor [Security.AccessControl.FileSystemRights]::FullControl -bor [Security.AccessControl.FileSystemRights]::Delete -bor [Security.AccessControl.FileSystemRights]::ChangePermissions -bor [Security.AccessControl.FileSystemRights]::TakeOwnership -bor [Security.AccessControl.FileSystemRights]::CreateFiles -bor [Security.AccessControl.FileSystemRights]::CreateDirectories -bor [Security.AccessControl.FileSystemRights]::DeleteSubdirectoriesAndFiles
     $acl = Get-Acl -LiteralPath $Path
+    Assert-NonNullDacl $acl 'Protected path'
     $ownerSid = $acl.Owner
     try { if ($ownerSid -notmatch '^S-1-') { $ownerSid = ([Security.Principal.NTAccount]::new($ownerSid).Translate([Security.Principal.SecurityIdentifier])).Value } }
     catch { throw 'Protected path owner cannot be resolved safely.' }
@@ -57,7 +67,17 @@ function Assert-NoUnapprovedWriteAcl([string]$Path, [string[]]$AllowedSid) {
     foreach ($ace in $acl.Access) {
         if ($ace.AccessControlType -ne 'Allow') { continue }
         $sid = $ace.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value
-        if ($sid -notin $AllowedSid -and (([int]$ace.FileSystemRights -band [int]$writeMask) -ne 0)) { throw "Unapproved write access exists on protected path: $Path" }
+        $rights = [int]$ace.FileSystemRights
+        $writeMask = [int][Security.AccessControl.FileSystemRights]::WriteData -bor
+            [int][Security.AccessControl.FileSystemRights]::AppendData -bor
+            [int][Security.AccessControl.FileSystemRights]::WriteExtendedAttributes -bor
+            [int][Security.AccessControl.FileSystemRights]::WriteAttributes -bor
+            [int][Security.AccessControl.FileSystemRights]::Delete -bor
+            [int][Security.AccessControl.FileSystemRights]::DeleteSubdirectoriesAndFiles -bor
+            [int][Security.AccessControl.FileSystemRights]::ChangePermissions -bor
+            [int][Security.AccessControl.FileSystemRights]::TakeOwnership -bor
+            0x40000000 -bor 0x10000000
+        if ($sid -notin $AllowedSid -and (($rights -band $writeMask) -ne 0)) { throw "Unapproved write access exists on protected path: $Path" }
     }
 }
 
@@ -81,17 +101,57 @@ function Assert-ProtectedDirectoryPath([string]$Path, [string[]]$AllowedSid, [st
     return $full
 }
 
+function Get-ConnectorAccessCertificatePassword([string]$SecretFilePath, [string]$SecretName, [string]$Root, [string[]]$AllowedSid) {
+    if ($SecretName -cne 'PLATFORM_CONNECTOR_ACCESS_SERVER_CERT_PASSWORD') { throw 'Unsupported certificate secret name.' }
+    try {
+        if (-not [IO.Path]::IsPathRooted($SecretFilePath)) { throw 'invalid path' }
+        $fullPath = [IO.Path]::GetFullPath($SecretFilePath)
+        $expectedPath = [IO.Path]::GetFullPath((Join-Path (Join-Path $Root 'runtime\connector-access') 'service-secrets.json'))
+        if (-not [string]::Equals($SecretFilePath, $fullPath, [StringComparison]::OrdinalIgnoreCase) -or
+            -not [string]::Equals($fullPath, $expectedPath, [StringComparison]::OrdinalIgnoreCase)) { throw 'noncanonical path' }
+        [void](Assert-NoReparsePath $fullPath)
+        $directory = Split-Path -Parent $fullPath
+        [void](Assert-ProtectedDirectoryPath $directory $AllowedSid $Root)
+        Assert-PrivateFileAcl $fullPath -AdditionalAllowedSid $AllowedSid
+    } catch { throw 'SERVICE_SECRET_PATH_OR_ACL_INVALID' }
+
+    try {
+        $stream = [IO.File]::Open($fullPath, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
+        try {
+            if ($stream.Length -lt 2 -or $stream.Length -gt 65536) { throw 'size' }
+            $bytes = New-Object byte[] ([int]$stream.Length)
+            $offset = 0
+            while ($offset -lt $bytes.Length) {
+                $read = $stream.Read($bytes, $offset, $bytes.Length - $offset)
+                if ($read -le 0) { throw 'short read' }
+                $offset += $read
+            }
+            if ($stream.ReadByte() -ne -1) { throw 'grew during read' }
+        } finally { $stream.Dispose() }
+        $encoding = New-Object System.Text.UTF8Encoding($false, $true)
+        $jsonText = $encoding.GetString($bytes)
+        $document = ConvertFrom-Json -InputObject $jsonText -ErrorAction Stop
+    } catch { throw 'SERVICE_SECRET_JSON_INVALID' }
+    if ($null -eq $document -or $document -is [Array] -or $document -is [string] -or $document -is [ValueType]) { throw 'SERVICE_SECRET_JSON_INVALID' }
+    $properties = @($document.PSObject.Properties | Where-Object { $_.Name -ceq $SecretName })
+    if ($properties.Count -ne 1) { throw 'SERVICE_SECRET_REQUIRED_VALUE_MISSING' }
+    if ($properties[0].Value -isnot [string] -or [string]::IsNullOrWhiteSpace([string]$properties[0].Value)) { throw 'SERVICE_SECRET_REQUIRED_VALUE_INVALID' }
+    return [string]$properties[0].Value
+}
+
 function Set-PrivateFileAcl([string]$Path, [string[]]$AdditionalAllowedSid = @(), [string[]]$FullControlSid = @()) {
     if ($env:OS -ne 'Windows_NT') { return }
-    $acl = [Security.AccessControl.FileSecurity]::new()
-    $acl.SetAccessRuleProtection($true, $false)
+    $icacls = Join-Path $env:SystemRoot 'System32\icacls.exe'
+    & $icacls $Path '/reset' | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw 'Could not reset the protected certificate file ACL.' }
+    $arguments = @('/inheritance:r','/grant:r')
     foreach ($sidText in (@('S-1-5-18', 'S-1-5-32-544') + $AdditionalAllowedSid | Select-Object -Unique)) {
-        $identity = [Security.Principal.SecurityIdentifier]::new($sidText)
-        $rights = if ($sidText -in (@('S-1-5-18','S-1-5-32-544') + $FullControlSid)) { [Security.AccessControl.FileSystemRights]::FullControl } else { [Security.AccessControl.FileSystemRights]::ReadAndExecute }
-        $rule = [Security.AccessControl.FileSystemAccessRule]::new($identity, $rights, 'Allow')
-        [void]$acl.AddAccessRule($rule)
+        if ([string]$sidText -notmatch '^S-1-\d+(?:-\d+)+$') { throw 'A protected file ACL identity did not resolve to a SID.' }
+        $rights = if ($sidText -in (@('S-1-5-18','S-1-5-32-544') + $FullControlSid)) { 'F' } else { 'RX' }
+        $arguments += ('*' + $sidText + ':' + $rights)
     }
-    Set-Acl -LiteralPath $Path -AclObject $acl
+    & $icacls $Path @arguments | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw 'Could not apply the protected certificate file ACL.' }
     Assert-PrivateFileAcl $Path -AdditionalAllowedSid $AdditionalAllowedSid
 }
 
@@ -329,10 +389,16 @@ function Test-ConnectorTlsHealth([string]$HostName, [int]$Port, [int]$Timeout, [
 }
 
 function Invoke-ConnectorAccessTlsRenewal {
-    param([string]$Incoming,[string]$Active,[string]$SecretName,[string]$Root,[int]$Port,[int]$Timeout)
-    $password = [Environment]::GetEnvironmentVariable($SecretName, 'Machine')
-    if ([string]::IsNullOrEmpty($password)) { $password = [Environment]::GetEnvironmentVariable($SecretName, 'Process') }
-    if ([string]::IsNullOrEmpty($password)) { throw "Required certificate password environment variable is missing: $SecretName" }
+    param([string]$Incoming,[string]$Active,[string]$SecretName,[string]$SecretFilePath='',[string]$Root,[int]$Port,[int]$Timeout)
+    if ($SecretFilePath -ceq '') {
+        $password = [Environment]::GetEnvironmentVariable($SecretName, 'Machine')
+        if ([string]::IsNullOrEmpty($password)) { $password = [Environment]::GetEnvironmentVariable($SecretName, 'Process') }
+        if ([string]::IsNullOrEmpty($password)) { throw "Required certificate password environment variable is missing: $SecretName" }
+    } else {
+        $runtimeSid = Assert-PlatformTaskAction $Root
+        $writerSid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+        $password = Get-ConnectorAccessCertificatePassword -SecretFilePath $SecretFilePath -SecretName $SecretName -Root $Root -AllowedSid @($runtimeSid,$writerSid)
+    }
     $incomingFull = Assert-NoReparsePath $Incoming
     $activeFull = Assert-NoReparsePath $Active -MayNotExist
     $directory = Split-Path -Parent $activeFull
@@ -440,10 +506,10 @@ function Invoke-ConnectorAccessTlsRenewal {
 }
 
 if ($SelfTest) {
-    $required = 'Assert-NoReparsePath','Get-ValidatedServerCertificate','Get-ExactPlatformServerProcesses','Assert-PlatformTaskAction','Invoke-PlatformRestart','Test-ConnectorTlsHealth'
+    $required = 'Assert-NoReparsePath','Get-ValidatedServerCertificate','Get-ConnectorAccessCertificatePassword','Assert-NonNullDacl','Get-ExactPlatformServerProcesses','Assert-PlatformTaskAction','Invoke-PlatformRestart','Test-ConnectorTlsHealth'
     foreach ($name in $required) { if (-not (Get-Command $name -CommandType Function -ErrorAction SilentlyContinue)) { throw "Self-test missing function: $name" } }
     Write-Output 'TLS_HOOK_SELFTEST_SOURCE_OK'
 } else {
     Assert-SupportedRuntime
-    Invoke-ConnectorAccessTlsRenewal -Incoming $SourcePfxPath -Active $ActivePfxPath -SecretName $PasswordEnvironmentVariable -Root $DeployRoot -Port $HealthPort -Timeout $TimeoutSeconds
+    Invoke-ConnectorAccessTlsRenewal -Incoming $SourcePfxPath -Active $ActivePfxPath -SecretName $PasswordEnvironmentVariable -SecretFilePath $SecretFilePath -Root $DeployRoot -Port $HealthPort -Timeout $TimeoutSeconds
 }
