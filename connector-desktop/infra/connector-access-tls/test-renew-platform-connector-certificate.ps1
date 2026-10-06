@@ -160,8 +160,20 @@ try {
     try { [void](Assert-PrivateFileAcl $secretFile -AdditionalAllowedSid @($testSid)); throw 'Untrusted read access to service secrets was accepted.' }
     catch { if ($_.Exception.Message -notmatch 'unapproved identity') { throw } }
     Set-PrivateFileAcl $secretFile -AdditionalAllowedSid @($testSid) -FullControlSid @($testSid)
-    try { [void](Assert-PrivateFileAcl $secretFile); throw 'Unapproved owner for service secrets was accepted.' }
-    catch { if ($_.Exception.Message -notmatch 'owner') { throw } }
+    $unapprovedOwnerAcl = [Security.AccessControl.FileSecurity]::new()
+    $unapprovedOwnerAcl.SetSecurityDescriptorSddlForm('O:S-1-5-32-545',[Security.AccessControl.AccessControlSections]::Owner)
+    $unapprovedOwnerAcl.SetSecurityDescriptorSddlForm('D:(A;;FA;;;SY)(A;;FA;;;BA)',[Security.AccessControl.AccessControlSections]::Access)
+    $script:aclFixtureMockPath = $secretFile
+    $script:aclFixtureMock = $unapprovedOwnerAcl
+    try {
+        $unapprovedOwnerRejected = $false
+        try { [void](Assert-PrivateFileAcl $secretFile) }
+        catch {
+            if ($_.Exception.Message -cne 'Certificate file owner is not an approved runtime identity.') { throw }
+            $unapprovedOwnerRejected = $true
+        }
+        if (-not $unapprovedOwnerRejected) { throw 'Unapproved owner for service secrets was accepted.' }
+    } finally { $script:aclFixtureMockPath = ''; $script:aclFixtureMock = $null }
 
     $readOnlyDirectory = Join-Path $temp 'readonly-parent-fixture'
     New-Item -ItemType Directory -Path $readOnlyDirectory | Out-Null
