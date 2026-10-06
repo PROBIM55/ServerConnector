@@ -5,7 +5,7 @@ using Platform.Connector.Core;
 
 namespace Connector.JobModules;
 
-public sealed class FbxGlbJobExecutor(string gltfpackPath) : IConnectorJobExecutor
+public sealed class FbxGlbJobExecutor(string gltfpackPath, string? nativeWorkRoot = null) : IConnectorJobExecutor
 {
     public const string Id = "converter.fbx-glb";
     public string ExecutorId => Id;
@@ -20,8 +20,10 @@ public sealed class FbxGlbJobExecutor(string gltfpackPath) : IConnectorJobExecut
         var attemptId = Guid.NewGuid().ToString("N");
         var staging = Path.Combine(payload.OutputDirectory, $".fbx-attempt-{attemptId}");
         var published = false;
+        NativeConverterWorkspace? nativeWorkspace = null;
         try
         {
+            nativeWorkspace = NativeConverterWorkspace.Create(nativeWorkRoot);
             Directory.CreateDirectory(staging);
             var converter = new AgrGltfpackPartConverter(gltfpackPath);
             var update = new SynchronousProgress<AgrConvertProgress>(p =>
@@ -31,7 +33,7 @@ public sealed class FbxGlbJobExecutor(string gltfpackPath) : IConnectorJobExecut
                 progress(new ConnectorExecutionProgress((int)Math.Round(fraction * 95), p.Stage), cancellationToken)
                     .GetAwaiter().GetResult();
             });
-            var result = await Task.Run(() => converter.Convert(payload.InputPath, staging, Path.Combine(staging, "work"), update, cancellationToken), cancellationToken);
+            var result = await Task.Run(() => converter.Convert(payload.InputPath, staging, nativeWorkspace.WorkRoot, update, cancellationToken), cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
             if (!File.Exists(result.ZipPath) || new FileInfo(result.ZipPath).Length == 0)
                 return new(false, "AGR converter did not produce a valid archive.", "CONVERTER_OUTPUT_INVALID");
@@ -61,9 +63,13 @@ public sealed class FbxGlbJobExecutor(string gltfpackPath) : IConnectorJobExecut
         }
         finally
         {
-            if (!published && Directory.Exists(staging))
+            try { nativeWorkspace?.Dispose(); }
+            finally
             {
-                try { Directory.Delete(staging, true); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+                if (!published && Directory.Exists(staging))
+                {
+                    try { Directory.Delete(staging, true); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+                }
             }
         }
     }
