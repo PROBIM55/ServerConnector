@@ -37,22 +37,28 @@ public partial class MainWindow : Window, IShellHost, IConnectorHost
     private const string DefaultTeklaExtensionsPublishSourcePath = @"\\62.113.36.107\BIM_Models\Tekla\02_ПАПКА ФИРМЫ\07_Extensions";
     private const string DefaultTeklaLibrariesPublishSourcePath = @"\\62.113.36.107\BIM_Models\Tekla\02_ПАПКА ФИРМЫ\02_Grasshopper\Libraries\8";
 
-    private readonly SettingsService _settingsService = new();
-    private readonly AutoStartService _autoStartService = new();
+    private readonly SettingsService _settingsService;
+    private readonly IAutoStartService _autoStartService;
     private readonly HeartbeatClient _heartbeatClient = new(new HttpClient { Timeout = TimeSpan.FromSeconds(110) });
     private readonly UpdateService _updateService = new(new HttpClient { Timeout = TimeSpan.FromSeconds(40) });
-    private readonly TeklaStandardService _teklaStandardService = new(new HttpClient { Timeout = TimeSpan.FromSeconds(25) });
+    private readonly PackageUpdateService _packageUpdateService;
+    private readonly TeklaStandardService _teklaStandardService;
     private readonly TcpConnectivityProbe _tcpConnectivityProbe = new();
     // Model Sharing / VPN services now live inside their feature modules (the shell catalog). See ComposeFeatureModules().
     private readonly Shell.ShellViewModel _shell;   // modular feature catalog (domains → modules); assigned in ctor (needs `this` as IShellHost)
+    private readonly ConnectorRuntimeServices _runtimeServices;
+    private readonly Features.ConverterWorkspace.ConverterWorkspaceModule _converterWorkspace;
+    private readonly Features.PlatformTools.PlatformToolsModule _platformTools;
+    private readonly GraphiteDesktopController _graphite;
     private StandardModule? _standard;   // Tekla domain → "Стандарт" module (the lifted firm/extensions/libraries sync engine)
     private ConnectorModule? _connector;   // "Коннектор" domain module (the lifted login/heartbeat FRONT-END view); engine stays here
     private string _lastVpnConfig = string.Empty;   // last config delivered by bootstrap (kept in memory, not persisted)
     private string _lastSmbLogin = string.Empty;    // SMB creds from bootstrap, for mounting the share over VPN
     private string _lastSmbPassword = string.Empty;
-    private readonly DispatcherTimer _timer = new();
-    private readonly DispatcherTimer _updateTimer = new();
-    private readonly DispatcherTimer _teklaSyncTimer = new();
+    private string _connectorManagedSmbShareRoot = string.Empty;
+    private string _connectorManagedSmbDrive = string.Empty;
+    private readonly ManagedSmbMappingStore _managedSmbMappings = new();
+    private readonly DesktopBackgroundAgent _backgroundAgent;
     private readonly Forms.NotifyIcon _trayIcon;
     private static readonly IReadOnlyList<ReleaseNoteItem> ReleaseNotes = new List<ReleaseNoteItem>
     {
@@ -245,6 +251,7 @@ public partial class MainWindow : Window, IShellHost, IConnectorHost
     private bool _trayHintShown;
     private string _activeSessionId = string.Empty;
     private UpdateManifest? _pendingUpdate;
+    private PackageUpdateCandidate? _pendingPackageUpdate;
     private UpdateToastWindow? _updateToastWindow;
     private string? _downloadedInstallerPath;
     private bool _updateOfferShown;
@@ -253,28 +260,73 @@ public partial class MainWindow : Window, IShellHost, IConnectorHost
     private bool _teklaCheckInProgress;   // seam backing store for IShellHost.TeklaCheckInProgress (read by connect flow)
     private bool _teklaBalloonShown;      // seam backing store; reset via IShellHost.ResetTeklaPendingBalloon
     private bool _serverConnectionFailed;
+    private readonly bool _allowOwnedFixtureClose;
+    private readonly bool _runLoadedExternalActions;
+    private readonly string? _webViewUserDataDirectory;
+    private readonly Action? _loadedInitializationCompleted;
+    private Task? _disposeResourcesTask;
+    private Task? _deferredResourcesDisposeTask;
     private static readonly TimeSpan UpdateCheckInterval = TimeSpan.FromMinutes(10);
     private static readonly TimeSpan TeklaSyncCheckInterval = TimeSpan.FromMinutes(2);
+    private static readonly TimeSpan BackgroundShutdownDrainTimeout = TimeSpan.FromSeconds(3);
 
-    public MainWindow()
+    public MainWindow() : this(MainWindowServices.CreateDefault())
     {
+    }
+
+    public MainWindow(MainWindowServices services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        _settingsService = services.Settings;
+        _autoStartService = services.AutoStart;
+        _runtimeServices = services.Runtime;
+        _teklaStandardService = services.WindowTeklaStandard;
+        _packageUpdateService = services.PackageUpdates;
+        _allowOwnedFixtureClose = services.AllowOwnedFixtureClose;
+        _runLoadedExternalActions = services.RunLoadedExternalActions;
+        _webViewUserDataDirectory = services.WebViewUserDataDirectory;
+        _loadedInitializationCompleted = services.LoadedInitializationCompleted;
         InitializeComponent();
-        _shell = new Shell.ShellViewModel(this, this);   // `this` satisfies IShellHost + IConnectorHost; field initializers have already run.
+        _shell = new Shell.ShellViewModel(this, this, _runtimeServices.Platform, _runtimeServices.LegacyPartConverter,
+            services.ShellTeklaStandard, services.VpnProvisioning, services.ModelSharingProvisioning, services.IfcExportPatch);
+        _converterWorkspace = new Features.ConverterWorkspace.ConverterWorkspaceModule(
+            _runtimeServices.ConverterClient, action => Dispatcher.BeginInvoke(action));
+        _platformTools = new Features.PlatformTools.PlatformToolsModule();
         WindowStartupLocation = WindowStartupLocation.CenterScreen;
         ComposeFeatureModules();   // bind Tekla sub-tabs (TeklaTabs) + host Structura/VPN/Атрибуты module views + wire glue
-        _timer.Tick += Timer_Tick;
-        _updateTimer.Tick += UpdateTimer_Tick;
-        _teklaSyncTimer.Tick += TeklaSyncTimer_Tick;
+        _backgroundAgent = new DesktopBackgroundAgent(
+            TimeSpan.FromSeconds(FixedHeartbeatSeconds),
+            UpdateCheckInterval,
+            TeklaSyncCheckInterval,
+            isLegacyMode: () => !_runtimeServices.CommonAccess.IsSelected,
+            heartbeat: RunHeartbeatTickAsync,
+            appUpdate: RunUpdateTickAsync,
+            teklaSync: RunTeklaSyncTickAsync,
+            onError: ReportBackgroundAgentError);
         Closing += MainWindow_Closing;
-        Closed += MainWindow_Closed;
         StateChanged += MainWindow_StateChanged;
-        _trayIcon = CreateTrayIcon();
+        _trayIcon = CreateTrayIcon(services.TrayIconVisible);
         LoadSettingsToUi();
         UpdateRunStateUi();
         UpdateActionButtonUi();
         _standard?.RefreshUi();
         SyncFeatureModules();
         UpdateHeaderStatusUi();
+        _graphite = new GraphiteDesktopController(this, _runtimeServices, _shell,
+            _platformTools.ViewModel, _converterWorkspace.ViewModel,
+            confirmFolderDisconnect: drive => Dispatcher.InvokeAsync(() =>
+                ThemedDialogs.Show(this, $"Отключить общую папку от диска {drive}?",
+                    "Общая папка", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes).Task);
+        _graphite.SnapshotChanged += OnGraphiteSnapshot;
+        GraphiteWebHost.Configure(_graphite.HandleAsync, AppendLog, _graphite.CreateDocumentSnapshot);
+    }
+
+    private async void OnGraphiteSnapshot(object snapshot)
+    {
+        if (_exitInProgress) return;
+        try { await GraphiteWebHost.PublishSnapshotAsync(snapshot); }
+        catch (ObjectDisposedException) { }
+        catch (Exception) { AppendLog("Не удалось обновить состояние интерфейса."); }
     }
 
     // ===== IShellHost (seam for the lifted "Стандарт" module) =========================================
@@ -329,13 +381,234 @@ public partial class MainWindow : Window, IShellHost, IConnectorHost
     Task IConnectorHost.ConnectByTokenAsync(string token, bool showSuccessDialog) =>
         ConnectByTokenInternalAsync(token, showSuccessDialog);
 
+    bool IConnectorHost.IsConnected => _isRunning &&
+        !string.IsNullOrWhiteSpace(_activeSessionId) && !_serverConnectionFailed;
+
+    bool IConnectorHost.CanControlBackgroundConnection => true;
+
+    async Task IConnectorHost.StartBackgroundConnectionAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var token = SettingsService.DecryptToken(_settings.TokenCipherBase64);
+        if (string.IsNullOrWhiteSpace(token))
+            throw new InvalidOperationException("Сначала подключитесь по токену устройства.");
+        if (string.IsNullOrWhiteSpace(_activeSessionId) || _serverConnectionFailed)
+            await ConnectByTokenInternalAsync(token, showSuccessDialog: false);
+        else
+        {
+            _backgroundAgent.Start(heartbeatEnabled: true);
+            _isRunning = true;
+            UpdateRunStateUi();
+            await SendHeartbeatSafeAsync();
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!((IConnectorHost)this).IsConnected)
+            throw new InvalidOperationException("Связь с сервером не подтверждена.");
+        UpdateHeaderStatusUi();
+    }
+
+    Task IConnectorHost.StopBackgroundConnectionAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        _backgroundAgent.SetHeartbeatEnabled(false);
+        _isRunning = false;
+        UpdateRunStateUi();
+        UpdateHeaderStatusUi();
+        AppendLog("Поддержание связи приостановлено.");
+        return Task.CompletedTask;
+    }
+
+    Task IConnectorHost.DisconnectAsync()
+    {
+        _backgroundAgent.SetHeartbeatEnabled(false);
+        _isRunning = false;
+        _activeSessionId = string.Empty;
+        UpdateRunStateUi();
+        OnGraphiteSnapshot(_graphite.CreateSnapshot());
+        AppendLog("Подключение отключено.");
+        return Task.CompletedTask;
+    }
+
+    Task IConnectorHost.SavePreferencesAsync(bool autoStart, int heartbeatSeconds)
+    {
+        if (heartbeatSeconds is < 5 or > 3600)
+            throw new ArgumentOutOfRangeException(nameof(heartbeatSeconds));
+        _autoStartService.SetEnabled(autoStart);
+        _settings.AutoStart = autoStart;
+        _settings.HeartbeatSeconds = heartbeatSeconds;
+        _settingsService.Save(_settings);
+        _backgroundAgent.SetHeartbeatInterval(TimeSpan.FromSeconds(heartbeatSeconds));
+        _connector?.LoadFromSettings(SettingsService.DecryptToken(_settings.TokenCipherBase64));
+        AppendLog("Настройки сохранены.");
+        return Task.CompletedTask;
+    }
+
+    Task IConnectorHost.SaveDesktopPreferencesAsync(DesktopPreferences preferences)
+    {
+        ArgumentNullException.ThrowIfNull(preferences);
+        ApplySelectedFolder(preferences.TeklaFirmLocalPath, value => _settings.TeklaStandardLocalPath = value);
+        ApplySelectedFolder(preferences.TeklaExtensionsLocalPath, value => _settings.TeklaExtensionsLocalPath = value);
+        ApplySelectedFolder(preferences.TeklaLibrariesLocalPath, value => _settings.TeklaLibrariesLocalPath = value);
+        ApplySelectedFolder(preferences.ModelSharingTeklaBin, value => _settings.ModelSharingTeklaBin = value);
+        ApplySelectedFolder(preferences.IfcPatchingTeklaBin, value => _settings.IfcPatchingTeklaBin = value);
+        ApplySelectedFolder(preferences.IfcPatchingStagingDir, value => _settings.IfcPatchingStagingDir = value);
+        ApplySelectedFolder(preferences.ConverterOutputDirectory, value => _settings.ConverterOutputDirectory = value);
+        ApplySelectedFolder(preferences.TeklaPublishSourcePath, value => _settings.TeklaPublishSourcePath = value);
+        ApplySelectedFolder(preferences.TeklaExtensionsPublishSourcePath, value => _settings.TeklaExtensionsPublishSourcePath = value);
+        ApplySelectedFolder(preferences.TeklaLibrariesPublishSourcePath, value => _settings.TeklaLibrariesPublishSourcePath = value);
+        if (preferences.AutoStart is { } autoStart)
+        {
+            _autoStartService.SetEnabled(autoStart);
+            _settings.AutoStart = autoStart;
+        }
+        if (preferences.HeartbeatSeconds is { } heartbeatSeconds)
+        {
+            if (heartbeatSeconds is < 5 or > 3600) throw new ArgumentOutOfRangeException(nameof(preferences));
+            _settings.HeartbeatSeconds = heartbeatSeconds;
+            _backgroundAgent.SetHeartbeatInterval(TimeSpan.FromSeconds(heartbeatSeconds));
+        }
+        _settingsService.Save(_settings);
+        _standard?.RefreshUi();
+        SyncFeatureModules();
+        _connector?.LoadFromSettings(SettingsService.DecryptToken(_settings.TokenCipherBase64));
+        AppendLog("Native-настройки сохранены.");
+        return Task.CompletedTask;
+    }
+
+    Task IConnectorHost.EnsureVpnReadyAsync() => EnsureVpnReadyAsync();
+
+    bool IConnectorHost.CanPublishTekla => _standard is not null && _settings.IsFirmAdmin;
+
+    Task IConnectorHost.ValidateTeklaPublicationAsync(TeklaPublicationRequest request, CancellationToken cancellationToken) =>
+        _standard?.ValidatePublicationAsync(request, cancellationToken) ??
+            Task.FromException(new NotSupportedException("Публикация Tekla недоступна."));
+
+    Task IConnectorHost.PublishTeklaAsync(TeklaPublicationRequest request, CancellationToken cancellationToken) =>
+        _standard?.PublishPublicationAsync(request, cancellationToken) ??
+            Task.FromException(new NotSupportedException("Публикация Tekla недоступна."));
+
+    async Task IConnectorHost.MountVpnShareAsync(string drive)
+    {
+        var expectedUnc = ResolveVpnSmbUnc();
+        await EnsureVpnReadyAsync();
+        await MountVpnShareToDriveAsync(expectedUnc, drive);
+    }
+
+    Task IConnectorHost.UnmountVpnShareAsync(string drive) => DisconnectConnectorManagedSmbAsync(drive);
+
+    async Task IConnectorHost.ExecuteSupportActionAsync(DesktopSupportAction action, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        switch (action)
+        {
+            case DesktopSupportAction.DownloadPendingUpdate:
+                await DownloadPendingUpdateAsync(cancellationToken);
+                return;
+            case DesktopSupportAction.ShowReleaseNotes:
+                new ReleaseNotesWindow(ReleaseNotes, typeof(MainWindow).Assembly.GetName().Version?.ToString(3) ?? "—") { Owner = this }.ShowDialog();
+                return;
+            case DesktopSupportAction.OpenApplicationJournal:
+                ShowApplicationJournal();
+                return;
+            case DesktopSupportAction.ClearApplicationJournal:
+                LogTextBox.Clear();
+                return;
+            case DesktopSupportAction.OpenLogFolder:
+                throw new NotSupportedException("Постоянная папка журналов не ведётся: доступен только текущий журнал приложения.");
+            case DesktopSupportAction.ExportDiagnostics:
+                ExportDiagnosticsSummary();
+                return;
+            case DesktopSupportAction.SyncTeklaFirm:
+                await RunTeklaSectionSyncAsync(TeklaStandardSection.Firm);
+                return;
+            case DesktopSupportAction.SyncTeklaExtensions:
+                await RunTeklaSectionSyncAsync(TeklaStandardSection.Extensions);
+                return;
+            case DesktopSupportAction.SyncTeklaLibraries:
+                await RunTeklaSectionSyncAsync(TeklaStandardSection.Libraries);
+                return;
+            default:
+                throw new NotSupportedException($"Native-действие {action} недоступно.");
+        }
+    }
+
+    private void ShowApplicationJournal()
+    {
+        // The legacy log control is hidden behind the WebView. Keep raw native
+        // logs in a native read-only window; never send them through browser IPC.
+        var journal = new System.Windows.Controls.TextBox
+        {
+            Text = LogTextBox.Text, IsReadOnly = true, TextWrapping = TextWrapping.NoWrap,
+            VerticalScrollBarVisibility = System.Windows.Controls.ScrollBarVisibility.Auto,
+            HorizontalScrollBarVisibility = System.Windows.Controls.ScrollBarVisibility.Auto,
+            FontFamily = new System.Windows.Media.FontFamily("Consolas"), FontSize = 12,
+            Margin = new Thickness(12)
+        };
+        var dialog = new Window
+        {
+            Owner = this, Title = "Журнал приложения", Width = 850, Height = 520,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner, Content = journal,
+            ShowInTaskbar = false
+        };
+        dialog.Loaded += (_, _) => journal.ScrollToEnd();
+        dialog.ShowDialog();
+    }
+
+    private void ExportDiagnosticsSummary()
+    {
+        var picker = new Microsoft.Win32.SaveFileDialog
+        {
+            FileName = "connector-diagnostics.json", Filter = "Диагностика JSON|*.json"
+        };
+        if (picker.ShowDialog(this) != true) return;
+        // An allowlisted summary deliberately excludes raw logs, native paths,
+        // device identifiers, configuration, credentials and model contents.
+        var summary = new
+        {
+            schemaVersion = 1, createdUtc = DateTimeOffset.UtcNow,
+            appVersion = typeof(MainWindow).Assembly.GetName().Version?.ToString(3),
+            structuraConnected = ((IConnectorHost)this).IsConnected,
+            platformConnected = _runtimeServices.Platform.Connection.IsConnected,
+            agentRunning = _runtimeServices.Host.IsRunning,
+            vpnConfigured = _settings.VpnEnabled && !string.IsNullOrWhiteSpace(_settings.VpnConfigCipherBase64),
+            pendingUpdate = ((IConnectorHost)this).HasPendingUpdate
+        };
+        File.WriteAllText(picker.FileName, System.Text.Json.JsonSerializer.Serialize(summary,
+            new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+        AppendLog("Диагностическая сводка сохранена.");
+    }
+
+    private Task RunTeklaSectionSyncAsync(TeklaStandardSection section) =>
+        _standard is null
+            ? Task.FromException(new InvalidOperationException("Модуль Стандарт Tekla недоступен."))
+            : _standard.RunInteractiveSyncAsync(section);
+
+    private static void ApplySelectedFolder(string? path, Action<string> assign)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return;
+        var fullPath = path.Trim();
+        if (!Path.IsPathFullyQualified(fullPath) || !Directory.Exists(fullPath))
+            throw new InvalidOperationException("Выбранная папка недоступна.");
+        assign(fullPath);
+    }
+
+    private async Task EnsureVpnReadyAsync()
+    {
+        if (!_settings.VpnEnabled || string.IsNullOrWhiteSpace(_lastVpnConfig))
+            throw new InvalidOperationException("VPN доступен после bootstrap с сохранённой native-конфигурацией.");
+        if (_shell.Vpn.Module("Общая папка (VPN)") is not Features.Vpn.VpnModule vpn)
+            throw new InvalidOperationException("Модуль VPN недоступен.");
+        var result = await vpn.EnsureEnabledAsync(showResultDialog: false, openShareOnSuccess: false);
+        if (!result.IsSuccess) throw new InvalidOperationException("VPN не подготовлен: " + result.Message);
+    }
+
     // App self-update "check" path (UpdateAction_Click when no pending update).
     Task IConnectorHost.CheckUpdatesAsync(bool showDialogs) => CheckUpdatesAsync(showDialogs);
 
     // App self-update "install" path (UpdateAction_Click when an update is pending).
     Task IConnectorHost.InstallPendingUpdateAsync(bool confirmBeforeRun) => InstallPendingUpdateAsync(confirmBeforeRun);
 
-    bool IConnectorHost.HasPendingUpdate => _pendingUpdate is not null;
+    bool IConnectorHost.HasPendingUpdate => _pendingUpdate is not null || _pendingPackageUpdate is not null;
 
     // Tekla-mirror sync button — identical to the Стандарт-tab button (OperationProgressWindow + "already running").
     Task IConnectorHost.RunTeklaInteractiveSyncAsync() =>
@@ -368,6 +641,8 @@ public partial class MainWindow : Window, IShellHost, IConnectorHost
 
     private void ComposeFeatureModules()
     {
+        ConverterWorkspaceHost.Content = _converterWorkspace.View;
+        PlatformToolsHost.Content = _platformTools.View;
         // Capture the Коннектор module + host its view BEFORE LoadSettingsToUi/UpdateRunStateUi/UpdateActionButtonUi
         // (called later in the ctor) push state into it. The connect/heartbeat engine stays here and reaches the
         // moved controls through this module's push methods (replacing the old direct control writes).
@@ -425,6 +700,12 @@ public partial class MainWindow : Window, IShellHost, IConnectorHost
         // Атрибуты: placeholder domain (no shell glue yet — pure roadmap view).
         AttributesHost.Content = _shell.Attributes.Module("Атрибуты")?.View;
 
+        if (_shell.Platform.Module("Platform") is Features.Platform.PlatformModule platform)
+        {
+            PlatformHost.Content = platform.View;
+            platform.Log = AppendLog;
+        }
+
         // Конвертер (C2b): подвкладки «Конвертация | История»; строки «Конвертер: …» — в общий журнал окна.
         ConverterTabs.ItemsSource = _shell.Converter.Modules;
         if (_shell.Converter.Module("Конвертация") is Features.Converter.ConverterModule converter)
@@ -435,6 +716,11 @@ public partial class MainWindow : Window, IShellHost, IConnectorHost
 
     private void SyncFeatureModules()
     {
+        if (_shell.Tekla.Module("Патчинг")?.View.DataContext is Features.Tekla.Patching.PatchingViewModel patch)
+        {
+            if (!string.IsNullOrWhiteSpace(_settings.IfcPatchingTeklaBin)) patch.TeklaBin = _settings.IfcPatchingTeklaBin;
+            if (!string.IsNullOrWhiteSpace(_settings.IfcPatchingStagingDir)) patch.StagingDir = _settings.IfcPatchingStagingDir;
+        }
         if (_shell.Tekla.Module("Model Sharing") is Features.Tekla.ModelSharing.ModelSharingModule ms)
         {
             ms.Initialize(
@@ -495,36 +781,46 @@ public partial class MainWindow : Window, IShellHost, IConnectorHost
 
     private async void Window_Loaded(object sender, RoutedEventArgs e)
     {
-        Topmost = true;
-        Activate();
-        Focus();
-        Topmost = false;
+        try
+        {
+            var saved = await _runtimeServices.Host.PrepareLocalAsync();
+            _converterWorkspace.ViewModel.RestoreSavedJobs(saved.Jobs);
+            await _runtimeServices.Host.RecoverLocalAsync();
+        }
+        catch (Exception ex)
+        {
+            AppendLog("Локальная очередь не восстановлена: " + ex.GetType().Name + ". Исходные данные сохранены; требуется проверка журнала.");
+        }
+        await GraphiteWebHost.PublishSnapshotAsync(_graphite.CreateSnapshot());
+        await GraphiteWebHost.InitializeAsync(_webViewUserDataDirectory);
         AppendLog("При закрытии окно сворачивается в трей. Для полного выхода: иконка в трее -> Закрыть.");
-        if (_teklaStandardService.CheckGitAvailability(out var gitPath, out var gitDetails))
+        if (_runLoadedExternalActions)
         {
-            AppendLog("Стандарт Tekla: git доступен (" + gitPath + ") " + gitDetails);
+            if (_teklaStandardService.CheckGitAvailability(out var gitPath, out var gitDetails))
+            {
+                AppendLog("Стандарт Tekla: git доступен (" + gitPath + ") " + gitDetails);
+            }
+            else
+            {
+                AppendLog("Стандарт Tekla: git недоступен (" + gitPath + ") " + gitDetails);
+            }
+            // Establish the device session and ensure its VPN before any automatic
+            // server-bound update/sync work. On an already provisioned PC the
+            // automatic tunnel service is up before Connector starts; on the first
+            // run bootstrap supplies the config and Connector asks for UAC once.
+            await TryAutoConnectAsync();
+            await CheckUpdatesAsync(showDialogs: false);
+            if (_standard is not null && !_runtimeServices.CommonAccess.IsSelected)
+            {
+                await _standard.RunTeklaSyncAsync(
+                    showDialogs: false,
+                    forceRefresh: false,
+                    autoApplyIfPossible: true);
+            }
+            _backgroundAgent.Start(_isRunning);
         }
-        else
-        {
-            AppendLog("Стандарт Tekla: git недоступен (" + gitPath + ") " + gitDetails);
-        }
-        // Establish the device session and ensure its VPN before any automatic
-        // server-bound update/sync work. On an already provisioned PC the
-        // automatic tunnel service is up before Connector starts; on the first
-        // run bootstrap supplies the config and Connector asks for UAC once.
-        await TryAutoConnectAsync();
-        await CheckUpdatesAsync(showDialogs: false);
-        if (_standard is not null)
-        {
-            await _standard.RunTeklaSyncAsync(
-                showDialogs: false,
-                forceRefresh: false,
-                autoApplyIfPossible: true);
-        }
-        _updateTimer.Interval = UpdateCheckInterval;
-        _updateTimer.Start();
-        _teklaSyncTimer.Interval = TeklaSyncCheckInterval;
-        _teklaSyncTimer.Start();
+        await GraphiteWebHost.PublishSnapshotAsync(_graphite.CreateSnapshot());
+        _loadedInitializationCompleted?.Invoke();
     }
 
     private async Task CheckAndOfferUpdatesAsync()
@@ -540,7 +836,7 @@ public partial class MainWindow : Window, IShellHost, IConnectorHost
             return;
         }
 
-        if (_pendingUpdate is null)
+        if (_pendingUpdate is null && _pendingPackageUpdate is null)
         {
             return;
         }
@@ -560,11 +856,7 @@ public partial class MainWindow : Window, IShellHost, IConnectorHost
 
         try
         {
-            _connector?.SetUpdateState("Обновление: загрузка установщика...");
-            _downloadedInstallerPath = await _updateService.DownloadInstallerAsync(_pendingUpdate, CancellationToken.None);
-            AppendLog("Скачан установщик обновления: " + _downloadedInstallerPath);
-            UpdateService.RunInstaller(_downloadedInstallerPath);
-            ExitFromTray();
+            await InstallPendingUpdateAsync(confirmBeforeRun: false);
         }
         catch (Exception ex)
         {
@@ -613,10 +905,35 @@ public partial class MainWindow : Window, IShellHost, IConnectorHost
         toast.Show();
     }
 
+    private void ShowPackageUpdateAvailableToast(PackageUpdateCandidate candidate)
+    {
+        if (string.Equals(_lastUpdateToastVersion, candidate.Version, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        _lastUpdateToastVersion = candidate.Version;
+        var toast = new UpdateToastWindow(
+            "Structura Connector",
+            "Доступна новая версия: " + candidate.Version + ".",
+            async () => await InstallPendingUpdateAsync(confirmBeforeRun: false));
+        toast.Closed += (_, _) =>
+        {
+            if (ReferenceEquals(_updateToastWindow, toast)) _updateToastWindow = null;
+        };
+        _updateToastWindow = toast;
+        toast.Show();
+    }
+
     private async Task TryAutoConnectAsync()
     {
         try
         {
+            if (_runtimeServices.CommonAccess.IsSelected)
+            {
+                await _runtimeServices.ConnectCommonAsync(null, true, CancellationToken.None);
+                return;
+            }
             var token = SettingsService.DecryptToken(_settings.TokenCipherBase64).Trim();
             if (string.IsNullOrWhiteSpace(token))
             {
@@ -641,7 +958,7 @@ public partial class MainWindow : Window, IShellHost, IConnectorHost
         }
     }
 
-    private Forms.NotifyIcon CreateTrayIcon()
+    private Forms.NotifyIcon CreateTrayIcon(bool visible)
     {
         var menu = new Forms.ContextMenuStrip();
 
@@ -660,7 +977,7 @@ public partial class MainWindow : Window, IShellHost, IConnectorHost
         {
             Icon = icon,
             Text = "Structura Connector",
-            Visible = true,
+            Visible = visible,
             ContextMenuStrip = menu
         };
         tray.DoubleClick += (_, _) => ShowFromTray();
@@ -708,35 +1025,43 @@ public partial class MainWindow : Window, IShellHost, IConnectorHost
         HideToTray();
     }
 
-    private void MainWindow_Closed(object? sender, EventArgs e)
+    private Task RunHeartbeatTickAsync(CancellationToken cancellationToken) =>
+        InvokeOnDispatcherAsync(() => SendHeartbeatSafeAsync(cancellationToken), cancellationToken);
+
+    private Task RunUpdateTickAsync(CancellationToken cancellationToken) =>
+        InvokeOnDispatcherAsync(
+            () => CheckUpdatesAsync(showDialogs: false, cancellationToken: cancellationToken),
+            cancellationToken);
+
+    private Task RunTeklaSyncTickAsync(CancellationToken cancellationToken) =>
+        InvokeOnDispatcherAsync(() =>
+        {
+            if (_standard is null || _runtimeServices.CommonAccess.IsSelected) return Task.CompletedTask;
+            return _standard.RunTeklaSyncAsync(
+                showDialogs: false,
+                forceRefresh: false,
+                autoApplyIfPossible: true);
+        }, cancellationToken);
+
+    private Task InvokeOnDispatcherAsync(Func<Task> action, CancellationToken cancellationToken)
     {
-        _updateTimer.Stop();
-        _trayIcon.Visible = false;
-        _trayIcon.Dispose();
-        // Конвертер: отменить идущие части и убрать их временные папки.
-        (_shell.Converter.Module("Конвертация") as IDisposable)?.Dispose();
+        if (Dispatcher.CheckAccess()) return action();
+        return Dispatcher
+            .InvokeAsync(action, DispatcherPriority.Background, cancellationToken)
+            .Task
+            .Unwrap();
     }
 
-    private async void UpdateTimer_Tick(object? sender, EventArgs e)
+    private void ReportBackgroundAgentError(DesktopBackgroundAction action, Exception exception)
     {
-        await CheckUpdatesAsync(showDialogs: false);
-        if (_standard is not null)
-        {
-            await _standard.RunTeklaSyncAsync(showDialogs: false, forceRefresh: false, autoApplyIfPossible: true);
-        }
-    }
-
-    private async void TeklaSyncTimer_Tick(object? sender, EventArgs e)
-    {
-        if (_standard is not null)
-        {
-            await _standard.RunTeklaSyncAsync(showDialogs: false, forceRefresh: false, autoApplyIfPossible: true);
-        }
+        if (Dispatcher.HasShutdownStarted || Dispatcher.HasShutdownFinished) return;
+        Dispatcher.BeginInvoke(() =>
+            AppendLog($"Фоновая задача {action} завершилась с ошибкой: {exception.Message}"));
     }
 
     private void UpdateActionButtonUi()
     {
-        if (_pendingUpdate is null)
+        if (_pendingUpdate is null && _pendingPackageUpdate is null)
         {
             _connector?.SetUpdateAction("Проверить обновление коннектора", isPrimaryStyle: false);
             return;
@@ -808,13 +1133,133 @@ public partial class MainWindow : Window, IShellHost, IConnectorHost
         Activate();
     }
 
-    private void ExitFromTray()
+    private bool _exitInProgress;
+
+    private async void ExitFromTray()
     {
+        if (_exitInProgress)
+        {
+            return;
+        }
+
+        _exitInProgress = true;
         _allowClose = true;
-        _timer.Stop();
-        _updateTimer.Stop();
-        _isRunning = false;
+        await DisposeWindowResourcesAsync();
         Close();
+    }
+
+    /// <summary>Disposes and closes an injected fixture window without using the production tray exit path.</summary>
+    public async Task CloseOwnedCompositionAsync()
+    {
+        if (!_allowOwnedFixtureClose || _trayIcon.Visible)
+        {
+            throw new InvalidOperationException("Owned fixture close requires an injected window with its tray icon disabled.");
+        }
+
+        if (_exitInProgress)
+        {
+            if (_disposeResourcesTask is not null) await _disposeResourcesTask;
+            return;
+        }
+
+        _exitInProgress = true;
+        _allowClose = true;
+        await DisposeWindowResourcesAsync();
+        Close();
+    }
+
+    private Task DisposeWindowResourcesAsync() =>
+        _disposeResourcesTask ??= DisposeWindowResourcesCoreAsync();
+
+    private async Task DisposeWindowResourcesCoreAsync()
+    {
+        _isRunning = false;
+        _trayIcon.Visible = false;
+        DesktopBackgroundStopResult backgroundStop;
+        try
+        {
+            backgroundStop = await _backgroundAgent.StopAsync(BackgroundShutdownDrainTimeout);
+        }
+        catch (Exception ex)
+        {
+            AppendLog("Ошибка остановки фоновых задач: " + ex.Message);
+            return;
+        }
+
+        if (!backgroundStop.IsDrained)
+        {
+            AppendLog("Фоновая операция ещё завершается; освобождение её ресурсов отложено до безопасной границы.");
+            _deferredResourcesDisposeTask = DisposeWindowResourcesWhenBackgroundStopsAsync(backgroundStop.Completion);
+            return;
+        }
+
+        try { await _backgroundAgent.DisposeAsync(); }
+        catch (Exception ex) { AppendLog("Ошибка освобождения фоновых задач: " + ex.Message); }
+        await DisposeWindowResourcesAfterBackgroundStopAsync();
+    }
+
+    private async Task DisposeWindowResourcesWhenBackgroundStopsAsync(Task backgroundCompletion)
+    {
+        try
+        {
+            await backgroundCompletion;
+            await _backgroundAgent.DisposeAsync();
+            await DisposeWindowResourcesAfterBackgroundStopAsync();
+        }
+        catch (Exception ex)
+        {
+            if (!Dispatcher.HasShutdownStarted && !Dispatcher.HasShutdownFinished)
+                AppendLog("Ошибка отложенного освобождения ресурсов: " + ex.Message);
+        }
+    }
+
+    private async Task DisposeWindowResourcesAfterBackgroundStopAsync()
+    {
+        _graphite.SnapshotChanged -= OnGraphiteSnapshot;
+        try { await _graphite.DisposeAsync(); }
+        catch (Exception ex) { AppendLog("Ошибка остановки интерфейса: " + ex.Message); }
+        try { await GraphiteWebHost.DisposeAsync(); }
+        catch (Exception ex) { AppendLog("Ошибка остановки WebView: " + ex.Message); }
+        try { (_shell.Converter.Module("Конвертация") as IDisposable)?.Dispose(); }
+        catch (Exception ex) { AppendLog("Ошибка остановки конвертера: " + ex.Message); }
+        try { _converterWorkspace.Dispose(); }
+        catch (Exception ex) { AppendLog("Ошибка остановки очереди конвертера: " + ex.Message); }
+        try { _platformTools.Dispose(); }
+        catch (Exception ex) { AppendLog("Ошибка остановки инструментов Platform: " + ex.Message); }
+        if (_shell.Platform.Module("Platform") is IAsyncDisposable platform)
+        {
+            try
+            {
+                await platform.DisposeAsync();
+            }
+            catch (Exception ex)
+            {
+                AppendLog("Ошибка остановки Platform: " + ex.Message);
+            }
+        }
+        try { await _runtimeServices.DisposeAsync(); }
+        catch (Exception ex) { AppendLog("Ошибка остановки заданий: " + ex.Message); }
+        _trayIcon.Dispose();
+    }
+
+    private string? GetUpdateRestartBlockReason()
+    {
+        if (_platformTools.ViewModel.IsBusy)
+            return "Дождитесь завершения подготовки инструментов перед обновлением.";
+        if (_runtimeServices.Host.DrainSnapshot.ActiveOperations > 0)
+            return "Дождитесь завершения принятых заданий перед обновлением.";
+        if (_teklaCheckInProgress)
+        {
+            return "Дождитесь завершения синхронизации Tekla перед обновлением.";
+        }
+
+        if (_shell.Converter.Module("Конвертация") is Features.Converter.ConverterModule converter &&
+            converter.ViewModel.IsRunning)
+        {
+            return "Дождитесь завершения конвертации модели перед обновлением.";
+        }
+
+        return (_shell.Platform.Module("Platform") as Features.Platform.PlatformModule)?.GetRestartBlockReason();
     }
 
     private void LoadSettingsToUi()
@@ -836,7 +1281,6 @@ public partial class MainWindow : Window, IShellHost, IConnectorHost
 
         _settings.ServerUrl = FixedServerUrl;
         _settings.UpdateManifestUrl = FixedUpdateManifestUrl;
-        _settings.AutoStart = true;
         if (_settings.HeartbeatSeconds < 10)
         {
             _settings.HeartbeatSeconds = FixedHeartbeatSeconds;
@@ -931,7 +1375,7 @@ public partial class MainWindow : Window, IShellHost, IConnectorHost
         _connector?.LoadFromSettings(token);
         SyncFeatureModules();
 
-        _timer.Interval = TimeSpan.FromSeconds(_settings.HeartbeatSeconds);
+        _backgroundAgent.SetHeartbeatInterval(TimeSpan.FromSeconds(_settings.HeartbeatSeconds));
 
         if (shouldPersist)
         {
@@ -1005,9 +1449,11 @@ public partial class MainWindow : Window, IShellHost, IConnectorHost
                 : SettingsService.EncryptToken(smbPassword),
             SmbSharePath = smbSharePath,
             HeartbeatSeconds = sec,
-            AutoStart = true,
+            AutoStart = _settings.AutoStart,
             TeklaStandardManifestUrl = teklaManifestUrl,
             TeklaStandardLocalPath = teklaLocalPath,
+            TeklaStandardInstalledVersion = _settings.TeklaStandardInstalledVersion,
+            TeklaStandardTargetVersion = _settings.TeklaStandardTargetVersion,
             TeklaStandardInstalledRevision = _settings.TeklaStandardInstalledRevision,
             TeklaStandardTargetRevision = _settings.TeklaStandardTargetRevision,
             TeklaStandardLastCheckUtc = _settings.TeklaStandardLastCheckUtc,
@@ -1063,13 +1509,17 @@ public partial class MainWindow : Window, IShellHost, IConnectorHost
             ModelSharingServerPort = _settings.ModelSharingServerPort > 0 ? _settings.ModelSharingServerPort : 9990,
             ModelSharingIdentityEmail = _settings.ModelSharingIdentityEmail,
             ModelSharingLastAppliedUtc = _settings.ModelSharingLastAppliedUtc,
+            IfcPatchingTeklaBin = _settings.IfcPatchingTeklaBin,
+            IfcPatchingStagingDir = _settings.IfcPatchingStagingDir,
+            ConverterOutputDirectory = _settings.ConverterOutputDirectory,
             VpnEnabled = _settings.VpnEnabled,
             VpnTunnelName = _settings.VpnTunnelName,
             VpnAddress = _settings.VpnAddress,
             VpnSmbUnc = _settings.VpnSmbUnc,
             VpnServerIp = _settings.VpnServerIp,
             VpnConfigReceivedUtc = _settings.VpnConfigReceivedUtc,
-            VpnConfigCipherBase64 = _settings.VpnConfigCipherBase64
+            VpnConfigCipherBase64 = _settings.VpnConfigCipherBase64,
+            ExtensionData = _settings.ExtensionData
         };
     }
 
@@ -1082,7 +1532,7 @@ public partial class MainWindow : Window, IShellHost, IConnectorHost
         _settings = ReadSettingsFromUi();
         _settingsService.Save(_settings);
         _autoStartService.SetEnabled(_settings.AutoStart);
-        _timer.Interval = TimeSpan.FromSeconds(_settings.HeartbeatSeconds);
+        _backgroundAgent.SetHeartbeatInterval(TimeSpan.FromSeconds(_settings.HeartbeatSeconds));
         _standard?.RefreshUi();
         AppendLog("Настройки сохранены.");
     }
@@ -1107,8 +1557,9 @@ public partial class MainWindow : Window, IShellHost, IConnectorHost
         UpdateHeaderStatusUi();
     }
 
-    private async Task SendHeartbeatSafeAsync()
+    private async Task SendHeartbeatSafeAsync(CancellationToken cancellationToken = default)
     {
+        if (_runtimeServices.CommonAccess.IsSelected) return;
         try
         {
             var token = SettingsService.DecryptToken(_settings.TokenCipherBase64);
@@ -1138,16 +1589,20 @@ public partial class MainWindow : Window, IShellHost, IConnectorHost
                 token,
                 _activeSessionId,
                 teklaState,
-                CancellationToken.None);
+                cancellationToken);
             _serverConnectionFailed = false;
             AppendLog("Heartbeat отправлен успешно.");
             UpdateHeaderStatusUi();
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
         }
         catch (Exception ex)
         {
             if (ex.Message.Contains("HTTP 409", StringComparison.OrdinalIgnoreCase))
             {
-                _timer.Stop();
+                _backgroundAgent.SetHeartbeatEnabled(false);
                 _isRunning = false;
                 _serverConnectionFailed = true;
                 UpdateRunStateUi();
@@ -1167,17 +1622,12 @@ public partial class MainWindow : Window, IShellHost, IConnectorHost
         LogTextBox.ScrollToEnd();
     }
 
-    private async void Timer_Tick(object? sender, EventArgs e)
-    {
-        await SendHeartbeatSafeAsync();
-    }
-
     private async void Start_Click(object sender, RoutedEventArgs e)
     {
         try
         {
             ApplyAndPersist();
-            _timer.Start();
+            _backgroundAgent.Start(heartbeatEnabled: true);
             _isRunning = true;
             UpdateRunStateUi();
             AppendLog("Фоновая отправка запущена.");
@@ -1192,7 +1642,7 @@ public partial class MainWindow : Window, IShellHost, IConnectorHost
 
     private void Stop_Click(object sender, RoutedEventArgs e)
     {
-        _timer.Stop();
+        _backgroundAgent.SetHeartbeatEnabled(false);
         _isRunning = false;
         UpdateRunStateUi();
         AppendLog("Фоновая отправка остановлена.");
@@ -1269,6 +1719,11 @@ public partial class MainWindow : Window, IShellHost, IConnectorHost
 
     private async Task ConnectByTokenInternalAsync(string token, bool showSuccessDialog)
     {
+        if (_runtimeServices.CommonAccess.ShouldUse(token))
+        {
+            await _runtimeServices.ConnectCommonAsync(token, false, CancellationToken.None);
+            return;
+        }
         var serverUrl = FixedServerUrl;
 
         AppendLog("Запрошен bootstrap по токену...");
@@ -1304,13 +1759,15 @@ public partial class MainWindow : Window, IShellHost, IConnectorHost
             SmbPasswordCipherBase64 = string.Empty,
             SmbSharePath = sharePath,
             HeartbeatSeconds = bootstrap.HeartbeatSeconds >= 10 ? bootstrap.HeartbeatSeconds : FixedHeartbeatSeconds,
-            AutoStart = true,
+            AutoStart = _settings.AutoStart,
             TeklaStandardManifestUrl = string.IsNullOrWhiteSpace(_settings.TeklaStandardManifestUrl)
                 ? FixedTeklaStandardManifestUrl
                 : _settings.TeklaStandardManifestUrl,
             TeklaStandardLocalPath = string.IsNullOrWhiteSpace(_settings.TeklaStandardLocalPath)
                 ? DefaultTeklaStandardLocalPath
                 : _settings.TeklaStandardLocalPath,
+            TeklaStandardInstalledVersion = _settings.TeklaStandardInstalledVersion,
+            TeklaStandardTargetVersion = _settings.TeklaStandardTargetVersion,
             TeklaStandardInstalledRevision = _settings.TeklaStandardInstalledRevision,
             TeklaStandardTargetRevision = _settings.TeklaStandardTargetRevision,
             TeklaStandardLastCheckUtc = _settings.TeklaStandardLastCheckUtc,
@@ -1388,6 +1845,9 @@ public partial class MainWindow : Window, IShellHost, IConnectorHost
             ModelSharingServerPort = _settings.ModelSharingServerPort > 0 ? _settings.ModelSharingServerPort : 9990,
             ModelSharingIdentityEmail = _settings.ModelSharingIdentityEmail,
             ModelSharingLastAppliedUtc = _settings.ModelSharingLastAppliedUtc,
+            IfcPatchingTeklaBin = _settings.IfcPatchingTeklaBin,
+            IfcPatchingStagingDir = _settings.IfcPatchingStagingDir,
+            ConverterOutputDirectory = _settings.ConverterOutputDirectory,
             // Preserve the last known-good tunnel until bootstrap supplies a
             // replacement. A transient VPN provisioning error must not disable
             // the controls or strand a working automatic tunnel.
@@ -1397,11 +1857,12 @@ public partial class MainWindow : Window, IShellHost, IConnectorHost
             VpnSmbUnc = _settings.VpnSmbUnc,
             VpnServerIp = _settings.VpnServerIp,
             VpnConfigReceivedUtc = _settings.VpnConfigReceivedUtc,
-            VpnConfigCipherBase64 = _settings.VpnConfigCipherBase64
+            VpnConfigCipherBase64 = _settings.VpnConfigCipherBase64,
+            ExtensionData = _settings.ExtensionData
         };
         _settingsService.Save(_settings);
-        _autoStartService.SetEnabled(true);
-        _timer.Interval = TimeSpan.FromSeconds(_settings.HeartbeatSeconds);
+        _autoStartService.SetEnabled(_settings.AutoStart);
+        _backgroundAgent.SetHeartbeatInterval(TimeSpan.FromSeconds(_settings.HeartbeatSeconds));
         _activeSessionId = bootstrap.SessionId;
         _serverConnectionFailed = false;
 
@@ -1507,8 +1968,7 @@ public partial class MainWindow : Window, IShellHost, IConnectorHost
                 (vpnReady ? "через VPN." : "из этой сети."));
         }
 
-        _timer.Stop();
-        _timer.Start();
+        _backgroundAgent.Start(heartbeatEnabled: true);
         _isRunning = true;
         UpdateRunStateUi();
 
@@ -1528,8 +1988,9 @@ public partial class MainWindow : Window, IShellHost, IConnectorHost
         }
     }
 
-    private async Task CheckUpdatesAsync(bool showDialogs)
+    private async Task CheckUpdatesAsync(bool showDialogs, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (_updateCheckInProgress)
         {
             return;
@@ -1539,6 +2000,14 @@ public partial class MainWindow : Window, IShellHost, IConnectorHost
         _connector?.SetUpdateActionEnabled(false);
         try
         {
+            if (_packageUpdateService.IsManagedInstall)
+            {
+                await CheckPackageUpdatesAsync(showDialogs, cancellationToken);
+                return;
+            }
+
+            if (_runtimeServices.CommonAccess.IsSelected) return;
+
             var manifestUrl = string.IsNullOrWhiteSpace(_settings.UpdateManifestUrl)
                 ? FixedUpdateManifestUrl
                 : _settings.UpdateManifestUrl.Trim();
@@ -1551,7 +2020,7 @@ public partial class MainWindow : Window, IShellHost, IConnectorHost
             _connector?.SetUpdateManifestUrl(manifestUrl);
             _settingsService.Save(_settings);
 
-            var manifest = await _updateService.TryGetUpdateAsync(manifestUrl, CancellationToken.None);
+            var manifest = await _updateService.TryGetUpdateAsync(manifestUrl, cancellationToken);
             if (manifest is null)
             {
                 _pendingUpdate = null;
@@ -1601,6 +2070,10 @@ public partial class MainWindow : Window, IShellHost, IConnectorHost
                 }
             }
         }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
         catch (Exception ex)
         {
             _pendingUpdate = null;
@@ -1622,10 +2095,59 @@ public partial class MainWindow : Window, IShellHost, IConnectorHost
     // (UpdateAction_Click + ShowReleaseNotes_Click moved into ConnectorView — they route through IConnectorHost
     // [HasPendingUpdate/CheckUpdatesAsync/InstallPendingUpdateAsync] and IConnectorHost.ReleaseNotes/OwnerWindow.)
 
+    // Native support action: verification/download only. Applying remains exclusively in
+    // InstallPendingUpdateAsync, including its existing drain/restart gates.
+    private async Task DownloadPendingUpdateAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        _connector?.SetUpdateActionEnabled(false);
+        try
+        {
+            if (_packageUpdateService.IsManagedInstall)
+            {
+                var candidate = _pendingPackageUpdate ?? throw new InvalidOperationException("Сначала проверьте наличие пакетного обновления.");
+                _connector?.SetUpdateState("Обновление: загрузка пакета...");
+                await _packageUpdateService.DownloadUpdatesAsync(candidate, cancellationToken);
+                cancellationToken.ThrowIfCancellationRequested();
+                AppendLog("Пакет обновления загружен: " + candidate.Version);
+                _connector?.SetUpdateState("Обновление: пакет загружен");
+                return;
+            }
+
+            var manifest = _pendingUpdate ?? throw new InvalidOperationException("Сначала проверьте наличие обновления.");
+            _connector?.SetUpdateState("Обновление: загрузка установщика...");
+            _downloadedInstallerPath = await _updateService.DownloadInstallerAsync(manifest, cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+            AppendLog("Установщик обновления проверен и загружен: " + _downloadedInstallerPath);
+            _connector?.SetUpdateState("Обновление: установщик загружен");
+        }
+        catch (OperationCanceledException)
+        {
+            _connector?.SetUpdateState("Обновление: загрузка отменена");
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _connector?.SetUpdateState("Обновление: ошибка загрузки");
+            AppendLog("Ошибка загрузки обновления: " + ex.Message);
+            throw;
+        }
+        finally
+        {
+            _connector?.SetUpdateActionEnabled(_pendingUpdate is not null || _pendingPackageUpdate is not null);
+        }
+    }
+
     private async Task InstallPendingUpdateAsync(bool confirmBeforeRun)
     {
         try
         {
+            if (_packageUpdateService.IsManagedInstall)
+            {
+                await InstallPendingPackageUpdateAsync(confirmBeforeRun);
+                return;
+            }
+
             if (_pendingUpdate is null)
             {
                 await CheckUpdatesAsync(showDialogs: true);
@@ -1648,6 +2170,13 @@ public partial class MainWindow : Window, IShellHost, IConnectorHost
 
             if (shouldRunInstaller)
             {
+                var restartBlockReason = GetUpdateRestartBlockReason();
+                if (restartBlockReason is not null)
+                {
+                    _connector?.SetUpdateState("Обновление: ожидает завершения задачи");
+                    ThemedDialogs.Show(this, restartBlockReason, "Обновление", MessageBoxButton.OK, MessageBoxImage.Information);
+                    return;
+                }
                 UpdateService.RunInstaller(_downloadedInstallerPath);
                 ExitFromTray();
             }
@@ -1663,6 +2192,99 @@ public partial class MainWindow : Window, IShellHost, IConnectorHost
             _connector?.SetUpdateState("Обновление: ошибка установки");
             AppendLog("Ошибка установки обновления: " + ex.Message);
             ThemedDialogs.Show(this, ex.Message, "Ошибка обновления", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private async Task CheckPackageUpdatesAsync(bool showDialogs, CancellationToken cancellationToken = default)
+    {
+        _connector?.SetUpdateState("Обновление: проверка пакетной версии...");
+        var candidate = await _packageUpdateService.CheckForUpdatesAsync(cancellationToken);
+        _pendingPackageUpdate = candidate;
+        _pendingUpdate = null;
+        if (candidate is null)
+        {
+            _lastUpdateToastVersion = string.Empty;
+            _connector?.SetUpdateState("Обновление: актуально");
+            UpdateActionButtonUi();
+            if (showDialogs) ThemedDialogs.Show(this, "Установлена актуальная версия.", "Обновления", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        _connector?.SetUpdateState($"Доступно обновление: {candidate.Version}");
+        AppendLog("Найдено пакетное обновление: " + candidate.Version);
+        ShowPackageUpdateAvailableToast(candidate);
+        UpdateActionButtonUi();
+        if (showDialogs) ThemedDialogs.Show(this, "Доступна новая версия: " + candidate.Version, "Обновления", MessageBoxButton.OK, MessageBoxImage.Information);
+    }
+
+    private async Task InstallPendingPackageUpdateAsync(bool confirmBeforeRun)
+    {
+        if (_pendingPackageUpdate is null)
+        {
+            await CheckPackageUpdatesAsync(showDialogs: true);
+            if (_pendingPackageUpdate is null) return;
+        }
+
+        _connector?.SetUpdateActionEnabled(false);
+        var drained = false;
+        var handedOff = false;
+        try
+        {
+            var candidate = _pendingPackageUpdate;
+            _connector?.SetUpdateState("Обновление: загрузка пакета...");
+            await _packageUpdateService.DownloadUpdatesAsync(candidate, CancellationToken.None);
+            AppendLog("Пакет обновления загружен: " + candidate.Version);
+
+            var shouldApply = !confirmBeforeRun || ThemedDialogs.Show(this,
+                "Пакет обновления загружен. Перезапустить Connector и применить его сейчас?",
+                "Обновление", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes;
+            if (!shouldApply)
+            {
+                _connector?.SetUpdateState("Обновление: пакет загружен");
+                return;
+            }
+
+            // Legacy sync/batch discovery remains guarded until it joins Agent admission.
+            if (_teklaCheckInProgress ||
+                (_shell.Converter.Module("Конвертация") is Features.Converter.ConverterModule batch && batch.ViewModel.IsRunning) ||
+                _platformTools.ViewModel.IsBusy)
+            {
+                _connector?.SetUpdateState("Обновление: ожидает завершения задачи");
+                return;
+            }
+            _connector?.SetUpdateState("Обновление: завершение принятых заданий...");
+            var drain = await _runtimeServices.Host.RequestDrainAsync(TimeSpan.FromSeconds(60), CancellationToken.None);
+            drained = true;
+            if (drain.Phase != global::Platform.Connector.Core.ConnectorDrainPhase.ReadyToApply)
+            {
+                _connector?.SetUpdateState("Обновление: ожидает завершения задачи");
+                return;
+            }
+            var restartBlockReason = GetUpdateRestartBlockReason();
+            if (restartBlockReason is not null)
+            {
+                _connector?.SetUpdateState("Обновление: ожидает завершения задачи");
+                ThemedDialogs.Show(this, restartBlockReason, "Обновление", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            _packageUpdateService.ApplyUpdatesAndRestart(candidate);
+            handedOff = true;
+        }
+        catch (OperationCanceledException)
+        {
+            _connector?.SetUpdateState("Обновление: загрузка отменена");
+        }
+        catch (Exception ex)
+        {
+            _connector?.SetUpdateState("Обновление: ошибка установки");
+            AppendLog("Ошибка пакетного обновления: " + ex.Message);
+            ThemedDialogs.Show(this, ex.Message, "Ошибка обновления", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        finally
+        {
+            if (drained && !handedOff) _runtimeServices.Host.Resume();
+            _connector?.SetUpdateActionEnabled(_pendingPackageUpdate is not null);
         }
     }
 
@@ -1827,14 +2449,17 @@ public partial class MainWindow : Window, IShellHost, IConnectorHost
         return candidates;
     }
 
-    private static void ConnectShareWithAnyLogin(string shareRoot, string password, IEnumerable<string> loginCandidates)
+    private static void ConnectShareWithAnyLogin(string connectionTarget, string shareRoot, string password, IEnumerable<string> loginCandidates)
     {
         Exception? last = null;
         foreach (var candidate in loginCandidates)
         {
             try
             {
-                RunProcessOrThrow("net", "use", shareRoot, password, $"/user:{candidate}", "/persistent:no");
+                if (string.Equals(connectionTarget, shareRoot, StringComparison.OrdinalIgnoreCase))
+                    RunProcessOrThrow("net", "use", shareRoot, password, $"/user:{candidate}", "/persistent:no");
+                else
+                    RunProcessOrThrow("net", "use", connectionTarget, shareRoot, password, $"/user:{candidate}", "/persistent:no");
                 return;
             }
             catch (InvalidOperationException ex)
@@ -2054,6 +2679,67 @@ public partial class MainWindow : Window, IShellHost, IConnectorHost
         }
     }
 
+    private async Task MountVpnShareToDriveAsync(string expectedUnc, string drive)
+    {
+        var shareRoot = GetSmbShareRoot(expectedUnc);
+        var configuredRoot = GetSmbShareRoot(ResolveVpnSmbUnc());
+        if (!string.Equals(shareRoot, configuredRoot, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Разрешено только подключение общей папки из VPN-настроек.");
+
+        var normalizedDrive = NormalizeDrive(drive);
+        if (_managedSmbMappings.MatchesRecordedTarget(normalizedDrive, shareRoot))
+        {
+            _connectorManagedSmbDrive = normalizedDrive;
+            _connectorManagedSmbShareRoot = shareRoot;
+            return;
+        }
+
+        var existingDrive = RunProcess("net", "use", normalizedDrive);
+        if (DriveInfo.GetDrives().Any(item => string.Equals(item.Name, normalizedDrive + "\\", StringComparison.OrdinalIgnoreCase)) ||
+            existingDrive.ExitCode == 0)
+            throw new InvalidOperationException($"Диск {normalizedDrive} уже занят; существующее подключение не изменено.");
+
+        var host = GetSmbHost(expectedUnc);
+        var loginCandidates = BuildSmbLoginCandidates(_lastSmbLogin, host);
+        await Task.Run(() => ConnectShareWithAnyLogin(normalizedDrive, shareRoot, _lastSmbPassword, loginCandidates));
+        _managedSmbMappings.Record(normalizedDrive, shareRoot);
+        _connectorManagedSmbDrive = normalizedDrive;
+        _connectorManagedSmbShareRoot = shareRoot;
+    }
+
+    private async Task DisconnectConnectorManagedSmbAsync(string drive)
+    {
+        var normalizedDrive = NormalizeDrive(drive);
+        var assignedShare = GetSmbShareRoot(ResolveVpnSmbUnc());
+        if (!_managedSmbMappings.MatchesRecordedTarget(normalizedDrive, assignedShare))
+            throw new InvalidOperationException("На этом диске нет подтверждённого подключения коннектора; существующее подключение не изменено.");
+
+        // A drive can be recreated outside Connector with the same UNC. The
+        // stored target cannot distinguish that replacement; only this explicit
+        // user confirmation authorizes removing the present Windows mapping.
+        if (ThemedDialogs.Show(this, $"Отключить общую папку от диска {normalizedDrive}?\n\nБудет отключено текущее сетевое подключение Windows на этом диске.",
+            "Общая папка", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
+            throw new OperationCanceledException();
+
+        if (!_managedSmbMappings.MatchesRecordedTarget(normalizedDrive, assignedShare))
+            throw new InvalidOperationException("Подключение изменилось; отключение отменено.");
+
+        await Task.Run(() => RunProcessOrThrow("net", "use", normalizedDrive, "/delete", "/y"));
+        _managedSmbMappings.Forget(normalizedDrive);
+        _connectorManagedSmbDrive = string.Empty;
+        _connectorManagedSmbShareRoot = string.Empty;
+        AppendLog("VPN: подключение общей папки отключено.");
+    }
+
+    private static string NormalizeDrive(string drive)
+    {
+        var value = (drive ?? string.Empty).Trim().TrimEnd('\\');
+        if (value.Length == 1 && char.IsLetter(value[0])) value += ":";
+        if (value.Length != 2 || !char.IsLetter(value[0]) || value[1] != ':')
+            throw new InvalidOperationException("Нужна свободная буква диска, например Z:.");
+        return char.ToUpperInvariant(value[0]) + ":";
+    }
+
     private async Task ConnectSmbInternalAsync(string login, string password, string sharePath, bool openExplorer)
     {
         if (string.IsNullOrWhiteSpace(login) || string.IsNullOrWhiteSpace(password))
@@ -2069,39 +2755,27 @@ public partial class MainWindow : Window, IShellHost, IConnectorHost
 
         await Task.Run(() =>
         {
-            DeleteStoredWindowsCredentialForHost(host);
-
-            try
+            // Only remove a resource this process mounted itself. Existing user
+            // sessions and saved Windows credentials must remain untouched.
+            if (string.Equals(_connectorManagedSmbShareRoot, shareRoot, StringComparison.OrdinalIgnoreCase))
             {
-                RunProcessOrThrow("net", "use", shareRoot, "/delete", "/y");
-            }
-            catch
-            {
-                // Ignore cleanup errors for non-existing mappings.
+                try { RunProcessOrThrow("net", "use", shareRoot, "/delete", "/y"); }
+                catch (InvalidOperationException ex) when (IsWindowsNetConnectionNotFound(ex.Message) || IsWindowsNetNoEntries(ex.Message)) { }
             }
 
             try
             {
-                ConnectShareWithAnyLogin(shareRoot, password, loginCandidates);
+                ConnectShareWithAnyLogin(shareRoot, shareRoot, password, loginCandidates);
             }
             catch (InvalidOperationException ex) when (IsWindowsSmbConflict(ex.Message))
             {
-                DisconnectAllSmbSessionsForHost(host);
-                try
-                {
-                    ConnectShareWithAnyLogin(shareRoot, password, loginCandidates);
-                }
-                catch (InvalidOperationException retryEx) when (IsWindowsSmbConflict(retryEx.Message))
-                {
-                    throw new InvalidOperationException(
-                        $"Windows сохранила активное SMB-подключение к серверу {host} с другими учётными данными. " +
-                        "Коннектор не стал отключать остальные сетевые диски. " +
-                        $"Закройте окна папок этого сервера и удалите только его подключения командой " +
-                        $"'net use \\\\{host}\\* /delete /y', затем повторите подключение.",
-                        retryEx);
-                }
+                throw new InvalidOperationException(
+                    $"Windows сохранила активное SMB-подключение к серверу {host} с другими учётными данными. " +
+                    "Коннектор не изменил существующие сетевые подключения.", ex);
             }
         });
+
+        _connectorManagedSmbShareRoot = shareRoot;
 
         AppendLog($"SMB вход выполнен: {shareRoot}");
 

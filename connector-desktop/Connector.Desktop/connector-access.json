@@ -1,0 +1,9 @@
+{
+  "enabled": false,
+  "serviceBaseUri": "",
+  "issuerCertificateSha256": "",
+  "netBirdExecutablePath": "",
+  "netBirdManagementUri": "",
+  "services": [],
+  "smbOverlayDestinations": []
+}

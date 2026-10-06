@@ -1,0 +1,358 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://bimplatforma.ru/schemas/modeling/constructive-document-v1.schema.json",
+  "title": "ConstructiveDocument v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "address", "units", "generation", "elements", "features", "assemblies", "diagnostics"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "address": { "$ref": "#/$defs/address" },
+    "units": { "const": "mm" },
+    "generation": { "$ref": "#/$defs/generation" },
+    "elements": { "type": "array", "items": { "$ref": "#/$defs/element" } },
+    "features": { "type": "array", "items": { "$ref": "#/$defs/feature" } },
+    "assemblies": { "type": "array", "items": { "$ref": "#/$defs/assembly" } },
+    "diagnostics": { "type": "array", "items": { "$ref": "#/$defs/diagnostic" } }
+  },
+  "$defs": {
+    "nonEmptyString": { "type": "string", "minLength": 1 },
+    "positiveNumber": { "type": "number", "exclusiveMinimum": 0 },
+    "vec2": {
+      "type": "array",
+      "prefixItems": [{ "type": "number" }, { "type": "number" }],
+      "minItems": 2,
+      "maxItems": 2
+    },
+    "vec3": {
+      "type": "array",
+      "prefixItems": [{ "type": "number" }, { "type": "number" }, { "type": "number" }],
+      "minItems": 3,
+      "maxItems": 3
+    },
+    "plane": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["origin", "axisX", "axisY", "axisZ"],
+      "properties": {
+        "origin": { "$ref": "#/$defs/vec3" },
+        "axisX": { "$ref": "#/$defs/vec3" },
+        "axisY": { "$ref": "#/$defs/vec3" },
+        "axisZ": { "$ref": "#/$defs/vec3" }
+      }
+    },
+    "boltPattern": {
+      "oneOf": [
+        { "type": "object", "additionalProperties": false, "required": ["kind"], "properties": { "kind": { "const": "single" } } },
+        { "type": "object", "additionalProperties": false, "required": ["kind", "count", "spacingMm"], "properties": { "kind": { "const": "linear" }, "count": { "type": "integer", "minimum": 2 }, "spacingMm": { "$ref": "#/$defs/positiveNumber" } } },
+        { "type": "object", "additionalProperties": false, "required": ["kind", "countX", "countY", "spacingXmm", "spacingYmm"], "properties": { "kind": { "const": "grid" }, "countX": { "type": "integer", "minimum": 2 }, "countY": { "type": "integer", "minimum": 2 }, "spacingXmm": { "$ref": "#/$defs/positiveNumber" }, "spacingYmm": { "$ref": "#/$defs/positiveNumber" } } },
+        { "type": "object", "additionalProperties": false, "required": ["kind", "points"], "properties": { "kind": { "const": "points" }, "points": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/vec2" } } } }
+      ]
+    },
+    "address": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["projectId", "moduleId", "moduleVariantId", "revisionId"],
+      "properties": {
+        "projectId": { "$ref": "#/$defs/nonEmptyString" },
+        "scenarioId": { "$ref": "#/$defs/nonEmptyString" },
+        "moduleId": { "$ref": "#/$defs/nonEmptyString" },
+        "moduleVariantId": { "$ref": "#/$defs/nonEmptyString" },
+        "revisionId": { "$ref": "#/$defs/nonEmptyString" }
+      }
+    },
+    "generation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "sourceHash", "adapterId", "adapterVersion", "generatedAtUtc"],
+      "properties": {
+        "id": { "$ref": "#/$defs/nonEmptyString" },
+        "sourceHash": { "$ref": "#/$defs/nonEmptyString" },
+        "adapterId": { "$ref": "#/$defs/nonEmptyString" },
+        "adapterVersion": { "$ref": "#/$defs/nonEmptyString" },
+        "generatedAtUtc": { "type": "string", "format": "date-time" }
+      }
+    },
+    "owner": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["moduleId", "entityId"],
+      "properties": {
+        "moduleId": { "$ref": "#/$defs/nonEmptyString" },
+        "entityId": { "$ref": "#/$defs/nonEmptyString" },
+        "partPath": { "type": "array", "items": { "$ref": "#/$defs/nonEmptyString" } }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["revisionId", "sourceHash", "adapterId", "adapterVersion"],
+      "properties": {
+        "revisionId": { "$ref": "#/$defs/nonEmptyString" },
+        "sourceHash": { "$ref": "#/$defs/nonEmptyString" },
+        "adapterId": { "$ref": "#/$defs/nonEmptyString" },
+        "adapterVersion": { "$ref": "#/$defs/nonEmptyString" },
+        "sourcePath": { "type": "array", "items": { "$ref": "#/$defs/nonEmptyString" } }
+      }
+    },
+    "material": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id"],
+      "properties": {
+        "id": { "$ref": "#/$defs/nonEmptyString" },
+        "name": { "type": "string" },
+        "grade": { "type": "string" },
+        "standard": { "type": "string" }
+      }
+    },
+    "pathNode": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "point"],
+      "properties": {
+        "id": { "$ref": "#/$defs/nonEmptyString" },
+        "point": { "$ref": "#/$defs/vec3" }
+      }
+    },
+    "pathSegment": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "kind", "startNodeId", "endNodeId"],
+          "properties": {
+            "id": { "$ref": "#/$defs/nonEmptyString" },
+            "kind": { "const": "line" },
+            "startNodeId": { "$ref": "#/$defs/nonEmptyString" },
+            "endNodeId": { "$ref": "#/$defs/nonEmptyString" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "kind", "startNodeId", "endNodeId", "pointOnArc"],
+          "properties": {
+            "id": { "$ref": "#/$defs/nonEmptyString" },
+            "kind": { "const": "arc" },
+            "startNodeId": { "$ref": "#/$defs/nonEmptyString" },
+            "endNodeId": { "$ref": "#/$defs/nonEmptyString" },
+            "pointOnArc": { "$ref": "#/$defs/vec3" }
+          }
+        }
+      ]
+    },
+    "path": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "nodes", "segments"],
+      "properties": {
+        "id": { "$ref": "#/$defs/nonEmptyString" },
+        "nodes": { "type": "array", "minItems": 2, "items": { "$ref": "#/$defs/pathNode" } },
+        "segments": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/pathSegment" } },
+        "closed": { "type": "boolean" }
+      }
+    },
+    "contourVertex": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "point"],
+      "properties": {
+        "id": { "$ref": "#/$defs/nonEmptyString" },
+        "point": { "$ref": "#/$defs/vec2" }
+      }
+    },
+    "contourEdge": {
+      "type": "object",
+      "required": ["id", "kind", "startVertexId", "endVertexId"],
+      "properties": {
+        "id": { "$ref": "#/$defs/nonEmptyString" },
+        "kind": { "enum": ["line", "arc"] },
+        "startVertexId": { "$ref": "#/$defs/nonEmptyString" },
+        "endVertexId": { "$ref": "#/$defs/nonEmptyString" },
+        "bulge": { "type": "number" }
+      },
+      "allOf": [
+        { "if": { "properties": { "kind": { "const": "arc" } } }, "then": { "required": ["bulge"] } }
+      ],
+      "unevaluatedProperties": false
+    },
+    "contour": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "vertices", "edges"],
+      "properties": {
+        "id": { "$ref": "#/$defs/nonEmptyString" },
+        "vertices": { "type": "array", "minItems": 3, "items": { "$ref": "#/$defs/contourVertex" } },
+        "edges": { "type": "array", "minItems": 3, "items": { "$ref": "#/$defs/contourEdge" } }
+      }
+    },
+    "profile": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "name"],
+          "properties": {
+            "kind": { "const": "catalog" },
+            "name": { "$ref": "#/$defs/nonEmptyString" },
+            "catalogId": { "type": "string" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "thicknessMm", "widthMm"],
+          "properties": {
+            "kind": { "const": "plate" },
+            "thicknessMm": { "$ref": "#/$defs/positiveNumber" },
+            "widthMm": { "$ref": "#/$defs/positiveNumber" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "contour"],
+          "properties": {
+            "kind": { "const": "contour" },
+            "contour": { "$ref": "#/$defs/contour" }
+          }
+        }
+      ]
+    },
+    "topologyRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["elementId", "role"],
+      "properties": {
+        "elementId": { "$ref": "#/$defs/nonEmptyString" },
+        "role": { "$ref": "#/$defs/nonEmptyString" },
+        "path": { "type": "array", "items": { "$ref": "#/$defs/nonEmptyString" } }
+      }
+    },
+    "topologyNode": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["role", "target"],
+      "properties": {
+        "role": { "$ref": "#/$defs/nonEmptyString" },
+        "path": { "type": "array", "items": { "$ref": "#/$defs/nonEmptyString" } },
+        "target": {
+          "type": "object",
+          "required": ["kind"],
+          "properties": {
+            "kind": { "enum": ["element", "path-node", "path-segment", "contour-vertex", "contour-edge", "semantic-face"] },
+            "pathId": { "type": "string" },
+            "nodeId": { "type": "string" },
+            "segmentId": { "type": "string" },
+            "contourId": { "type": "string" },
+            "vertexId": { "type": "string" },
+            "edgeId": { "type": "string" },
+            "faceId": { "type": "string" }
+          },
+          "unevaluatedProperties": false
+        }
+      }
+    },
+    "elementBase": {
+      "type": "object",
+      "required": ["id", "stableKey", "owner", "source", "role", "material", "revisionProvenance", "topology"],
+      "properties": {
+        "id": { "$ref": "#/$defs/nonEmptyString" },
+        "stableKey": { "$ref": "#/$defs/nonEmptyString" },
+        "owner": { "$ref": "#/$defs/owner" },
+        "source": { "enum": ["generated", "manual"] },
+        "role": { "$ref": "#/$defs/nonEmptyString" },
+        "name": { "type": "string" },
+        "material": { "$ref": "#/$defs/material" },
+        "classification": { "type": "object" },
+        "revisionProvenance": { "$ref": "#/$defs/provenance" },
+        "topology": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/topologyNode" } },
+        "properties": { "type": "object" }
+      }
+    },
+    "element": {
+      "allOf": [
+        { "$ref": "#/$defs/elementBase" },
+        {
+          "oneOf": [
+            { "type": "object", "required": ["kind", "start", "end", "profile"], "properties": { "kind": { "const": "straight-member" }, "start": { "$ref": "#/$defs/vec3" }, "end": { "$ref": "#/$defs/vec3" }, "profile": { "$ref": "#/$defs/profile" }, "placement": { "type": "object" } } },
+            { "type": "object", "required": ["kind", "path", "profile"], "properties": { "kind": { "const": "path-member" }, "path": { "$ref": "#/$defs/path" }, "profile": { "$ref": "#/$defs/profile" }, "placement": { "type": "object" } } },
+            { "type": "object", "required": ["kind", "plane", "outerContour", "thicknessMm"], "properties": { "kind": { "const": "planar-plate" }, "plane": { "$ref": "#/$defs/plane" }, "outerContour": { "$ref": "#/$defs/contour" }, "innerContours": { "type": "array", "items": { "$ref": "#/$defs/contour" } }, "thicknessMm": { "$ref": "#/$defs/positiveNumber" }, "extrusionSide": { "enum": ["positive", "negative", "symmetric"] } } },
+            { "type": "object", "required": ["kind", "stationFrameVersion", "spine", "thicknessMm", "stockWidthMm", "developedContour", "stations"], "properties": { "kind": { "const": "developed-plate" }, "stationFrameVersion": { "const": 1 }, "spine": { "$ref": "#/$defs/path" }, "thicknessMm": { "$ref": "#/$defs/positiveNumber" }, "stockWidthMm": { "$ref": "#/$defs/positiveNumber" }, "developedContour": { "$ref": "#/$defs/contour" }, "stations": { "type": "array", "minItems": 2, "items": { "type": "object", "required": ["id", "spineNodeId", "stationMm", "frame"], "properties": { "id": { "$ref": "#/$defs/nonEmptyString" }, "spineNodeId": { "$ref": "#/$defs/nonEmptyString" }, "stationMm": { "type": "number" }, "frame": { "$ref": "#/$defs/plane" } }, "additionalProperties": false } }, "bends": { "type": "array", "items": { "type": "object" } } } },
+            { "type": "object", "required": ["kind", "sections", "thicknessMm"], "properties": { "kind": { "const": "lofted-plate" }, "sections": { "type": "array", "minItems": 2, "items": { "type": "object" } }, "thicknessMm": { "$ref": "#/$defs/positiveNumber" } } },
+            { "type": "object", "required": ["kind", "recipe"], "properties": { "kind": { "const": "parametric-solid" }, "recipe": { "type": "object" } } },
+            { "type": "object", "required": ["kind", "path", "diameterMm"], "properties": { "kind": { "const": "reinforcement" }, "path": { "$ref": "#/$defs/path" }, "diameterMm": { "$ref": "#/$defs/positiveNumber" }, "grade": { "type": "string" }, "count": { "type": "integer", "minimum": 1 }, "spacingMm": { "$ref": "#/$defs/positiveNumber" } } }
+          ]
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "featureBase": {
+      "type": "object",
+      "required": ["id", "stableKey", "source", "role", "owner", "revisionProvenance"],
+      "properties": {
+        "id": { "$ref": "#/$defs/nonEmptyString" },
+        "stableKey": { "$ref": "#/$defs/nonEmptyString" },
+        "source": { "enum": ["generated", "manual"] },
+        "role": { "$ref": "#/$defs/nonEmptyString" },
+        "owner": { "$ref": "#/$defs/topologyRef" },
+        "relations": { "type": "array", "items": { "$ref": "#/$defs/topologyRef" } },
+        "dependsOn": { "type": "array", "items": { "$ref": "#/$defs/nonEmptyString" } },
+        "frame": { "$ref": "#/$defs/plane" },
+        "revisionProvenance": { "$ref": "#/$defs/provenance" },
+        "expectedNativeStrategy": { "enum": ["native-single", "native-composite", "adapter-decision", "blocked"] },
+        "properties": { "type": "object" }
+      }
+    },
+    "feature": {
+      "allOf": [
+        { "$ref": "#/$defs/featureBase" },
+        {
+          "oneOf": [
+            { "type": "object", "required": ["kind", "plane", "keepSide"], "properties": { "kind": { "const": "fitting" }, "plane": { "$ref": "#/$defs/plane" }, "keepSide": { "enum": ["positive", "negative"] } } },
+            { "type": "object", "required": ["kind", "cutter"], "properties": { "kind": { "const": "boolean-cut" }, "cutter": { "type": "object" } } },
+            { "type": "object", "required": ["kind", "center", "axis", "diameterMm"], "properties": { "kind": { "const": "hole" }, "center": { "$ref": "#/$defs/vec3" }, "axis": { "$ref": "#/$defs/vec3" }, "diameterMm": { "$ref": "#/$defs/positiveNumber" }, "depthMm": { "$ref": "#/$defs/positiveNumber" }, "holeType": { "enum": ["round", "slotted"] }, "slotLengthMm": { "$ref": "#/$defs/positiveNumber" }, "slotDirection": { "$ref": "#/$defs/vec3" } }, "allOf": [{ "if": { "required": ["holeType"], "properties": { "holeType": { "const": "slotted" } } }, "then": { "required": ["slotLengthMm", "slotDirection"] }, "else": { "not": { "anyOf": [{ "required": ["slotLengthMm"] }, { "required": ["slotDirection"] }] } } }] },
+            { "type": "object", "required": ["kind", "frame", "boltStandard", "diameterMm", "toleranceMm", "boltType", "pattern", "createHoles"], "properties": { "kind": { "const": "bolt-group" }, "boltStandard": { "$ref": "#/$defs/nonEmptyString" }, "diameterMm": { "$ref": "#/$defs/positiveNumber" }, "lengthMm": { "$ref": "#/$defs/positiveNumber" }, "toleranceMm": { "type": "number", "minimum": 0 }, "boltType": { "enum": ["shop", "site"] }, "pattern": { "$ref": "#/$defs/boltPattern" }, "createHoles": { "type": "boolean" } } },
+            { "type": "object", "required": ["kind", "weldType", "sizeMm", "shopSite", "side"], "properties": { "kind": { "const": "weld" }, "weldType": { "$ref": "#/$defs/nonEmptyString" }, "sizeMm": { "$ref": "#/$defs/positiveNumber" }, "shopSite": { "enum": ["shop", "site"] }, "side": { "enum": ["arrow", "other", "both"] }, "path": { "$ref": "#/$defs/path" }, "intermittent": { "type": "object" }, "edgePreparationFeatureId": { "type": "string" } } },
+            { "type": "object", "required": ["kind", "cornerType", "sizeXmm"], "properties": { "kind": { "const": "contour-corner" }, "cornerType": { "enum": ["chamfer", "round", "cove"] }, "sizeXmm": { "$ref": "#/$defs/positiveNumber" }, "sizeYmm": { "$ref": "#/$defs/positiveNumber" } } },
+            { "type": "object", "required": ["kind", "treatmentType"], "properties": { "kind": { "const": "edge-treatment" }, "treatmentType": { "enum": ["chamfer", "round", "cope", "edge-preparation"] }, "sizeMm": { "$ref": "#/$defs/positiveNumber" }, "secondarySizeMm": { "$ref": "#/$defs/positiveNumber" }, "preparation": { "type": "object" } } },
+            { "type": "object", "required": ["kind", "radiusMm"], "properties": { "kind": { "const": "bend" }, "radiusMm": { "$ref": "#/$defs/positiveNumber" }, "angleDeg": { "type": "number" }, "neutralAxisFactor": { "type": "number" } } }
+          ]
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "assembly": {
+      "type": "object",
+      "required": ["id", "stableKey", "role", "mainElementId", "secondaryElementIds", "source", "owner", "revisionProvenance"],
+      "properties": {
+        "id": { "$ref": "#/$defs/nonEmptyString" },
+        "stableKey": { "$ref": "#/$defs/nonEmptyString" },
+        "role": { "$ref": "#/$defs/nonEmptyString" },
+        "name": { "type": "string" },
+        "mainElementId": { "$ref": "#/$defs/nonEmptyString" },
+        "secondaryElementIds": { "type": "array", "items": { "$ref": "#/$defs/nonEmptyString" } },
+        "featureIds": { "type": "array", "items": { "$ref": "#/$defs/nonEmptyString" } },
+        "source": { "enum": ["generated", "manual"] },
+        "owner": { "$ref": "#/$defs/owner" },
+        "revisionProvenance": { "$ref": "#/$defs/provenance" },
+        "properties": { "type": "object" }
+      },
+      "additionalProperties": false
+    },
+    "diagnostic": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["severity", "code", "message"],
+      "properties": {
+        "severity": { "enum": ["info", "warning", "error"] },
+        "code": { "$ref": "#/$defs/nonEmptyString" },
+        "message": { "$ref": "#/$defs/nonEmptyString" },
+        "path": { "type": "string" },
+        "entityId": { "type": "string" },
+        "featureId": { "type": "string" }
+      }
+    }
+  }
+}

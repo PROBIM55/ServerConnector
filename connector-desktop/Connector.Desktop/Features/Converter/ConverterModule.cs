@@ -17,12 +17,12 @@ public sealed class ConverterModule : IFeatureModule, IDisposable
 
     // Создаётся в потоке окна (ShellViewModel в конструкторе MainWindow): диспетчер — текущий, владелец диалогов и
     // окна «Отчёт» — главное окно на момент показа.
-    public ConverterModule(Dispatcher? dispatcher = null, Func<Window?>? owner = null)
+    public ConverterModule(Dispatcher? dispatcher = null, Func<Window?>? owner = null, IAgrPartConverter? partConverter = null)
     {
         dispatcher ??= Dispatcher.CurrentDispatcher;
         var ui = new WpfConverterUi(owner ?? (() => System.Windows.Application.Current?.MainWindow));
         ViewModel = new ConverterViewModel(
-            log => new AgrConverterService(new AgrGltfpackPartConverter(AgrGltfpackPartConverter.DefaultGltfpackPath),
+            log => new AgrConverterService(partConverter ?? new AgrGltfpackPartConverter(AgrGltfpackPartConverter.DefaultGltfpackPath),
                                            options: new AgrConverterServiceOptions { Log = log }),
             ui,
             ConverterDispatch.Post(dispatcher));

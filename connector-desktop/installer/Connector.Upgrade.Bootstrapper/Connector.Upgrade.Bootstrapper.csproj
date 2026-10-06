@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>Connector.Upgrade.Bootstrapper</AssemblyName>
+    <RootNamespace>Connector.Upgrade.Bootstrapper</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Connector.Upgrade.Bootstrapper.Tests" />
+    <ProjectReference Include="..\Connector.Upgrade.Core\Connector.Upgrade.Core.csproj" />
+    <ProjectReference Include="..\Connector.Upgrade.MachineCommandChannel\Connector.Upgrade.MachineCommandChannel.csproj" />
+    <ProjectReference Include="..\Connector.Upgrade.MachineDispatcher\Connector.Upgrade.MachineDispatcher.csproj" />
+    <ProjectReference Include="..\Connector.Upgrade.MachineIpc\Connector.Upgrade.MachineIpc.csproj" />
+    <ProjectReference Include="..\Connector.Upgrade.OriginalUserCaller\Connector.Upgrade.OriginalUserCaller.csproj" />
+    <ProjectReference Include="..\Connector.Upgrade.WindowsComposition\Connector.Upgrade.WindowsComposition.csproj" />
+    <ProjectReference Include="..\Connector.Upgrade.WindowsUserJournal\Connector.Upgrade.WindowsUserJournal.csproj" />
+    <ProjectReference Include="..\Connector.Upgrade.WindowsHost\Connector.Upgrade.WindowsHost.csproj" />
+    <ProjectReference Include="..\Connector.Upgrade.WindowsPayload\Connector.Upgrade.WindowsPayload.csproj" />
+    <ProjectReference Include="..\Connector.Upgrade.NetBirdMachine\Connector.Upgrade.NetBirdMachine.csproj" />
+    <ProjectReference Include="..\Connector.Upgrade.HelperReleaseTrust\Connector.Upgrade.HelperReleaseTrust.csproj" />
+    <ProjectReference Include="..\Connector.Upgrade.Velopack\Connector.Upgrade.Velopack.csproj" />
+    <ProjectReference Include="..\Connector.Upgrade.VelopackPayload\Connector.Upgrade.VelopackPayload.csproj" />
+    <ProjectReference Include="..\..\src\Connector.CommonAccess.Runtime\Connector.CommonAccess.Runtime.csproj" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net8.0-windows</TargetFramework><UseWPF>true</UseWPF><Nullable>enable</Nullable><ImplicitUsings>enable</ImplicitUsings></PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\Connector.Desktop\Connector.Desktop.csproj" />
+    <Compile Include="..\ui-smoke\GraphiteWebSmoke.cs" Link="GraphiteWebSmoke.cs" />
+    <Compile Include="..\ui-smoke\EngineSmoke.cs" Link="EngineSmoke.cs" />
+    <PackageReference Include="Velopack" Version="1.2.161" />
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
+  </ItemGroup>
+</Project>

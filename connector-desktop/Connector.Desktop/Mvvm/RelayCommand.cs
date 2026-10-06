@@ -44,6 +44,12 @@ public sealed class AsyncRelayCommand : ICommand
 
     public async void Execute(object? parameter)
     {
+        await ExecuteAsync(parameter);
+    }
+
+    // Native hosts can await the same execution path without relying on async-void ICommand dispatch.
+    public async Task ExecuteAsync(object? parameter = null)
+    {
         if (!CanExecute(parameter)) return;
         IsRunning = true;
         try { await _execute(); }

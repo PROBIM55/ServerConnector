@@ -20,12 +20,13 @@ public sealed class VpnProvisioningService
 
     public string LogFilePath { get; }
 
-    public VpnProvisioningService()
+    public VpnProvisioningService(string? stateRoot = null)
     {
         var baseDir = AppContext.BaseDirectory;
         _awgExe = Path.Combine(baseDir, "tools", "awg", "amneziawg.exe");
 
-        var root = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ConnectorAgentDesktop");
+        var root = Path.GetFullPath(stateRoot ?? Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ConnectorAgentDesktop"));
         _confDir = Path.Combine(root, "vpn");
         Directory.CreateDirectory(_confDir);
         LogFilePath = Path.Combine(root, "vpn.log");
@@ -110,7 +111,7 @@ public sealed class VpnProvisioningService
             var startCode = RunElevatedPowerShell(startScript, out var startError);
             if (startCode == ElevationCancelled)
             {
-                return VpnResult.Fail("Запуск VPN отменён (не подтверждён запрос прав администратора).");
+                return VpnResult.Cancelled("Запуск VPN отменён (не подтверждён запрос прав администратора).");
             }
             if (startCode == 0 && WaitForStableTunnel(tunnel))
             {
@@ -140,7 +141,7 @@ public sealed class VpnProvisioningService
                     out var reconfigureError);
                 if (reconfigureCode == ElevationCancelled)
                 {
-                    return VpnResult.Fail(
+                    return VpnResult.Cancelled(
                         "Обновление VPN отменено (не подтверждён запрос прав администратора).");
                 }
                 if (reconfigureCode == 0 && WaitForStableTunnel(tunnel) &&
@@ -180,7 +181,7 @@ public sealed class VpnProvisioningService
         var code = RunElevated("/installtunnelservice \"" + confPath + "\"", out var elevErr);
         if (code == ElevationCancelled)
         {
-            return VpnResult.Fail("Установка VPN отменена (не подтверждён запрос прав администратора). Нажмите ещё раз и подтвердите.");
+            return VpnResult.Cancelled("Установка VPN отменена (не подтверждён запрос прав администратора). Нажмите ещё раз и подтвердите.");
         }
 
         // /installtunnelservice runs elevated with UseShellExecute, so we can't read its stdout;
@@ -210,7 +211,7 @@ public sealed class VpnProvisioningService
         var code = RunElevated("/uninstalltunnelservice " + tunnel, out _);
         if (code == ElevationCancelled)
         {
-            return VpnResult.Fail("Отключение VPN отменено (не подтверждён запрос прав администратора).");
+            return VpnResult.Cancelled("Отключение VPN отменено (не подтверждён запрос прав администратора).");
         }
         WaitUntil(() => !IsTunnelInstalled(tunnel), TimeSpan.FromSeconds(8));
         TryDeleteConf(confPath);
@@ -433,8 +434,10 @@ public sealed class VpnProvisioningService
 public sealed class VpnResult
 {
     public bool IsSuccess { get; init; }
+    public bool IsCancelled { get; init; }
     public string Message { get; init; } = "";
 
     public static VpnResult Success(string message) => new() { IsSuccess = true, Message = message };
     public static VpnResult Fail(string message) => new() { IsSuccess = false, Message = message };
+    public static VpnResult Cancelled(string message) => new() { IsCancelled = true, Message = message };
 }

@@ -1,0 +1,218 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://structura-most.ru/contracts/agr-publication/requirements-profile-v1.schema.json",
+  "title": "AGR publication requirements profile v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "title",
+    "maturity",
+    "sources",
+    "fbxFormatVersion",
+    "fbxCompatibilityVersion",
+    "metersPerUnit",
+    "allowedShaders",
+    "lowPoly",
+    "highPoly"
+  ],
+  "properties": {
+    "id": { "type": "string", "minLength": 1 },
+    "title": { "type": "string", "minLength": 1 },
+    "maturity": { "enum": ["draft", "transcribed", "verified"] },
+    "sources": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/source" }
+    },
+    "fbxFormatVersion": { "const": "7.4" },
+    "fbxCompatibilityVersion": { "const": "2014" },
+    "metersPerUnit": { "const": 1 },
+    "allowedShaders": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/shader" }
+    },
+    "lowPoly": { "$ref": "#/$defs/lowPoly" },
+    "highPoly": { "$ref": "#/$defs/highPoly" }
+  },
+  "$defs": {
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title", "effectiveDate"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "title": { "type": "string", "minLength": 1 },
+        "effectiveDate": { "type": "string", "format": "date" },
+        "url": { "type": "string", "format": "uri" },
+        "notes": { "type": "string" }
+      }
+    },
+    "shader": {
+      "enum": [
+        "standard-legacy",
+        "physical-material",
+        "principled-bsdf",
+        "vray",
+        "octane",
+        "corona",
+        "arnold",
+        "unknown"
+      ]
+    },
+    "textureKind": {
+      "enum": [
+        "diffuse",
+        "normal",
+        "opacity",
+        "roughness",
+        "metallic",
+        "erm",
+        "other"
+      ]
+    },
+    "texture": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "allowedDimensions",
+        "allowAlpha",
+        "minPaddingByDimension",
+        "storage"
+      ],
+      "properties": {
+        "allowedDimensions": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "integer", "minimum": 1 }
+        },
+        "maxBytes": { "type": "integer", "minimum": 1 },
+        "allowAlpha": { "type": "boolean" },
+        "bitsPerChannel": { "type": "integer", "minimum": 1 },
+        "minPaddingByDimension": {
+          "type": "object",
+          "additionalProperties": { "type": "number", "minimum": 0 }
+        },
+        "storage": { "enum": ["embedded", "external"] }
+      }
+    },
+    "lowPoly": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "archiveMaxBytes",
+        "minOksFiles",
+        "maxOksFiles",
+        "requiredGroundFiles",
+        "oksTriangleMax",
+        "groundTriangleMax",
+        "maxTransparentMaterials",
+        "maxGeometryObjects",
+        "maxOpaqueGeometryObjects",
+        "maxTransparentGeometryObjects",
+        "maxOksTextureSets",
+        "maxGroundTextureSets",
+        "minGroundTextureDensityPxPerSquareMeter",
+        "maxGroundTextureDensityPxPerSquareMeter",
+        "requiredTextureKinds",
+        "texture"
+      ],
+      "properties": {
+        "archiveMaxBytes": { "type": "integer", "minimum": 1 },
+        "minOksFiles": { "type": "integer", "minimum": 0 },
+        "maxOksFiles": { "type": "integer", "minimum": 1 },
+        "requiredGroundFiles": { "type": "integer", "minimum": 0 },
+        "oksTriangleMax": { "type": "integer", "minimum": 1 },
+        "groundTriangleMax": { "type": "integer", "minimum": 1 },
+        "maxTransparentMaterials": { "type": "integer", "minimum": 0 },
+        "maxGeometryObjects": { "type": "integer", "minimum": 1 },
+        "maxOpaqueGeometryObjects": { "type": "integer", "minimum": 1 },
+        "maxTransparentGeometryObjects": { "type": "integer", "minimum": 0 },
+        "maxOksTextureSets": { "type": "integer", "minimum": 0 },
+        "maxGroundTextureSets": { "type": "integer", "minimum": 0 },
+        "minGroundTextureDensityPxPerSquareMeter": { "type": "number", "minimum": 0 },
+        "maxGroundTextureDensityPxPerSquareMeter": { "type": "number", "minimum": 0 },
+        "requiredTextureKinds": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/textureKind" }
+        },
+        "texture": { "$ref": "#/$defs/texture" }
+      }
+    },
+    "groundTriangleBand": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["maxAreaHa", "maxTriangles"],
+      "properties": {
+        "maxAreaHa": { "type": ["number", "null"], "minimum": 0 },
+        "maxTriangles": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "collision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "smallModelTriangleThreshold",
+        "smallModelTriangleMax",
+        "largeModelRatio"
+      ],
+      "properties": {
+        "smallModelTriangleThreshold": { "type": "integer", "minimum": 1 },
+        "smallModelTriangleMax": { "type": "integer", "minimum": 1 },
+        "largeModelRatio": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 }
+      }
+    },
+    "highPoly": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "oksArchiveMaxBytes",
+        "groundArchiveMaxBytes",
+        "oksTriangleMax",
+        "groundTriangleBands",
+        "maxMaterialsPerGeometry",
+        "minTextureFiles",
+        "maxTextureFiles",
+        "minTexelDensityPxPerMeter",
+        "maxTexelDensityPxPerMeter",
+        "maxUdimTilesPerMaterial",
+        "udimTileMin",
+        "udimTileMax",
+        "requiredTextureKinds",
+        "texture",
+        "collision",
+        "maxLightingObjects"
+      ],
+      "properties": {
+        "oksArchiveMaxBytes": { "type": "integer", "minimum": 1 },
+        "groundArchiveMaxBytes": { "type": "integer", "minimum": 1 },
+        "oksTriangleMax": { "type": "integer", "minimum": 1 },
+        "groundTriangleBands": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/groundTriangleBand" }
+        },
+        "maxMaterialsPerGeometry": { "type": "integer", "minimum": 1 },
+        "minTextureFiles": { "type": "integer", "minimum": 0 },
+        "maxTextureFiles": { "type": "integer", "minimum": 1 },
+        "minTexelDensityPxPerMeter": { "type": "number", "minimum": 0 },
+        "maxTexelDensityPxPerMeter": { "type": "number", "minimum": 0 },
+        "maxUdimTilesPerMaterial": { "type": "integer", "minimum": 1 },
+        "udimTileMin": { "type": "integer", "minimum": 1001 },
+        "udimTileMax": { "type": "integer", "minimum": 1001 },
+        "requiredTextureKinds": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/textureKind" }
+        },
+        "texture": { "$ref": "#/$defs/texture" },
+        "collision": { "$ref": "#/$defs/collision" },
+        "maxLightingObjects": { "type": "integer", "minimum": 0 }
+      }
+    }
+  }
+}

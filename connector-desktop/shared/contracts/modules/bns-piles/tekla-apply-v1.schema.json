@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://platform.structura/contracts/modules/bns-piles/tekla-apply-v1.schema.json",
+  "title": "BNS Piles Tekla Apply Payload",
+  "type": "object",
+  "required": ["probePath"],
+  "properties": {
+    "probePath": { "type": "string", "minLength": 1 },
+    "probeArgs": { "type": "string" },
+    "commandText": { "type": "string" },
+    "workingDirectory": { "type": "string" },
+    "commandFilePath": { "type": "string" },
+    "resultFilePath": { "type": "string" },
+    "requireSessionPreflight": { "type": "boolean" },
+    "sessionProbeArgs": { "type": "string" },
+    "expectedSessionToken": { "type": "string" },
+    "jobTimeoutSeconds": { "type": "integer", "minimum": 1, "maximum": 86400 },
+    "diagnostics": { "type": "boolean" }
+  },
+  "additionalProperties": true
+}

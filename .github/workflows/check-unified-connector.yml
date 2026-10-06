@@ -1,0 +1,92 @@
+name: Check unified connector
+
+on:
+  pull_request:
+    branches:
+      - master
+    paths:
+      - 'connector-access/**'
+      - 'connector-desktop/**'
+      - 'connector/server/app.py'
+      - 'connector/server/unified_updates.py'
+      - 'connector/server/requirements*.txt'
+      - 'connector/server/tests/test_unified_updates.py'
+      - 'connector/server/tests/test_update_manifest.py'
+      - '.github/workflows/check-unified-connector.yml'
+  push:
+    branches:
+      - master
+    paths:
+      - 'connector-access/**'
+      - 'connector-desktop/**'
+      - 'connector/server/app.py'
+      - 'connector/server/unified_updates.py'
+      - 'connector/server/requirements*.txt'
+      - 'connector/server/tests/test_unified_updates.py'
+      - 'connector/server/tests/test_update_manifest.py'
+      - '.github/workflows/check-unified-connector.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  source-and-targeted-tests:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install server test dependencies
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          if ($LASTEXITCODE -ne 0) { throw 'pip upgrade failed' }
+          python -m pip install -r connector/server/requirements-dev.txt
+          if ($LASTEXITCODE -ne 0) { throw 'Server development dependencies failed to install' }
+
+      - name: Check connector source boundaries
+        shell: pwsh
+        run: ./connector-desktop/scripts/verify_source_boundaries.ps1
+
+      - name: Test unified and legacy update feeds
+        shell: pwsh
+        run: |
+          python -m pytest connector/server/tests/test_unified_updates.py connector/server/tests/test_update_manifest.py
+          if ($LASTEXITCODE -ne 0) { throw 'Unified/legacy update feed tests failed' }
+
+      - name: Test signed feed publisher with isolated P-256 fixtures
+        shell: pwsh
+        run: ./connector-desktop/scripts/tests/publish_unified_feed.tests.ps1
+
+      - name: Test desktop and upgrade components sequentially
+        shell: pwsh
+        run: |
+          $projects = @(
+            'connector-desktop/Connector.Desktop.Tests/Connector.Desktop.Tests.csproj',
+            'connector-desktop/tests/Connector.Network.Tests/Connector.Network.Tests.csproj',
+            'connector-access/tests/Connector.Access.Tests/Connector.Access.Tests.csproj',
+            'connector-desktop/installer/Connector.Upgrade.Tests/Connector.Upgrade.Tests.csproj',
+            'connector-desktop/installer/Connector.Upgrade.WindowsHost.Tests/Connector.Upgrade.WindowsHost.Tests.csproj',
+            'connector-desktop/installer/Connector.Upgrade.PlatformAccess.Tests/Connector.Upgrade.PlatformAccess.Tests.csproj',
+            'connector-desktop/installer/Connector.Upgrade.Bootstrapper.Tests/Connector.Upgrade.Bootstrapper.Tests.csproj',
+            'connector-desktop/installer/Connector.Upgrade.WindowsUserJournal.Tests/Connector.Upgrade.WindowsUserJournal.Tests.csproj',
+            'connector-desktop/installer/Connector.Upgrade.WindowsComposition.Tests/Connector.Upgrade.WindowsComposition.Tests.csproj',
+            'connector-desktop/installer/Connector.Upgrade.ReleaseManifestBuilder.Tests/Connector.Upgrade.ReleaseManifestBuilder.Tests.csproj'
+          )
+          foreach ($project in $projects) {
+            Write-Host "Running targeted suite: $project"
+            dotnet test $project --configuration Release --verbosity minimal
+            if ($LASTEXITCODE -ne 0) { throw "Targeted suite failed: $project" }
+          }

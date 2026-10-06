@@ -231,6 +231,20 @@ public class PackRequirementTests
     }
 
     [GltfpackFact]
+    public void ConvertPart_ManifestDescribesSimplificationTargetAndActualTriangles()
+    {
+        using var tmp = new TempDir("c1c1fix-lod-description");
+        var r = Run(tmp.Path, "a");
+        var level = r.Levels[0];
+        Assert.True(level.Simplified);
+        var description = r.Manifest!["levels"]!["L0"]!.GetValue<string>();
+        var actualPercent = 100d * level.TrianglesGlb / r.TrianglesRef;
+
+        Assert.Contains("целевая доля 10%; фактически " + level.TrianglesGlb + " (" + actualPercent.ToString("0.######", System.Globalization.CultureInfo.InvariantCulture) + "%) треугольников", description);
+        Assert.DoesNotContain("упрощение до 0.1 треугольников", description);
+    }
+
+    [GltfpackFact]
     public void ConvertPart_TwoRuns_SameZipAndStudioPackageSha()
     {
         using var tmp = new TempDir("c1c1fix-det");

@@ -1,0 +1,26 @@
+{
+  "revision": 3,
+  "status": "refined field form approved by user",
+  "mode": "built-in image_gen",
+  "transparent_background": true,
+  "userReference": "Leading AI and engineering companies; previous V1 and V2 rejected.",
+  "references": [
+    {
+      "url": "https://openai.com/brand/",
+      "purpose": "Geometric balance and clear negative space; no borrowed shapes or assets."
+    },
+    {
+      "url": "https://brand.autodesk.com/brand-system/logo/",
+      "purpose": "A distinct custom-drawn symbol with controlled proportions and small-size legibility."
+    },
+    {
+      "url": "https://www.pentagram.com/work/secondmind",
+      "purpose": "A substantive mathematical idea can underpin a graphic identity."
+    }
+  ],
+  "refinement": {
+    "target": "platform-field-v3.png",
+    "output": "platform-field-refined-v3.png",
+    "prompt": "Use case: logo-brand / precise-object-edit.\nEdit the supplied black transparent identity sketch for an architecture and engineering software platform.\nKeep the core idea: a taut, curved structural grid around a square negative-space opening. Keep it as an elegant, completely flat, crisp single-colour black identity mark on truly transparent background. Preserve the interplay of calculated curves and an orthogonal void, and the distinctive controlled asymmetry.\nOne focused refinement: improve the perimeter and negative-space clarity. The current four pointed rays make it look like a ninja star or decorative pinwheel. Recompose the same curved tracks into a compact, calmer, continuous overall silhouette with carefully rounded/chamfered ends, not outward spikes. Make the outer envelope closer to a softened irregular quadrilateral. Retain only THREE broad curves per axis, not many thin stripes. Increase the square opening and the narrowest clear gaps so all parts can be read at icon scale. Equalise optical weight and resolve intersections cleanly. The visual result should be a mathematically poised custom symbol with architectural tension, sophistication and memorable negative space.\nNo rotation into a symmetric mandala, no sixfold knot, no flowers, no letters, no swastika or cross, no fold/ribbon illusion, no gradients, shadows, 3D, texture, text, colour, tiles, mockups or annotations. One mark centred at about 76% of the square canvas. Preserve actual transparency."
+  }
+}

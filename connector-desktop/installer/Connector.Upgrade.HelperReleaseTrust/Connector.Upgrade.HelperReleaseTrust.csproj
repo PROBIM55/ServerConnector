@@ -1,0 +1,92 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(UnifiedReleaseBuild)' == 'true' and '$(HelperReleasePublicKeyFile)' != '' and Exists('$(HelperReleasePublicKeyFile)')">
+    <EmbeddedResource Include="$(HelperReleasePublicKeyFile)" LogicalName="Connector.Upgrade.HelperReleaseTrust.ReleasePublicKey.pem" />
+  </ItemGroup>
+  <UsingTask TaskName="ValidateHelperReleasePublicKey" TaskFactory="RoslynCodeTaskFactory"
+             AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
+    <ParameterGroup>
+      <KeyFile ParameterType="System.String" Required="true" />
+    </ParameterGroup>
+    <Task>
+      <Using Namespace="System" />
+      <Using Namespace="System.IO" />
+      <Using Namespace="System.Security.Cryptography" />
+      <Code Type="Fragment" Language="cs"><![CDATA[
+        var pem = File.ReadAllText(KeyFile).Trim();
+        if (pem.Length == 0 || !pem.StartsWith("-----BEGIN PUBLIC KEY-----", StringComparison.Ordinal) ||
+            !pem.EndsWith("-----END PUBLIC KEY-----", StringComparison.Ordinal) ||
+            pem.IndexOf("-----BEGIN ", 1, StringComparison.Ordinal) >= 0 ||
+            pem.IndexOf("PRIVATE KEY", StringComparison.Ordinal) >= 0)
+        {
+            Log.LogError("HelperReleasePublicKeyFile must contain exactly one public ECDSA PUBLIC KEY PEM and no private key.");
+            return false;
+        }
+
+        try
+        {
+            var body = pem.Substring("-----BEGIN PUBLIC KEY-----".Length,
+                pem.Length - "-----BEGIN PUBLIC KEY-----".Length - "-----END PUBLIC KEY-----".Length);
+            if (body.IndexOf("-----", StringComparison.Ordinal) >= 0)
+            {
+                Log.LogError("HelperReleasePublicKeyFile contains an unexpected PEM block.");
+                return false;
+            }
+
+            var der = Convert.FromBase64String(body);
+            var derHex = BitConverter.ToString(der).Replace("-", string.Empty);
+            const string spkiPrefix = "3059301306072A8648CE3D020106082A8648CE3D03010703420004";
+            if (der.Length != 91 || !derHex.StartsWith(spkiPrefix, StringComparison.Ordinal))
+            {
+                Log.LogError("HelperReleasePublicKeyFile must be a valid P-256 SubjectPublicKeyInfo public key.");
+                return false;
+            }
+
+            var x = new byte[32];
+            var y = new byte[32];
+            Array.Copy(der, 27, x, 0, x.Length);
+            Array.Copy(der, 59, y, 0, y.Length);
+            var parameters = new ECParameters
+            {
+                Curve = ECCurve.NamedCurves.nistP256,
+                Q = new ECPoint { X = x, Y = y }
+            };
+            using (var key = ECDsa.Create())
+            {
+                key.ImportParameters(parameters);
+                if (key.KeySize != 256)
+                {
+                    Log.LogError("Helper release manifest signatures require a P-256 public key.");
+                    return false;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.LogError("HelperReleasePublicKeyFile is not a valid public ECDSA PEM: " + ex.Message);
+            return false;
+        }
+
+        return true;
+      ]]></Code>
+    </Task>
+  </UsingTask>
+  <Target Name="ValidateUnifiedHelperReleasePublicKey" BeforeTargets="CoreCompile"
+          Condition="'$(UnifiedReleaseBuild)' == 'true'">
+    <Error Condition="'$(Configuration)' != 'Release'"
+           Text="UnifiedReleaseBuild must use Configuration=Release so release trust material cannot enter a Debug output." />
+    <Error Condition="'$(HelperReleasePublicKeyFile)' == ''"
+           Text="Unified release builds require HelperReleasePublicKeyFile pointing to a public ECDSA P-256 PEM file." />
+    <Error Condition="'$(HelperReleasePublicKeyFile)' != '' and !Exists('$(HelperReleasePublicKeyFile)')"
+           Text="HelperReleasePublicKeyFile does not exist: $(HelperReleasePublicKeyFile)" />
+    <ValidateHelperReleasePublicKey KeyFile="$(HelperReleasePublicKeyFile)"
+                                    Condition="'$(HelperReleasePublicKeyFile)' != '' and Exists('$(HelperReleasePublicKeyFile)')" />
+  </Target>
+  <ItemGroup>
+    <ProjectReference Include="..\Connector.Upgrade.HelperLauncher\Connector.Upgrade.HelperLauncher.csproj" />
+  </ItemGroup>
+</Project>

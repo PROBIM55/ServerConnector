@@ -1,0 +1,41 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <PlatformTarget>x64</PlatformTarget>
+    <LangVersion>10.0</LangVersion>
+    <Nullable>enable</Nullable>
+    <!--
+      Sister plugin. Purpose vs BridgeGirderPlugin unclear from decompiled
+      sources — both currently use the same payload shape and route through
+      TeklaBridge.BridgeCommands. Kept as a separate DLL to preserve the
+      deploy contract (.inp file names point to BridgeMvpPlugin.dll). Phase E
+      may merge or document the divergence.
+    -->
+    <AssemblyName>BridgeMvpPlugin</AssemblyName>
+    <RootNamespace>Bridge.TeklaPlugin</RootNamespace>
+    <TeklaBin Condition="'$(TeklaBin)' == ''">C:\TeklaStructures\2025.0\bin</TeklaBin>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\TeklaBridge\TeklaBridge.csproj">
+      <Private>false</Private>
+    </ProjectReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="Tekla.Structures">
+      <HintPath>$(TeklaBin)\Tekla.Structures.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Tekla.Structures.Model">
+      <HintPath>$(TeklaBin)\Tekla.Structures.Model.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Tekla.Structures.Plugins">
+      <HintPath>$(TeklaBin)\Tekla.Structures.Plugins.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+</Project>

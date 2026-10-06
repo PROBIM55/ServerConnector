@@ -1,0 +1,108 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://platform.structura-most.ru/contracts/agr-publication/publication-build-manifest-v1.schema.json",
+  "title": "AGR publication build manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "jobId",
+    "profileId",
+    "modelKind",
+    "target",
+    "snapshotHash",
+    "meshPackage",
+    "output",
+    "geometry",
+    "texturing",
+    "fbx",
+    "resourceLimits"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "jobId": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$" },
+    "profileId": { "type": "string", "minLength": 1 },
+    "modelKind": { "enum": ["low-poly", "high-poly"] },
+    "target": { "enum": ["project", "oks", "ground"] },
+    "snapshotHash": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "meshPackage": { "type": "string", "minLength": 1 },
+    "randomSeed": { "type": "integer", "minimum": 0, "default": 0 },
+    "output": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["directory", "baseName"],
+      "properties": {
+        "directory": { "type": "string", "minLength": 1 },
+        "baseName": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$" },
+        "writeGeoJson": { "type": "boolean", "default": false }
+      }
+    },
+    "geometry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["applyTransforms", "triangulate", "recalculateNormals", "mergeBy"],
+      "properties": {
+        "applyTransforms": { "type": "boolean" },
+        "triangulate": { "type": "boolean" },
+        "recalculateNormals": { "type": "boolean" },
+        "weldToleranceMeters": { "type": "number", "minimum": 0, "default": 0 },
+        "targetTriangleCount": { "type": "integer", "minimum": 4 },
+        "mergeBy": { "enum": ["none", "role", "role-and-material"] }
+      }
+    },
+    "texturing": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode"],
+      "properties": {
+        "mode": { "enum": ["preserve", "generate-uv", "bake"] },
+        "resolution": { "enum": [256, 512, 1024, 2048, 4096] },
+        "uvMarginPixels": { "type": "integer", "minimum": 0 },
+        "udimTileMin": { "type": "integer", "minimum": 1001, "maximum": 1999 },
+        "udimTileMax": { "type": "integer", "minimum": 1001, "maximum": 1999 }
+      }
+    },
+    "fbx": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "binary",
+        "formatVersion",
+        "compatibilityVersion",
+        "metersPerUnit",
+        "axisForward",
+        "axisUp",
+        "embedTextures"
+      ],
+      "properties": {
+        "binary": { "const": true },
+        "formatVersion": { "const": "7.4" },
+        "compatibilityVersion": { "const": "2014" },
+        "metersPerUnit": { "const": 1 },
+        "axisForward": { "enum": ["X", "Y", "Z", "-X", "-Y", "-Z"] },
+        "axisUp": { "enum": ["X", "Y", "Z", "-X", "-Y", "-Z"] },
+        "embedTextures": { "type": "boolean" }
+      }
+    },
+    "resourceLimits": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["maxThreads", "timeoutSeconds"],
+      "properties": {
+        "maxThreads": { "type": "integer", "minimum": 1, "maximum": 64 },
+        "timeoutSeconds": { "type": "integer", "minimum": 10, "maximum": 86400 }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "modelKind": { "const": "high-poly" } },
+        "required": ["modelKind"]
+      },
+      "then": {
+        "properties": { "target": { "enum": ["oks", "ground"] } }
+      }
+    }
+  ]
+}

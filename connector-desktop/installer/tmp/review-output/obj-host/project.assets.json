@@ -1,0 +1,284 @@
+{
+  "version": 3,
+  "targets": {
+    "net8.0-windows7.0": {
+      "Connector.Upgrade.Core/1.0.0": {
+        "type": "project",
+        "framework": ".NETCoreApp,Version=v8.0",
+        "compile": {
+          "bin/placeholder/Connector.Upgrade.Core.dll": {}
+        },
+        "runtime": {
+          "bin/placeholder/Connector.Upgrade.Core.dll": {}
+        }
+      },
+      "Connector.Upgrade.MachineAcl/1.0.0": {
+        "type": "project",
+        "framework": ".NETCoreApp,Version=v8.0",
+        "compile": {
+          "bin/placeholder/Connector.Upgrade.MachineAcl.dll": {}
+        },
+        "runtime": {
+          "bin/placeholder/Connector.Upgrade.MachineAcl.dll": {}
+        }
+      },
+      "Connector.Upgrade.NetBirdMachine/1.0.0": {
+        "type": "project",
+        "framework": ".NETCoreApp,Version=v8.0",
+        "dependencies": {
+          "Connector.Upgrade.Core": "1.0.0",
+          "Connector.Upgrade.WindowsMsi": "1.0.0"
+        },
+        "compile": {
+          "bin/placeholder/Connector.Upgrade.NetBirdMachine.dll": {}
+        },
+        "runtime": {
+          "bin/placeholder/Connector.Upgrade.NetBirdMachine.dll": {}
+        }
+      },
+      "Connector.Upgrade.UserState/1.0.0": {
+        "type": "project",
+        "framework": ".NETCoreApp,Version=v8.0",
+        "compile": {
+          "bin/placeholder/Connector.Upgrade.UserState.dll": {}
+        },
+        "runtime": {
+          "bin/placeholder/Connector.Upgrade.UserState.dll": {}
+        }
+      },
+      "Connector.Upgrade.Velopack/1.0.0": {
+        "type": "project",
+        "framework": ".NETCoreApp,Version=v8.0",
+        "compile": {
+          "bin/placeholder/Connector.Upgrade.Velopack.dll": {}
+        },
+        "runtime": {
+          "bin/placeholder/Connector.Upgrade.Velopack.dll": {}
+        }
+      },
+      "Connector.Upgrade.VelopackPayload/1.0.0": {
+        "type": "project",
+        "framework": ".NETCoreApp,Version=v8.0",
+        "dependencies": {
+          "Connector.Upgrade.MachineAcl": "1.0.0",
+          "Connector.Upgrade.Velopack": "1.0.0"
+        },
+        "compile": {
+          "bin/placeholder/Connector.Upgrade.VelopackPayload.dll": {}
+        },
+        "runtime": {
+          "bin/placeholder/Connector.Upgrade.VelopackPayload.dll": {}
+        }
+      },
+      "Connector.Upgrade.WindowsJournal/1.0.0": {
+        "type": "project",
+        "framework": ".NETCoreApp,Version=v8.0",
+        "dependencies": {
+          "Connector.Upgrade.Core": "1.0.0"
+        },
+        "compile": {
+          "bin/placeholder/Connector.Upgrade.WindowsJournal.dll": {}
+        },
+        "runtime": {
+          "bin/placeholder/Connector.Upgrade.WindowsJournal.dll": {}
+        }
+      },
+      "Connector.Upgrade.WindowsMsi/1.0.0": {
+        "type": "project",
+        "framework": ".NETCoreApp,Version=v8.0",
+        "dependencies": {
+          "Connector.Upgrade.Core": "1.0.0",
+          "Connector.Upgrade.WindowsPayload": "1.0.0"
+        },
+        "compile": {
+          "bin/placeholder/Connector.Upgrade.WindowsMsi.dll": {}
+        },
+        "runtime": {
+          "bin/placeholder/Connector.Upgrade.WindowsMsi.dll": {}
+        }
+      },
+      "Connector.Upgrade.WindowsPayload/1.0.0": {
+        "type": "project",
+        "framework": ".NETCoreApp,Version=v8.0",
+        "dependencies": {
+          "Connector.Upgrade.Core": "1.0.0",
+          "Connector.Upgrade.MachineAcl": "1.0.0"
+        },
+        "compile": {
+          "bin/placeholder/Connector.Upgrade.WindowsPayload.dll": {}
+        },
+        "runtime": {
+          "bin/placeholder/Connector.Upgrade.WindowsPayload.dll": {}
+        }
+      },
+      "Connector.Upgrade.WindowsUserStage/1.0.0": {
+        "type": "project",
+        "framework": ".NETCoreApp,Version=v8.0",
+        "dependencies": {
+          "Connector.Upgrade.MachineAcl": "1.0.0",
+          "Connector.Upgrade.UserState": "1.0.0"
+        },
+        "compile": {
+          "bin/placeholder/Connector.Upgrade.WindowsUserStage.dll": {}
+        },
+        "runtime": {
+          "bin/placeholder/Connector.Upgrade.WindowsUserStage.dll": {}
+        }
+      }
+    }
+  },
+  "libraries": {
+    "Connector.Upgrade.Core/1.0.0": {
+      "type": "project",
+      "path": "../Connector.Upgrade.Core/Connector.Upgrade.Core.csproj",
+      "msbuildProject": "../Connector.Upgrade.Core/Connector.Upgrade.Core.csproj"
+    },
+    "Connector.Upgrade.MachineAcl/1.0.0": {
+      "type": "project",
+      "path": "../Connector.Upgrade.MachineAcl/Connector.Upgrade.MachineAcl.csproj",
+      "msbuildProject": "../Connector.Upgrade.MachineAcl/Connector.Upgrade.MachineAcl.csproj"
+    },
+    "Connector.Upgrade.NetBirdMachine/1.0.0": {
+      "type": "project",
+      "path": "../Connector.Upgrade.NetBirdMachine/Connector.Upgrade.NetBirdMachine.csproj",
+      "msbuildProject": "../Connector.Upgrade.NetBirdMachine/Connector.Upgrade.NetBirdMachine.csproj"
+    },
+    "Connector.Upgrade.UserState/1.0.0": {
+      "type": "project",
+      "path": "../Connector.Upgrade.UserState/Connector.Upgrade.UserState.csproj",
+      "msbuildProject": "../Connector.Upgrade.UserState/Connector.Upgrade.UserState.csproj"
+    },
+    "Connector.Upgrade.Velopack/1.0.0": {
+      "type": "project",
+      "path": "../Connector.Upgrade.Velopack/Connector.Upgrade.Velopack.csproj",
+      "msbuildProject": "../Connector.Upgrade.Velopack/Connector.Upgrade.Velopack.csproj"
+    },
+    "Connector.Upgrade.VelopackPayload/1.0.0": {
+      "type": "project",
+      "path": "../Connector.Upgrade.VelopackPayload/Connector.Upgrade.VelopackPayload.csproj",
+      "msbuildProject": "../Connector.Upgrade.VelopackPayload/Connector.Upgrade.VelopackPayload.csproj"
+    },
+    "Connector.Upgrade.WindowsJournal/1.0.0": {
+      "type": "project",
+      "path": "../Connector.Upgrade.WindowsJournal/Connector.Upgrade.WindowsJournal.csproj",
+      "msbuildProject": "../Connector.Upgrade.WindowsJournal/Connector.Upgrade.WindowsJournal.csproj"
+    },
+    "Connector.Upgrade.WindowsMsi/1.0.0": {
+      "type": "project",
+      "path": "../Connector.Upgrade.WindowsMsi/Connector.Upgrade.WindowsMsi.csproj",
+      "msbuildProject": "../Connector.Upgrade.WindowsMsi/Connector.Upgrade.WindowsMsi.csproj"
+    },
+    "Connector.Upgrade.WindowsPayload/1.0.0": {
+      "type": "project",
+      "path": "../Connector.Upgrade.WindowsPayload/Connector.Upgrade.WindowsPayload.csproj",
+      "msbuildProject": "../Connector.Upgrade.WindowsPayload/Connector.Upgrade.WindowsPayload.csproj"
+    },
+    "Connector.Upgrade.WindowsUserStage/1.0.0": {
+      "type": "project",
+      "path": "../Connector.Upgrade.WindowsUserStage/Connector.Upgrade.WindowsUserStage.csproj",
+      "msbuildProject": "../Connector.Upgrade.WindowsUserStage/Connector.Upgrade.WindowsUserStage.csproj"
+    }
+  },
+  "projectFileDependencyGroups": {
+    "net8.0-windows7.0": [
+      "Connector.Upgrade.Core >= 1.0.0",
+      "Connector.Upgrade.NetBirdMachine >= 1.0.0",
+      "Connector.Upgrade.UserState >= 1.0.0",
+      "Connector.Upgrade.Velopack >= 1.0.0",
+      "Connector.Upgrade.VelopackPayload >= 1.0.0",
+      "Connector.Upgrade.WindowsJournal >= 1.0.0",
+      "Connector.Upgrade.WindowsMsi >= 1.0.0",
+      "Connector.Upgrade.WindowsPayload >= 1.0.0",
+      "Connector.Upgrade.WindowsUserStage >= 1.0.0"
+    ]
+  },
+  "packageFolders": {
+    "C:\\Users\\Lagom\\.nuget\\packages\\": {}
+  },
+  "project": {
+    "version": "1.0.0",
+    "restore": {
+      "projectUniqueName": "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.WindowsHost\\Connector.Upgrade.WindowsHost.csproj",
+      "projectName": "Connector.Upgrade.WindowsHost",
+      "projectPath": "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.WindowsHost\\Connector.Upgrade.WindowsHost.csproj",
+      "packagesPath": "C:\\Users\\Lagom\\.nuget\\packages\\",
+      "outputPath": "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\tmp\\review-output\\obj-host\\",
+      "projectStyle": "PackageReference",
+      "configFilePaths": [
+        "C:\\Users\\Lagom\\AppData\\Roaming\\NuGet\\NuGet.Config"
+      ],
+      "originalTargetFrameworks": [
+        "net8.0-windows"
+      ],
+      "sources": {
+        "https://api.nuget.org/v3/index.json": {}
+      },
+      "frameworks": {
+        "net8.0-windows7.0": {
+          "targetAlias": "net8.0-windows",
+          "projectReferences": {
+            "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.Core\\Connector.Upgrade.Core.csproj": {
+              "projectPath": "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.Core\\Connector.Upgrade.Core.csproj"
+            },
+            "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.NetBirdMachine\\Connector.Upgrade.NetBirdMachine.csproj": {
+              "projectPath": "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.NetBirdMachine\\Connector.Upgrade.NetBirdMachine.csproj"
+            },
+            "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.UserState\\Connector.Upgrade.UserState.csproj": {
+              "projectPath": "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.UserState\\Connector.Upgrade.UserState.csproj"
+            },
+            "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.VelopackPayload\\Connector.Upgrade.VelopackPayload.csproj": {
+              "projectPath": "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.VelopackPayload\\Connector.Upgrade.VelopackPayload.csproj"
+            },
+            "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.Velopack\\Connector.Upgrade.Velopack.csproj": {
+              "projectPath": "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.Velopack\\Connector.Upgrade.Velopack.csproj"
+            },
+            "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.WindowsJournal\\Connector.Upgrade.WindowsJournal.csproj": {
+              "projectPath": "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.WindowsJournal\\Connector.Upgrade.WindowsJournal.csproj"
+            },
+            "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.WindowsMsi\\Connector.Upgrade.WindowsMsi.csproj": {
+              "projectPath": "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.WindowsMsi\\Connector.Upgrade.WindowsMsi.csproj"
+            },
+            "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.WindowsPayload\\Connector.Upgrade.WindowsPayload.csproj": {
+              "projectPath": "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.WindowsPayload\\Connector.Upgrade.WindowsPayload.csproj"
+            },
+            "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.WindowsUserStage\\Connector.Upgrade.WindowsUserStage.csproj": {
+              "projectPath": "G:\\00_Projects\\18_Server\\connector-desktop\\installer\\Connector.Upgrade.WindowsUserStage\\Connector.Upgrade.WindowsUserStage.csproj"
+            }
+          }
+        }
+      },
+      "warningProperties": {
+        "warnAsError": [
+          "NU1605"
+        ]
+      },
+      "restoreAuditProperties": {
+        "enableAudit": "true",
+        "auditLevel": "low",
+        "auditMode": "direct"
+      }
+    },
+    "frameworks": {
+      "net8.0-windows7.0": {
+        "targetAlias": "net8.0-windows",
+        "imports": [
+          "net461",
+          "net462",
+          "net47",
+          "net471",
+          "net472",
+          "net48",
+          "net481"
+        ],
+        "assetTargetFallback": true,
+        "warn": true,
+        "frameworkReferences": {
+          "Microsoft.NETCore.App": {
+            "privateAssets": "all"
+          }
+        },
+        "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\8.0.422/PortableRuntimeIdentifierGraph.json"
+      }
+    }
+  }
+}

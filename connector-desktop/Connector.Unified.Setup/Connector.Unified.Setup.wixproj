@@ -1,0 +1,184 @@
+<Project Sdk="WixToolset.Sdk/6.0.2">
+  <PropertyGroup>
+    <OutputType>Package</OutputType>
+    <InstallerPlatform>x64</InstallerPlatform>
+    <DefineConstants>ProductVersion=$(ProductVersion);BootstrapperDir=$(BootstrapperPublishDir);HelperDir=$(MachineHelperPublishDir);SetupSource=$(SetupExePath);HelperReleaseManifest=$(HelperReleaseManifestPath);HelperReleaseSignature=$(HelperReleaseSignaturePath);NetBirdMsi=$(NetBirdMsiPath);LegacyConnectorMsi=$(LegacyConnectorMsiPath);LegacyPlatformMsi=$(LegacyPlatformMsiPath);AccessConfiguration=$(ConnectorAccessConfigurationPath);NetBirdPreflight=$(NetBirdPreflightScriptPath);NetBirdVerifier=$(NetBirdVerifierScriptPath);NetBirdIdentityLock=$(NetBirdIdentityLockPath)</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="WixToolset.Util.wixext" Version="6.0.2" />
+  </ItemGroup>
+
+  <UsingTask TaskName="ValidateUnifiedSetupInputs" TaskFactory="RoslynCodeTaskFactory"
+             AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
+    <ParameterGroup>
+      <BootstrapperDir ParameterType="System.String" Required="true" />
+      <MachineHelperDir ParameterType="System.String" Required="true" />
+      <SetupPath ParameterType="System.String" Required="true" />
+      <ManifestPath ParameterType="System.String" Required="true" />
+      <SignaturePath ParameterType="System.String" Required="true" />
+      <NetBirdPath ParameterType="System.String" Required="true" />
+      <LegacyConnectorPath ParameterType="System.String" Required="true" />
+      <LegacyPlatformPath ParameterType="System.String" Required="true" />
+      <AccessConfigurationPath ParameterType="System.String" Required="true" />
+      <PreflightPath ParameterType="System.String" Required="true" />
+      <VerifierPath ParameterType="System.String" Required="true" />
+      <IdentityLockPath ParameterType="System.String" Required="true" />
+    </ParameterGroup>
+    <Task>
+      <Using Namespace="System" />
+      <Using Namespace="System.IO" />
+      <Using Namespace="System.Security.Cryptography" />
+      <Using Namespace="System.Text.RegularExpressions" />
+      <Code Type="Fragment" Language="cs"><![CDATA[
+        bool FileRequired(string path, string expectedName)
+        {
+            if (string.IsNullOrWhiteSpace(path) || !Path.IsPathRooted(path) || !File.Exists(path))
+            {
+                Log.LogError("Required unified MSI input is missing: " + (path ?? "<empty>"));
+                return false;
+            }
+            if (!string.Equals(Path.GetFileName(path), expectedName, StringComparison.OrdinalIgnoreCase))
+            {
+                Log.LogError("Unified MSI input must be named '" + expectedName + "': " + path);
+                return false;
+            }
+            if (new FileInfo(path).Length == 0)
+            {
+                Log.LogError("Unified MSI input is empty: " + path);
+                return false;
+            }
+            return true;
+        }
+        bool DirectoryRequired(string path, string executableName)
+        {
+            if (string.IsNullOrWhiteSpace(path) || !Path.IsPathRooted(path) || !Directory.Exists(path))
+            {
+                Log.LogError("Required publish directory is missing: " + (path ?? "<empty>"));
+                return false;
+            }
+            var executable = Path.Combine(path, executableName);
+            if (!FileRequired(executable, executableName)) return false;
+            if (Directory.GetFiles(path, "*", SearchOption.AllDirectories).Length < 2)
+            {
+                Log.LogError("Publish directory must contain the executable and its runtime files: " + path);
+                return false;
+            }
+            return true;
+        }
+        bool Pin(string path, long expectedBytes, string expectedSha256)
+        {
+            if (!File.Exists(path)) return false;
+            var info = new FileInfo(path);
+            if (info.Length != expectedBytes)
+            {
+                Log.LogError("Pinned installer size does not match its lock: " + Path.GetFileName(path));
+                return false;
+            }
+            using (var stream = File.OpenRead(path))
+            {
+                string actual;
+                using (var sha = SHA256.Create()) actual = BitConverter.ToString(sha.ComputeHash(stream)).Replace("-", string.Empty);
+                if (!string.Equals(actual, expectedSha256, StringComparison.OrdinalIgnoreCase))
+                {
+                    Log.LogError("Pinned installer SHA-256 does not match its lock: " + Path.GetFileName(path));
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        bool ok = true;
+        ok &= DirectoryRequired(BootstrapperDir, "Connector.Upgrade.Bootstrapper.exe");
+        ok &= DirectoryRequired(MachineHelperDir, "Connector.Upgrade.MachineHelper.exe");
+        ok &= FileRequired(SetupPath, "Setup.exe");
+        ok &= FileRequired(ManifestPath, "helper-release.json");
+        ok &= FileRequired(SignaturePath, "helper-release.sig");
+        if (File.Exists(SignaturePath) && new FileInfo(SignaturePath).Length != 64)
+        {
+            Log.LogError("helper-release.sig must contain a 64-byte P-256 signature.");
+            ok = false;
+        }
+        ok &= FileRequired(NetBirdPath, "netbird_installer_0.79.0_windows_amd64.msi");
+        ok &= Pin(NetBirdPath, 23543808L, "50F822C0F5F6E54E7618096CDD36B63BF4B169E125C9DA06052FD4FD96115210");
+        ok &= FileRequired(LegacyConnectorPath, "Connector.Desktop.Setup.msi");
+        ok &= Pin(LegacyConnectorPath, 114074894L, "47B5B3434CED41C3B9A71615906CBAF835B6CB45433554BE612E7BF2D88EF515");
+        ok &= FileRequired(LegacyPlatformPath, "Platform.Connector.Desktop.Setup.msi");
+        ok &= Pin(LegacyPlatformPath, 59929448L, "D6666FD1613B16879AB6FDA9912D3476D0BA0BE2A782A7F934772D9F89DEDC3D");
+        ok &= FileRequired(AccessConfigurationPath, "connector-access.json");
+        ok &= FileRequired(PreflightPath, "netbird_windows_preflight.ps1");
+        ok &= FileRequired(VerifierPath, "verify_netbird_installer.ps1");
+        ok &= FileRequired(IdentityLockPath, "v0.79.0-windows-x64.lock.json");
+        bool ExactHash(string path, string expected)
+        {
+            if (!File.Exists(path)) return false;
+            using (var stream = File.OpenRead(path))
+            {
+                string actual;
+                using (var sha = SHA256.Create()) actual = BitConverter.ToString(sha.ComputeHash(stream)).Replace("-", string.Empty);
+                if (string.Equals(actual, expected, StringComparison.OrdinalIgnoreCase)) return true;
+            }
+            Log.LogError("Machine NetBird trust input does not match the hash pinned by the desktop runtime: " + Path.GetFileName(path));
+            return false;
+        }
+        ok &= ExactHash(PreflightPath, "8BF7CFB9C667374F7F165A37C42C2B47F9FB4476E89A36995358375CA59490C2");
+        ok &= ExactHash(VerifierPath, "DFFFA2EC3BBDFB57583F66AB651F12259AFFFBCF39AA014B11411F9C152EA834");
+        ok &= ExactHash(IdentityLockPath, "EE48F195FAE2A08B83C0A44F238C237C79F05F27BCA8DBC995542B1FCD23FA96");
+        if (File.Exists(AccessConfigurationPath))
+        {
+            try
+            {
+                var json = File.ReadAllText(AccessConfigurationPath);
+                var enabled = Regex.IsMatch(json, "\\\"enabled\\\"\\s*:\\s*true\\s*[,}]", RegexOptions.CultureInvariant);
+                var validService = Regex.IsMatch(json, "\\\"serviceBaseUri\\\"\\s*:\\s*\\\"https://[^\\\"\\s]+\\\"", RegexOptions.CultureInvariant | RegexOptions.IgnoreCase) &&
+                    !Regex.IsMatch(json, "\\\"serviceBaseUri\\\"\\s*:\\s*\\\"https://(localhost|127\\.0\\.0\\.1|\\[::1\\])", RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+                var validIssuer = Regex.IsMatch(json, "\\\"issuerCertificateSha256\\\"\\s*:\\s*\\\"[A-Fa-f0-9]{64}\\\"", RegexOptions.CultureInvariant);
+                var hasControlPlane = Regex.IsMatch(json, "\\\"serviceId\\\"\\s*:\\s*\\\"control-plane\\\"", RegexOptions.CultureInvariant) &&
+                    Regex.IsMatch(json, "\\\"baseUri\\\"\\s*:\\s*\\\"https://[^\\\"\\s]+/api/platform/connector/access/v1/?\\\"", RegexOptions.CultureInvariant | RegexOptions.IgnoreCase) &&
+                    Regex.IsMatch(json, "\\\"healthPath\\\"\\s*:\\s*\\\"jobs/health\\\"", RegexOptions.CultureInvariant);
+                if (!enabled || !validService || !validIssuer || !hasControlPlane)
+                {
+                    Log.LogError("Machine connector-access.json must be an explicitly supplied enabled production configuration with HTTPS service/control-plane endpoints and a 64-digit issuer certificate SHA-256. The checked-in disabled template is not a packageable release input.");
+                    ok = false;
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.LogError("Machine connector-access.json is not valid deployment JSON: " + ex.Message);
+                ok = false;
+            }
+        }
+        return ok;
+      ]]></Code>
+    </Task>
+  </UsingTask>
+
+  <Target Name="ValidateUnifiedSetupInputs" BeforeTargets="BeforeBuild">
+    <Error Condition="!$([System.Text.RegularExpressions.Regex]::IsMatch('$(ProductVersion)', '^\d+\.\d+\.\d+$'))" Text="ProductVersion must be an explicit numeric MSI version X.Y.Z." />
+    <Error Condition="'$(BootstrapperPublishDir)' == ''" Text="BootstrapperPublishDir is required." />
+    <Error Condition="'$(MachineHelperPublishDir)' == ''" Text="MachineHelperPublishDir is required." />
+    <Error Condition="'$(SetupExePath)' == ''" Text="SetupExePath is required." />
+    <Error Condition="'$(HelperReleaseManifestPath)' == ''" Text="HelperReleaseManifestPath is required." />
+    <Error Condition="'$(HelperReleaseSignaturePath)' == ''" Text="HelperReleaseSignaturePath is required." />
+    <Error Condition="'$(NetBirdMsiPath)' == ''" Text="NetBirdMsiPath is required." />
+    <Error Condition="'$(LegacyConnectorMsiPath)' == ''" Text="LegacyConnectorMsiPath is required." />
+    <Error Condition="'$(LegacyPlatformMsiPath)' == ''" Text="LegacyPlatformMsiPath is required." />
+    <Error Condition="'$(ConnectorAccessConfigurationPath)' == ''" Text="ConnectorAccessConfigurationPath must point to the machine deployment configuration, never a user profile." />
+    <Error Condition="'$(NetBirdPreflightScriptPath)' == ''" Text="NetBirdPreflightScriptPath is required." />
+    <Error Condition="'$(NetBirdVerifierScriptPath)' == ''" Text="NetBirdVerifierScriptPath is required." />
+    <Error Condition="'$(NetBirdIdentityLockPath)' == ''" Text="NetBirdIdentityLockPath is required." />
+    <ValidateUnifiedSetupInputs BootstrapperDir="$(BootstrapperPublishDir)"
+                                MachineHelperDir="$(MachineHelperPublishDir)"
+                                SetupPath="$(SetupExePath)"
+                                ManifestPath="$(HelperReleaseManifestPath)"
+                                SignaturePath="$(HelperReleaseSignaturePath)"
+                                NetBirdPath="$(NetBirdMsiPath)"
+                                LegacyConnectorPath="$(LegacyConnectorMsiPath)"
+                                LegacyPlatformPath="$(LegacyPlatformMsiPath)"
+                                AccessConfigurationPath="$(ConnectorAccessConfigurationPath)"
+                                PreflightPath="$(NetBirdPreflightScriptPath)"
+                                VerifierPath="$(NetBirdVerifierScriptPath)"
+                                IdentityLockPath="$(NetBirdIdentityLockPath)"
+                                Condition="'$(BootstrapperPublishDir)' != '' and '$(MachineHelperPublishDir)' != '' and '$(SetupExePath)' != '' and '$(HelperReleaseManifestPath)' != '' and '$(HelperReleaseSignaturePath)' != '' and '$(NetBirdMsiPath)' != '' and '$(LegacyConnectorMsiPath)' != '' and '$(LegacyPlatformMsiPath)' != '' and '$(ConnectorAccessConfigurationPath)' != '' and '$(NetBirdPreflightScriptPath)' != '' and '$(NetBirdVerifierScriptPath)' != '' and '$(NetBirdIdentityLockPath)' != ''" />
+  </Target>
+</Project>

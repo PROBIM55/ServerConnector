@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Connector.Upgrade.MachineIpc\Connector.Upgrade.MachineIpc.csproj" />
+    <ProjectReference Include="..\Connector.Upgrade.MachineJournal\Connector.Upgrade.MachineJournal.csproj" />
+    <ProjectReference Include="..\Connector.Upgrade.WindowsHost\Connector.Upgrade.WindowsHost.csproj" />
+    <ProjectReference Include="..\Connector.Upgrade.VelopackPayload\Connector.Upgrade.VelopackPayload.csproj" />
+    <ProjectReference Include="..\Connector.Upgrade.WindowsPayload\Connector.Upgrade.WindowsPayload.csproj" />
+  </ItemGroup>
+</Project>

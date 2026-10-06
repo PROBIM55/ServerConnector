@@ -1,0 +1,10 @@
+page("BridgeMVP", "")
+{
+  plugin(1, "BridgeGirderPlugin")
+  {
+    tab_page("", "jd_Picture", 1)
+    {
+      attribute("", "BridgeGirderPlugin", label, "%s", none, none, "0.0", "0.0", 20, 20)
+    }
+  }
+}

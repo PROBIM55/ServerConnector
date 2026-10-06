@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Connector.Upgrade.HelperLauncher\Connector.Upgrade.HelperLauncher.csproj" />
+    <ProjectReference Include="..\Connector.Upgrade.LaunchedHelperIdentity\Connector.Upgrade.LaunchedHelperIdentity.csproj" />
+    <ProjectReference Include="..\Connector.Upgrade.MachinePipe\Connector.Upgrade.MachinePipe.csproj" />
+  </ItemGroup>
+</Project>

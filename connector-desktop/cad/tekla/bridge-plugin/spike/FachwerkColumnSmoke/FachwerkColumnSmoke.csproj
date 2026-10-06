@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <PlatformTarget>x64</PlatformTarget>
+    <LangVersion>10.0</LangVersion>
+    <Nullable>enable</Nullable>
+    <UseWindowsForms>true</UseWindowsForms>
+    <AssemblyName>FachwerkColumnSmoke</AssemblyName>
+    <RootNamespace>FachwerkColumnSmoke</RootNamespace>
+    <TeklaBin Condition="'$(TeklaBin)' == ''">C:\TeklaStructures\2020.0\nt\bin\plugins</TeklaBin>
+    <TeklaDialogsBin Condition="'$(TeklaDialogsBin)' == ''">C:\TeklaStructures\2020.0\nt\bin\dialogs</TeklaDialogsBin>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\FachwerkColumnPlugin\FachwerkColumnPlugin.csproj" />
+    <None Include="..\..\deploy\component\FachwerkColumnProfiles.json"
+          Link="FachwerkColumnProfiles.json"
+          CopyToOutputDirectory="PreserveNewest" />
+    <Reference Include="Tekla.Structures">
+      <HintPath>$(TeklaBin)\Tekla.Structures.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Tekla.Structures.Model">
+      <HintPath>$(TeklaBin)\Tekla.Structures.Model.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Tekla.Structures.Plugins">
+      <HintPath>$(TeklaBin)\Tekla.Structures.Plugins.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Tekla.Structures.Dialog">
+      <HintPath>$(TeklaDialogsBin)\Tekla.Structures.Dialog.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+</Project>

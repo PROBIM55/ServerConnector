@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://platform.local/schemas/connector-job-status-v1.json",
+  "title": "ConnectorJobStatusV1",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "requestId",
+    "deviceId",
+    "moduleId",
+    "provider",
+    "status",
+    "updatedAtUtc"
+  ],
+  "properties": {
+    "schemaVersion": { "type": "integer", "const": 1 },
+    "requestId": { "type": "string", "minLength": 1 },
+    "deviceId": { "type": "string", "minLength": 1 },
+    "moduleId": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+    "provider": { "type": "string", "enum": ["autocad", "tekla"] },
+    "status": { "type": "string", "enum": ["queued", "picked", "running", "success", "error", "cancelled", "timeout"] },
+    "message": { "type": ["string", "null"] },
+    "progress": { "type": ["integer", "null"], "minimum": 0, "maximum": 100 },
+    "errorCode": { "type": ["string", "null"] },
+    "result": { "type": ["object", "null"] },
+    "updatedAtUtc": { "type": "string", "format": "date-time" },
+    "correlationId": { "type": ["string", "null"] }
+  },
+  "additionalProperties": false
+}

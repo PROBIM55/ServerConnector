@@ -1,0 +1,162 @@
+name: Build Unified Connector Candidate
+on:
+  workflow_dispatch:
+    inputs:
+      pack_version: {description: "Pack semver", required: true, type: string}
+      installer_version: {description: "Installer semver; must match pack", required: true, type: string}
+      channel: {description: "Update channel", required: true, type: string, default: stable}
+      feed_url: {description: "HTTPS update feed URL", required: true, type: string}
+      ifc_worker_url: {description: "HTTPS pinned IFC worker URL", required: true, type: string}
+      netbird_msi_url: {description: "HTTPS NetBird MSI URL", required: true, type: string}
+      legacy_connector_msi_url: {description: "HTTPS legacy Connector MSI URL", required: true, type: string}
+      legacy_platform_msi_url: {description: "HTTPS legacy Platform MSI URL", required: true, type: string}
+permissions:
+  contents: read
+jobs:
+  candidate:
+    runs-on: windows-latest
+    environment: production
+    permissions:
+      contents: read
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      PACK_VERSION: ${{ inputs.pack_version }}
+      INSTALLER_VERSION: ${{ inputs.installer_version }}
+      CHANNEL: ${{ inputs.channel }}
+      FEED_URL: ${{ inputs.feed_url }}
+      IFC_WORKER_URL: ${{ inputs.ifc_worker_url }}
+      NETBIRD_MSI_URL: ${{ inputs.netbird_msi_url }}
+      LEGACY_CONNECTOR_MSI_URL: ${{ inputs.legacy_connector_msi_url }}
+      LEGACY_PLATFORM_MSI_URL: ${{ inputs.legacy_platform_msi_url }}
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - name: Validate, stage, and provision protected output
+        id: prepare
+        env:
+          UPDATE_SIGNING_KEY_PEM: ${{ secrets.UNIFIED_UPDATE_SIGNING_KEY_PEM }}
+          HELPER_SIGNING_KEY_PEM: ${{ secrets.UNIFIED_HELPER_MANIFEST_SIGNING_KEY_PEM }}
+          CONNECTOR_ACCESS_CONFIGURATION_JSON: ${{ secrets.UNIFIED_CONNECTOR_ACCESS_CONFIGURATION_JSON }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          foreach ($name in @('PACK_VERSION','INSTALLER_VERSION','CHANNEL','FEED_URL','IFC_WORKER_URL','NETBIRD_MSI_URL','LEGACY_CONNECTOR_MSI_URL','LEGACY_PLATFORM_MSI_URL','UPDATE_SIGNING_KEY_PEM','HELPER_SIGNING_KEY_PEM','CONNECTOR_ACCESS_CONFIGURATION_JSON')) {
+            if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($name))) { throw "Missing required input or environment secret: $name" }
+          }
+          if ($env:PACK_VERSION -cnotmatch '^\d+\.\d+\.\d+$' -or $env:PACK_VERSION -cne $env:INSTALLER_VERSION) { throw 'Versions must be identical semver values.' }
+          if ($env:CHANNEL -cnotmatch '^[A-Za-z0-9][A-Za-z0-9_-]*$') { throw 'Invalid channel.' }
+          foreach ($name in @('FEED_URL','IFC_WORKER_URL','NETBIRD_MSI_URL','LEGACY_CONNECTOR_MSI_URL','LEGACY_PLATFORM_MSI_URL')) {
+            $uri = $null
+            if (![Uri]::TryCreate([Environment]::GetEnvironmentVariable($name), [UriKind]::Absolute, [ref]$uri) -or $uri.Scheme -cne 'https' -or $uri.UserInfo.Length -ne 0) { throw "$name must be HTTPS without embedded credentials." }
+          }
+          $root = Join-Path $env:RUNNER_TEMP ("unified-candidate-" + [Guid]::NewGuid().ToString('N'))
+          $downloads = Join-Path $root 'downloads'
+          $bundle = Join-Path $root 'pinned-assets'
+          $output = Join-Path $root 'protected-output'
+          New-Item -ItemType Directory -Path $root -Force | Out-Null
+          function Set-TrustedAcl([string]$Path) {
+            $acl = Get-Acl -LiteralPath $Path
+            $acl.SetAccessRuleProtection($true, $false)
+            $acl.SetOwner([Security.Principal.WindowsIdentity]::GetCurrent().User)
+            $sids = @([Security.Principal.WindowsIdentity]::GetCurrent().User,
+              [Security.Principal.SecurityIdentifier]::new([Security.Principal.WellKnownSidType]::LocalSystemSid, $null),
+              [Security.Principal.SecurityIdentifier]::new([Security.Principal.WellKnownSidType]::BuiltinAdministratorsSid, $null))
+            foreach ($sid in $sids) {
+              $rule = [Security.AccessControl.FileSystemAccessRule]::new($sid, [Security.AccessControl.FileSystemRights]::FullControl, [Security.AccessControl.InheritanceFlags]::ContainerInherit -bor [Security.AccessControl.InheritanceFlags]::ObjectInherit, [Security.AccessControl.PropagationFlags]::None, [Security.AccessControl.AccessControlType]::Allow)
+              $acl.AddAccessRule($rule)
+            }
+            Set-Acl -LiteralPath $Path -AclObject $acl
+          }
+          Set-TrustedAcl $root
+          New-Item -ItemType Directory -Path $downloads,$bundle,$output -Force | Out-Null
+          Set-TrustedAcl $output
+          $key1 = Join-Path $root 'update-signing-key.pem'
+          $key2 = Join-Path $root 'helper-signing-key.pem'
+          $access = Join-Path $root 'connector-access.json'
+          [IO.File]::WriteAllText($key1, $env:UPDATE_SIGNING_KEY_PEM, [Text.UTF8Encoding]::new($false))
+          [IO.File]::WriteAllText($key2, $env:HELPER_SIGNING_KEY_PEM, [Text.UTF8Encoding]::new($false))
+          [IO.File]::WriteAllText($access, $env:CONNECTOR_ACCESS_CONFIGURATION_JSON, [Text.UTF8Encoding]::new($false))
+          Remove-Item Env:UPDATE_SIGNING_KEY_PEM,Env:HELPER_SIGNING_KEY_PEM,Env:CONNECTOR_ACCESS_CONFIGURATION_JSON
+          $engine = Get-Content 'connector-desktop/workers/accepted-engines.json' -Raw | ConvertFrom-Json -ErrorAction Stop
+          $expectedHash = [string]$engine.ifcOptimizer.sha256
+          if ($expectedHash -cnotmatch '^[A-Fa-f0-9]{64}$') { throw 'Invalid IFC worker pin in accepted-engines.json.' }
+          $client = [Net.Http.HttpClient]::new()
+          try {
+            $items = @(
+              @{ Url=$env:IFC_WORKER_URL; Path=(Join-Path $downloads 'structura-ifc-optimizer.exe') },
+              @{ Url=$env:NETBIRD_MSI_URL; Path=(Join-Path $bundle 'netbird_installer_0.79.0_windows_amd64.msi') },
+              @{ Url=$env:LEGACY_CONNECTOR_MSI_URL; Path=(Join-Path $bundle 'Connector.Desktop.Setup.msi') },
+              @{ Url=$env:LEGACY_PLATFORM_MSI_URL; Path=(Join-Path $bundle 'Platform.Connector.Desktop.Setup.msi') }
+            )
+            foreach ($item in $items) {
+              $response = $client.GetAsync([Uri]$item.Url, [Net.Http.HttpCompletionOption]::ResponseHeadersRead).GetAwaiter().GetResult()
+              try {
+                $response.EnsureSuccessStatusCode()
+                if ($response.RequestMessage.RequestUri.Scheme -cne 'https') { throw 'Download redirected away from HTTPS.' }
+                $stream = $response.Content.ReadAsStreamAsync().GetAwaiter().GetResult()
+                try { $file = [IO.File]::Create($item.Path); try { $stream.CopyTo($file) } finally { $file.Dispose() } } finally { $stream.Dispose() }
+              } finally { $response.Dispose() }
+            }
+          } finally { $client.Dispose() }
+          $worker = Join-Path $downloads 'structura-ifc-optimizer.exe'
+          $actualWorkerHash = (Get-FileHash -LiteralPath $worker -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actualWorkerHash -cne $expectedHash.ToLowerInvariant()) { throw 'IFC worker SHA-256 does not match accepted-engines.json.' }
+          foreach ($pair in @{root=$root;downloads=$downloads;bundle=$bundle;output=$output;key1=$key1;key2=$key2;access=$access;worker=$worker}.GetEnumerator()) { "$($pair.Key)=$($pair.Value)" >> $env:GITHUB_OUTPUT }
+      - name: Build candidate and stage allowed outputs
+        id: build
+        env:
+          BUILD_FEED_URL: ${{ inputs.feed_url }}
+          BUILD_CHANNEL: ${{ inputs.channel }}
+          BUILD_PACK_VERSION: ${{ inputs.pack_version }}
+          BUILD_INSTALLER_VERSION: ${{ inputs.installer_version }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $root = '${{ steps.prepare.outputs.root }}'
+          & 'connector-desktop/scripts/build_unified_release.ps1' -PackVersion $env:BUILD_PACK_VERSION -InstallerVersion $env:BUILD_INSTALLER_VERSION -Channel $env:BUILD_CHANNEL -FeedUrl $env:BUILD_FEED_URL -IfcWorkerPath '${{ steps.prepare.outputs.worker }}' -UpdateSigningKeyPemPath '${{ steps.prepare.outputs.key1 }}' -HelperManifestSigningKeyPemPath '${{ steps.prepare.outputs.key2 }}' -HelperReleasePublicKeyFile 'connector-desktop/installer/release-public-key.pem' -ConnectorAccessConfigurationPath '${{ steps.prepare.outputs.access }}' -ProtectedOutputRoot '${{ steps.prepare.outputs.output }}' -PinnedAssetBundleDirectory '${{ steps.prepare.outputs.bundle }}'
+          if ($LASTEXITCODE -ne 0) { throw 'Unified candidate build failed.' }
+          $run = Get-ChildItem -LiteralPath '${{ steps.prepare.outputs.output }}' -Directory -Filter "unified-$env:BUILD_PACK_VERSION-*" | Select-Object -Last 1
+          if ($null -eq $run) { throw 'Builder output directory not found.' }
+          $candidate = Join-Path $run.FullName 'candidate-artifacts'
+          New-Item -ItemType Directory -Path $candidate | Out-Null
+          $package = Join-Path $run.FullName 'update-package'
+          $feedFiles = @(Get-ChildItem -LiteralPath $package -File | Where-Object { $_.Name -match '^(releases\..+\.json(\.sig)?|assets\..+\.json(\.sig)?)$' })
+          $manifest = Join-Path $package "connector-release.$($env:BUILD_CHANNEL).json"
+          $signature = "$manifest.sig"
+          if (!(Test-Path -LiteralPath $manifest -PathType Leaf) -or !(Test-Path -LiteralPath $signature -PathType Leaf)) { throw 'Signed release manifest missing.' }
+          $feedFiles += Get-Item -LiteralPath $manifest,$signature
+          $releaseManifest = Get-Content -LiteralPath $manifest -Raw | ConvertFrom-Json -ErrorAction Stop
+          if ($releaseManifest.channel -cne $env:BUILD_CHANNEL -or $releaseManifest.applicationId -cne 'Structura.Connector.Desktop' -or @($releaseManifest.assets).Count -eq 0) { throw 'Signed release manifest has no valid package assets.' }
+          foreach ($asset in $releaseManifest.assets) {
+            $name = [string]$asset.fileName
+            if ([IO.Path]::GetFileName($name) -cne $name -or $name -notmatch '^Structura\.Connector\.Desktop-.+\.nupkg$') { throw 'Release manifest contains an unsafe package filename.' }
+            $packageAsset = Join-Path $package $name
+            if (!(Test-Path -LiteralPath $packageAsset -PathType Leaf)) { throw "Signed feed package asset is missing: $name" }
+            $item = Get-Item -LiteralPath $packageAsset
+            $hash = (Get-FileHash -LiteralPath $packageAsset -Algorithm SHA256).Hash.ToLowerInvariant()
+            if ($item.Length -ne [long]$asset.size -or $hash -cne [string]$asset.sha256) { throw "Signed feed package asset does not match its manifest: $name" }
+            $feedFiles += $item
+          }
+          $velopackIndex = Join-Path $package "RELEASES-$env:BUILD_CHANNEL"
+          if (!(Test-Path -LiteralPath $velopackIndex -PathType Leaf)) { throw 'Channel Velopack RELEASES index is missing.' }
+          $feedFiles += Get-Item -LiteralPath $velopackIndex
+          $feedFiles = @($feedFiles | Sort-Object FullName -Unique)
+          foreach ($file in $feedFiles) { Copy-Item -LiteralPath $file.FullName -Destination $candidate }
+          $binaries = @(Get-ChildItem -LiteralPath $run.FullName -Filter 'Structura.Connector.Installer.exe' -File -Recurse) + @(Get-ChildItem -LiteralPath $run.FullName -Filter 'Connector.Unified.Setup.msi' -File -Recurse)
+          if ($binaries.Count -ne 2) { throw 'Expected installer EXE and MSI missing.' }
+          foreach ($file in $binaries) { Copy-Item -LiteralPath $file.FullName -Destination $candidate }
+          Get-ChildItem -LiteralPath $candidate -File | ForEach-Object { $hash=(Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant(); "$hash  $($_.Name)" | Add-Content (Join-Path $candidate 'checksums.sha256') -Encoding ascii }
+          "artifact_dir=$candidate" >> $env:GITHUB_OUTPUT
+      - name: Upload candidate artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: unified-connector-candidate-${{ inputs.pack_version }}
+          path: ${{ steps.build.outputs.artifact_dir }}/*
+          if-no-files-found: error
+          retention-days: 14

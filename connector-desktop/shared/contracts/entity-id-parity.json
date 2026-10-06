@@ -1,0 +1,33 @@
+[
+  {
+    "moduleId": "building",
+    "entityType": "frame-member",
+    "elementId": "member-01",
+    "entityId": "building.entity/manual/frame-member/member-01"
+  },
+  {
+    "moduleId": "retaining-walls",
+    "entityType": "wall-run",
+    "elementId": "run-west-left",
+    "entityId": "retaining-walls.entity/manual/wall-run/run-west-left"
+  },
+  {
+    "moduleId": "engineering-networks",
+    "entityType": "node",
+    "elementId": "manhole-01",
+    "entityId": "engineering-networks.entity/manual/node/manhole-01"
+  },
+  {
+    "moduleId": "axis-split",
+    "entityType": "support-axis",
+    "elementId": "support-01",
+    "entityId": "axis-split.entity/manual/support-axis/support-01"
+  },
+  {
+    "moduleId": "building",
+    "entityType": "slab-modifier",
+    "ownerId": "slab-01",
+    "elementId": "opening-01",
+    "entityId": "building.entity/manual/slab-modifier/opening-01/slab-01"
+  }
+]

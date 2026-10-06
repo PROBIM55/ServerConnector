@@ -5,6 +5,7 @@
        glTF — через SharpGLTF. -->
   <PropertyGroup>
     <TargetFramework>net8.0-windows</TargetFramework>
+    <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
     <UseWPF>true</UseWPF>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>

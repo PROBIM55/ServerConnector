@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'">
+  <title>Connector · Graphite</title>
+  <link id="app-favicon" rel="icon" href="brand/structura-logo.png">
+  <link rel="stylesheet" href="style.css">
+  <style>.prototype,.app-shell{min-height:100vh}</style>
+</head>
+<body data-theme="graphite">
+  <main class="prototype"><div class="app-shell"><aside class="side-nav"><div class="product-switch" aria-label="Рабочая среда"><button type="button" data-mode="structura" aria-pressed="true"><img src="brand/structura-logo.png" alt=""><span>Structura</span></button><button type="button" data-mode="platform" aria-pressed="false"><img class="mono-mark" src="brand/platform-field-refined-v3.png" alt=""><span>Платформа</span></button></div><nav id="navigation" aria-label="Навигация модулей"></nav><div class="common-nav"><button data-page="jobs">Задания <b id="job-count">0</b></button><button data-page="settings">Настройки</button></div></aside><section class="workspace"><div id="active-job" class="active-job" role="status"></div><header class="page-head"><div><p id="crumb">STRUCTURA</p><h1 id="page-title">Обзор</h1></div><span id="connection-status" class="status neutral">Не подключено</span></header><div id="page-content"></div></section></div></main>
+  <dialog id="kit-dialog"><form method="dialog"><header><h2 id="dialog-title">Диалог</h2><button aria-label="Закрыть">×</button></header><div id="dialog-content">Состояние диалога в Graphite.</div><footer><button class="secondary">Закрыть</button></footer></form></dialog>
+  <script src="kit-tokens.js"></script>
+  <script src="icons.js"></script>
+  <script src="brand-concepts.js"></script>
+  <script src="review-pages.js"></script>
+  <script src="desktop-bridge.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

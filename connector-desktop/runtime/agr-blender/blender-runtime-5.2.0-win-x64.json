@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "runtimeId": "blender/windows-x64/5.2.0",
+  "version": "5.2.0",
+  "platform": "windows-x64",
+  "archiveUrl": "https://download.blender.org/release/Blender5.2/blender-5.2.0-windows-x64.zip",
+  "archiveFileName": "blender-5.2.0-windows-x64.zip",
+  "archiveSizeBytes": 404954661,
+  "archiveSha256": "2d184b626c001692c362291911293b6a297179d618d95e9e9192c3a80318adc4",
+  "executableRelativePath": "blender-5.2.0-windows-x64/blender.exe",
+  "workerProtocolVersion": "0.2.0"
+}

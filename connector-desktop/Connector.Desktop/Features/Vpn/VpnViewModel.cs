@@ -74,6 +74,9 @@ public sealed class VpnViewModel : ObservableObject
     private bool _isBusy;
     public bool IsBusy { get => _isBusy; private set { if (SetProperty(ref _isBusy, value)) RaiseCanExec(); } }
 
+    private OperationOutcome _lastOperationOutcome;
+    public OperationOutcome LastOperationOutcome { get => _lastOperationOutcome; private set => SetProperty(ref _lastOperationOutcome, value); }
+
     public ICommand EnableCommand { get; }
     public ICommand DisableCommand { get; }
     public ICommand OpenFolderCommand { get; }
@@ -167,6 +170,7 @@ public sealed class VpnViewModel : ObservableObject
         bool showResultDialog,
         bool openShareOnSuccess)
     {
+        LastOperationOutcome = OperationOutcome.Running;
         try
         {
             if (!_ctx.Enabled)
@@ -176,6 +180,7 @@ public sealed class VpnViewModel : ObservableObject
                 {
                     DialogHandler?.Invoke(message, MessageBoxButton.OK, MessageBoxImage.Information);
                 }
+                LastOperationOutcome = OperationOutcome.Rejected;
                 return VpnResult.Fail(message);
             }
             if (string.IsNullOrWhiteSpace(_ctx.VpnConfig))
@@ -186,6 +191,7 @@ public sealed class VpnViewModel : ObservableObject
                 {
                     DialogHandler?.Invoke(message, MessageBoxButton.OK, MessageBoxImage.Warning);
                 }
+                LastOperationOutcome = OperationOutcome.Rejected;
                 return VpnResult.Fail(message);
             }
 
@@ -193,6 +199,9 @@ public sealed class VpnViewModel : ObservableObject
             IsBusy = true;
             StatusLine = "Проверяем и включаем VPN. При первой установке подтвердите запрос UAC.";
             var result = await Task.Run(() => _vpnService.Enable(_ctx.VpnConfig, tunnel));
+            LastOperationOutcome = result.IsSuccess
+                ? OperationOutcome.Succeeded
+                : result.IsCancelled ? OperationOutcome.Cancelled : OperationOutcome.Failed;
             Log?.Invoke("VPN enable: " + (result.IsSuccess ? "ok" : "fail") + " — " + result.Message);
             if (showResultDialog)
             {
@@ -212,6 +221,7 @@ public sealed class VpnViewModel : ObservableObject
         }
         catch (Exception ex)
         {
+            LastOperationOutcome = OperationOutcome.Failed;
             Log?.Invoke("VPN enable error: " + ex.Message);
             if (showResultDialog)
             {
@@ -224,17 +234,22 @@ public sealed class VpnViewModel : ObservableObject
 
     private async Task DisableAsync()
     {
+        LastOperationOutcome = OperationOutcome.Running;
         try
         {
             var tunnel = VpnTunnel;
             IsBusy = true;
             var result = await Task.Run(() => _vpnService.Disable(tunnel));
+            LastOperationOutcome = result.IsSuccess
+                ? OperationOutcome.Succeeded
+                : result.IsCancelled ? OperationOutcome.Cancelled : OperationOutcome.Failed;
             Log?.Invoke("VPN disable: " + (result.IsSuccess ? "ok" : "fail") + " — " + result.Message);
             DialogHandler?.Invoke(result.Message,
                 MessageBoxButton.OK, result.IsSuccess ? MessageBoxImage.Information : MessageBoxImage.Warning);
         }
         catch (Exception ex)
         {
+            LastOperationOutcome = OperationOutcome.Failed;
             Log?.Invoke("VPN disable error: " + ex.Message);
             DialogHandler?.Invoke(ex.Message, MessageBoxButton.OK, MessageBoxImage.Error);
         }

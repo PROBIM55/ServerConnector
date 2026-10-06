@@ -1,0 +1,2597 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Historical source provenance, not an external build or synchronization dependency",
+  "importedAtUtc": "2026-10-01T14:57:51.9928304Z",
+  "files": [
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "apps/connector-desktop/src/Platform.Connector.Core/Abstractions.cs",
+      "destination": "src/Platform.Connector.Core/Abstractions.cs",
+      "importedSha256": "5f5f3f62e71498c69b948325a2538a3d5cda69b26c22bf0ac022729bcec739b8"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "apps/connector-desktop/src/Platform.Connector.Core/CompositeJobStatusPublisher.cs",
+      "destination": "src/Platform.Connector.Core/CompositeJobStatusPublisher.cs",
+      "importedSha256": "f2540bed8274f5bc590ad29099940fb84185df7cf42ec75d02e4f8c5cefa7158"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "apps/connector-desktop/src/Platform.Connector.Core/ConnectorCapabilities.cs",
+      "destination": "src/Platform.Connector.Core/ConnectorCapabilities.cs",
+      "importedSha256": "4ea9746b5ffb771589946d4b093aaf305282415417873f8e55413c31683084a9"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "apps/connector-desktop/src/Platform.Connector.Core/ConnectorDiagnosticsExporter.cs",
+      "destination": "src/Platform.Connector.Core/ConnectorDiagnosticsExporter.cs",
+      "importedSha256": "b7dd777b5d0caf9af5eaa74f913a011b460fea53550a409d7a859d33d29f99ba"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "apps/connector-desktop/src/Platform.Connector.Core/ConnectorJobRunner.cs",
+      "destination": "src/Platform.Connector.Core/ConnectorJobRunner.cs",
+      "importedSha256": "c34b7d35d62b8ec763659350b635692394c14888d3cbde68c3f81646a2279fa2"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "apps/connector-desktop/src/Platform.Connector.Core/ConnectorRuntimeHost.cs",
+      "destination": "src/Platform.Connector.Core/ConnectorRuntimeHost.cs",
+      "importedSha256": "4446856d5df69492f0475da0389032300bfc45af294f91b4791323ac5328e7d2"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "apps/connector-desktop/src/Platform.Connector.Core/ConnectorRuntimePhase.cs",
+      "destination": "src/Platform.Connector.Core/ConnectorRuntimePhase.cs",
+      "importedSha256": "b245cc0b2d3b05be7c7f279ef51d7d4a28060a68dde168cf4248d5397b4d146d"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "apps/connector-desktop/src/Platform.Connector.Core/ConnectorRuntimeState.cs",
+      "destination": "src/Platform.Connector.Core/ConnectorRuntimeState.cs",
+      "importedSha256": "cea7545d9614ff7cabf8f3f3acf54567b02ce3c268f115db3ba9e79efb4cbf26"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "apps/connector-desktop/src/Platform.Connector.Core/ConnectorRuntimeSupervisor.cs",
+      "destination": "src/Platform.Connector.Core/ConnectorRuntimeSupervisor.cs",
+      "importedSha256": "4fcbf7edace354235b9b4643d1986283bcab9cb7fdfe9e38a4d83c9349d1fee5"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "apps/connector-desktop/src/Platform.Connector.Core/ConnectorWorker.cs",
+      "destination": "src/Platform.Connector.Core/ConnectorWorker.cs",
+      "importedSha256": "194f18efd493f662c6eb0dc27311111227f71249a6cbeaff74cd963f8ac41ab7"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "apps/connector-desktop/src/Platform.Connector.Core/ConsoleJobStatusPublisher.cs",
+      "destination": "src/Platform.Connector.Core/ConsoleJobStatusPublisher.cs",
+      "importedSha256": "295b085dd6a5829cead9d68132c76f6651b602e346dadd49bbae77680fe8e581"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "apps/connector-desktop/src/Platform.Connector.Core/Contracts.cs",
+      "destination": "src/Platform.Connector.Core/Contracts.cs",
+      "importedSha256": "2dbd7ac1a33230519ad53141e8fe4bfada3aa9712775016e1abe08936e24b5a9"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "apps/connector-desktop/src/Platform.Connector.Core/DesktopSettings.cs",
+      "destination": "src/Platform.Connector.Core/DesktopSettings.cs",
+      "importedSha256": "191a77e03060c101e0218a98743d9f7864f7e316d0c4f3a6e081578c4eed7a3b"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "apps/connector-desktop/src/Platform.Connector.Core/FileRequestIdempotencyStore.cs",
+      "destination": "src/Platform.Connector.Core/FileRequestIdempotencyStore.cs",
+      "importedSha256": "82a515308d9cae4b980af8679ded88d86a2a66d84d16285a886e1722eb0c200c"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "apps/connector-desktop/src/Platform.Connector.Core/HttpConnectorControlPlaneClient.cs",
+      "destination": "src/Platform.Connector.Core/HttpConnectorControlPlaneClient.cs",
+      "importedSha256": "274cd345a2f3d589f90b96f156e94e5ec4dcf864ef4251a55d3fb59494179c43"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "apps/connector-desktop/src/Platform.Connector.Core/IConnectorControlPlaneClient.cs",
+      "destination": "src/Platform.Connector.Core/IConnectorControlPlaneClient.cs",
+      "importedSha256": "653df7c063a1803de3f1318e976c5656cef7a77908b862138c5ba6f4d8a4a4fe"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "apps/connector-desktop/src/Platform.Connector.Core/IConnectorLogger.cs",
+      "destination": "src/Platform.Connector.Core/IConnectorLogger.cs",
+      "importedSha256": "2f1a2a340e99d8e4b4e1ad3f0edee23aa57a652968d526d6cb7e1cf6a003c683"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "apps/connector-desktop/src/Platform.Connector.Core/IRequestIdempotencyStore.cs",
+      "destination": "src/Platform.Connector.Core/IRequestIdempotencyStore.cs",
+      "importedSha256": "bb3a77d0013abeea71a8f22b37ae503198498841ea01468670ed98677739c85c"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "apps/connector-desktop/src/Platform.Connector.Core/JsonLineConnectorLogger.cs",
+      "destination": "src/Platform.Connector.Core/JsonLineConnectorLogger.cs",
+      "importedSha256": "97024d027237abbc69aecd39e678b0bc3ab0b16751c8c47f97b8a47c92bbe3e6"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "apps/connector-desktop/src/Platform.Connector.Core/NullRequestIdempotencyStore.cs",
+      "destination": "src/Platform.Connector.Core/NullRequestIdempotencyStore.cs",
+      "importedSha256": "c2f0058dcc7cd64a92f08edcfb7e8939ee65bda197504a2521fe8cc35562a5de"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "apps/connector-desktop/src/Platform.Connector.Core/Platform.Connector.Core.csproj",
+      "destination": "src/Platform.Connector.Core/Platform.Connector.Core.csproj",
+      "importedSha256": "63d969d03c6775e01406ee57577b0e57fcfa2bdaddeef49b5822aee2cbf511bf"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "apps/connector-desktop/src/Platform.Connector.Core/SecureTokenStore.cs",
+      "destination": "src/Platform.Connector.Core/SecureTokenStore.cs",
+      "importedSha256": "e427ba1593fd568cf6d49d497f2a6377a5041e6d9a643333d8a2cca1ebedee53"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "apps/connector-desktop/src/Platform.Connector.Core/ServerContracts.cs",
+      "destination": "src/Platform.Connector.Core/ServerContracts.cs",
+      "importedSha256": "97b053bfb9a20d8b8fda752c86fec76f91d416a0dc531f82dc68a4e979e8e462"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "apps/connector-desktop/src/Platform.Connector.Core/ServerJobStatusPublisher.cs",
+      "destination": "src/Platform.Connector.Core/ServerJobStatusPublisher.cs",
+      "importedSha256": "645c2e53203cd4f0ba70184cf96ae0a6b1ac9dade7745f53e2bc6189a19552c4"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "apps/connector-desktop/src/Platform.Connector.Core/SessionConflictException.cs",
+      "destination": "src/Platform.Connector.Core/SessionConflictException.cs",
+      "importedSha256": "a4c167c1d36f502418b41fe57b5837377eb5d3229087b53cd0b09fbff29bb935"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "apps/connector-desktop/src/Platform.Connector.Core/TokenRejectedException.cs",
+      "destination": "src/Platform.Connector.Core/TokenRejectedException.cs",
+      "importedSha256": "c6fe453abe0e99dc2521455ae2f8cfba450446f1cc7e542c51f270c1be4f5111"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "apps/connector-desktop/src/Platform.Connector.Core/TrackingConnectorAdapters.cs",
+      "destination": "src/Platform.Connector.Core/TrackingConnectorAdapters.cs",
+      "importedSha256": "cb8d0c40fa57d6bfa735fa9fc32eee4ea46c8e7f70518ec1a7cc1fd114feedc2"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "apps/connector-desktop/src/Platform.Connector.Compute.Agr/AgrBlenderProcessRunner.cs",
+      "destination": "src/Platform.Connector.Compute.Agr/AgrBlenderProcessRunner.cs",
+      "importedSha256": "f155eee14d18c173ca7d6d26bc3fff74b239e89e5512573d15ca2fc43a6becb0"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "apps/connector-desktop/src/Platform.Connector.Compute.Agr/AgrBlenderRuntimeInstaller.cs",
+      "destination": "src/Platform.Connector.Compute.Agr/AgrBlenderRuntimeInstaller.cs",
+      "importedSha256": "fb939c1ee37689a68e59efc2fd7acfb5202c1461be1a18b6e0949c22e306bd32"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "apps/connector-desktop/src/Platform.Connector.Compute.Agr/AgrBlenderRuntimeManifest.cs",
+      "destination": "src/Platform.Connector.Compute.Agr/AgrBlenderRuntimeManifest.cs",
+      "importedSha256": "0fef11f791b964c5af3def05fa3a394da5e282ae199b2f114bc905ea5c507022"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "apps/connector-desktop/src/Platform.Connector.Compute.Agr/AgrComputeOptions.cs",
+      "destination": "src/Platform.Connector.Compute.Agr/AgrComputeOptions.cs",
+      "importedSha256": "4df14f232b72ddcfaf463b17e25d0c1eaaf6645550027dacdbdd42a584bdf39a"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "apps/connector-desktop/src/Platform.Connector.Compute.Agr/AgrConnectorIntegration.cs",
+      "destination": "src/Platform.Connector.Compute.Agr/AgrConnectorIntegration.cs",
+      "importedSha256": "8356445d81d6b81981c577e0eb5fd66c5161e69d0d5284eac8cdd9f450244372"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "apps/connector-desktop/src/Platform.Connector.Compute.Agr/AgrJobExecutor.cs",
+      "destination": "src/Platform.Connector.Compute.Agr/AgrJobExecutor.cs",
+      "importedSha256": "aec5acf60500828572ef64887844d4a60bec10a61069b155f39a2bdf925a24fc"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "apps/connector-desktop/src/Platform.Connector.Compute.Agr/AgrJobInputMaterializer.cs",
+      "destination": "src/Platform.Connector.Compute.Agr/AgrJobInputMaterializer.cs",
+      "importedSha256": "4f2289c8ff983f652edf95d858d79f327aafcb6471c156d0899ee37c46928968"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "apps/connector-desktop/src/Platform.Connector.Compute.Agr/AgrManagedRuntime.cs",
+      "destination": "src/Platform.Connector.Compute.Agr/AgrManagedRuntime.cs",
+      "importedSha256": "691fdc846105bb1a1c3fcc5dc0acbbb0acefd3ca6f948ef0e903f48c8fb8fb7a"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "apps/connector-desktop/src/Platform.Connector.Compute.Agr/Platform.Connector.Compute.Agr.csproj",
+      "destination": "src/Platform.Connector.Compute.Agr/Platform.Connector.Compute.Agr.csproj",
+      "importedSha256": "2467d8b3383e556bfce8b5fff9971d5d3d5644b1f868a88657b858e492204a71"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "apps/connector-desktop/tests/Platform.Connector.Compute.Agr.Tests/AgrBlenderProcessRunnerTests.cs",
+      "destination": "tests/Platform.Connector.Compute.Agr.Tests/AgrBlenderProcessRunnerTests.cs",
+      "importedSha256": "4e710e22994bfd055fe7dfe8916bb5633f14bed541273d9827f054318965441b"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "apps/connector-desktop/tests/Platform.Connector.Compute.Agr.Tests/AgrBlenderRuntimeInstallerTests.cs",
+      "destination": "tests/Platform.Connector.Compute.Agr.Tests/AgrBlenderRuntimeInstallerTests.cs",
+      "importedSha256": "f6770bfd1af72629eb2844395acbd9b25f740bdbf4a28a90e536301db01d3771"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "apps/connector-desktop/tests/Platform.Connector.Compute.Agr.Tests/AgrJobExecutorTests.cs",
+      "destination": "tests/Platform.Connector.Compute.Agr.Tests/AgrJobExecutorTests.cs",
+      "importedSha256": "d4efeb954488f48de504f7e091ec6b47398aff0e10e95e1f46b03cab3ae30bab"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "apps/connector-desktop/tests/Platform.Connector.Compute.Agr.Tests/AgrJobInputMaterializerTests.cs",
+      "destination": "tests/Platform.Connector.Compute.Agr.Tests/AgrJobInputMaterializerTests.cs",
+      "importedSha256": "1f06de7fbb4c712ac39ae1b4a8bf3eba6143ec56a73e06f16f852177fbf837da"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "apps/connector-desktop/tests/Platform.Connector.Compute.Agr.Tests/Platform.Connector.Compute.Agr.Tests.csproj",
+      "destination": "tests/Platform.Connector.Compute.Agr.Tests/Platform.Connector.Compute.Agr.Tests.csproj",
+      "importedSha256": "baefc4e8c6d931e839155aee22b1bc1254ffc98f65316d8ef5193f257afff841"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "apps/connector-desktop/tests/Platform.Connector.Core.Tests/AutoCadSessionLogicTests.cs",
+      "destination": "tests/Platform.Connector.Core.Tests/AutoCadSessionLogicTests.cs",
+      "importedSha256": "015b479783bae38e47543c6899317d0de5a9c65fab331de8d21810271e4d5430"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "apps/connector-desktop/tests/Platform.Connector.Core.Tests/AutoCadSessionRoutingTests.cs",
+      "destination": "tests/Platform.Connector.Core.Tests/AutoCadSessionRoutingTests.cs",
+      "importedSha256": "e7083b4d1770e610a0a61b47eb46a4898ff8662dda0cea0c2e53186080daafc6"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "apps/connector-desktop/tests/Platform.Connector.Core.Tests/BridgeCadE2EStabilityTests.cs",
+      "destination": "tests/Platform.Connector.Core.Tests/BridgeCadE2EStabilityTests.cs",
+      "importedSha256": "65c0482606310e24a47413652b97422c5b93bacfb36bc389700360f7192f61a6"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "apps/connector-desktop/tests/Platform.Connector.Core.Tests/CadProviderAdapterRuntimeTests.cs",
+      "destination": "tests/Platform.Connector.Core.Tests/CadProviderAdapterRuntimeTests.cs",
+      "importedSha256": "ad46d4cca36a3fc570788b244e7877c91e699e48742c3229c139920b31bea413"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "apps/connector-desktop/tests/Platform.Connector.Core.Tests/ConnectorJobRunnerTests.cs",
+      "destination": "tests/Platform.Connector.Core.Tests/ConnectorJobRunnerTests.cs",
+      "importedSha256": "b48df9b7f21444682ebaeb4b9a502dea217e828c8c143bf3687769207d53f4c5"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "apps/connector-desktop/tests/Platform.Connector.Core.Tests/ConnectorRuntimeStateTests.cs",
+      "destination": "tests/Platform.Connector.Core.Tests/ConnectorRuntimeStateTests.cs",
+      "importedSha256": "8ef6eb434f7931cb28f79de609f7c112269f6ada57e04b0e0f6f032586ae08ec"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "apps/connector-desktop/tests/Platform.Connector.Core.Tests/ConnectorRuntimeSupervisorTests.cs",
+      "destination": "tests/Platform.Connector.Core.Tests/ConnectorRuntimeSupervisorTests.cs",
+      "importedSha256": "a1e086e4702d9ccc39bfcc62f278ea40d7dedcb74fea024f6359b68f15bc5115"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "apps/connector-desktop/tests/Platform.Connector.Core.Tests/IdempotencyAndWorkerTests.cs",
+      "destination": "tests/Platform.Connector.Core.Tests/IdempotencyAndWorkerTests.cs",
+      "importedSha256": "7bf3c9d6615803b222a902326c956d12644aeca2ab504432e2333bdce3dfae0a"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "apps/connector-desktop/tests/Platform.Connector.Core.Tests/PhasePresentationAndSettingsTests.cs",
+      "destination": "tests/Platform.Connector.Core.Tests/PhasePresentationAndSettingsTests.cs",
+      "importedSha256": "b1d991f39002609a45747b3bce3835600f274e9ab319de9de06803e16efd02cb"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "apps/connector-desktop/tests/Platform.Connector.Core.Tests/Platform.Connector.Core.Tests.csproj",
+      "destination": "tests/Platform.Connector.Core.Tests/Platform.Connector.Core.Tests.csproj",
+      "importedSha256": "fdd10b4d2135c3fdff2f7cf7ab23889d4a182f61e71cb8f7144dae9c4a2a3486"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "apps/connector-desktop/runtime/agr-blender/README.md",
+      "destination": "runtime/agr-blender/README.md",
+      "importedSha256": "72397e35b9a41a1e9dc5704a5c0cd1ac1d2e8a5747584084b4b8bb97f70f25d0"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "apps/connector-desktop/runtime/agr-blender/agr_worker.py",
+      "destination": "runtime/agr-blender/agr_worker.py",
+      "importedSha256": "5208e105ed8b5c6a5f3b876e48082ffd2e702bcdf9ce6bd4a082e5fff8454b15"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "apps/connector-desktop/runtime/agr-blender/blender-runtime-5.2.0-win-x64.json",
+      "destination": "runtime/agr-blender/blender-runtime-5.2.0-win-x64.json",
+      "importedSha256": "6535712e7ce34a20571b7e4506965001285710707b303908b7d51d34f872f3e9"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/autocad/adapter/src/Platform.Cad.AutoCad.Adapter/AutoCadProviderAdapter.cs",
+      "destination": "cad/autocad/adapter/src/Platform.Cad.AutoCad.Adapter/AutoCadProviderAdapter.cs",
+      "importedSha256": "6781f6fa2b3cdcd26833488aba704e15f1ad2976eaa4f6b5b2177fa8f7d5c9dd"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/autocad/adapter/src/Platform.Cad.AutoCad.Adapter/Platform.Cad.AutoCad.Adapter.csproj",
+      "destination": "cad/autocad/adapter/src/Platform.Cad.AutoCad.Adapter/Platform.Cad.AutoCad.Adapter.csproj",
+      "importedSha256": "a6a5bc0d92bc958dbb7fd6d43f24e225c467ed837b96ae72ecbebd90b22ce8a0"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/autocad/adapter/src/Platform.Cad.AutoCad.Adapter/Sessions/AutoCadEntityVariantConverter.cs",
+      "destination": "cad/autocad/adapter/src/Platform.Cad.AutoCad.Adapter/Sessions/AutoCadEntityVariantConverter.cs",
+      "importedSha256": "8472f5b0b4fb8388b17d28669be5a5c3a6980e6f7d49169114274c3322d1cb90"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/autocad/adapter/src/Platform.Cad.AutoCad.Adapter/Sessions/AutoCadRunningObjectTable.cs",
+      "destination": "cad/autocad/adapter/src/Platform.Cad.AutoCad.Adapter/Sessions/AutoCadRunningObjectTable.cs",
+      "importedSha256": "a136062d89d644baf809324633621a797550007b80bc3f61c66744a153b46b05"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/autocad/adapter/src/Platform.Cad.AutoCad.Adapter/Sessions/AutoCadSessionKey.cs",
+      "destination": "cad/autocad/adapter/src/Platform.Cad.AutoCad.Adapter/Sessions/AutoCadSessionKey.cs",
+      "importedSha256": "74b780b9a27d777919d8531a30dad145798f207638bb5aa0dd5032d04c565e8b"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/autocad/adapter/src/Platform.Cad.AutoCad.Adapter/Sessions/AutoCadSessionModels.cs",
+      "destination": "cad/autocad/adapter/src/Platform.Cad.AutoCad.Adapter/Sessions/AutoCadSessionModels.cs",
+      "importedSha256": "97551697510036fc546f1086395c635d8de5ae4bae20e698dc1dbba1ddf02350"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/autocad/adapter/src/Platform.Cad.AutoCad.Adapter/Sessions/AutoCadSessionPayloadParser.cs",
+      "destination": "cad/autocad/adapter/src/Platform.Cad.AutoCad.Adapter/Sessions/AutoCadSessionPayloadParser.cs",
+      "importedSha256": "e3eba1672b2f7efc60a86fe4879ebcc52184c5947ab11d4612ce672b425cc40f"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/autocad/adapter/src/Platform.Cad.AutoCad.Adapter/Sessions/AutoCadSessionResolver.cs",
+      "destination": "cad/autocad/adapter/src/Platform.Cad.AutoCad.Adapter/Sessions/AutoCadSessionResolver.cs",
+      "importedSha256": "a6034f28f8c300d1caea081690b0d3978d9951a44b5e1b4691115769a6b93c19"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/autocad/adapter/src/Platform.Cad.AutoCad.Adapter/Sessions/AutoCadSessionService.cs",
+      "destination": "cad/autocad/adapter/src/Platform.Cad.AutoCad.Adapter/Sessions/AutoCadSessionService.cs",
+      "importedSha256": "e3249e7df35a0a4d8d3d81f06438019baaad1c68d232318299a0e889f8b1b336"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/autocad/adapter/src/Platform.Cad.AutoCad.Adapter/Sessions/ComRetryPolicy.cs",
+      "destination": "cad/autocad/adapter/src/Platform.Cad.AutoCad.Adapter/Sessions/ComRetryPolicy.cs",
+      "importedSha256": "1685171a4b125fe41e53cd6fac2d77465e801252b4a89b54d536dc73e6464e0c"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/autocad/adapter/src/Platform.Cad.AutoCad.Adapter/Sessions/StaExecutor.cs",
+      "destination": "cad/autocad/adapter/src/Platform.Cad.AutoCad.Adapter/Sessions/StaExecutor.cs",
+      "importedSha256": "446d31a790d166cd18202f661fc81bdecb501b65f076e83cc04d279d1582b7fe"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/adapter/src/Platform.Cad.Tekla.Adapter/BridgeDesktopRestarter.cs",
+      "destination": "cad/tekla/adapter/src/Platform.Cad.Tekla.Adapter/BridgeDesktopRestarter.cs",
+      "importedSha256": "ace82e25abe708509cef007b8183f72270f224cb9c55a7c45ca0cc527f79d231"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/adapter/src/Platform.Cad.Tekla.Adapter/BridgeTokenReader.cs",
+      "destination": "cad/tekla/adapter/src/Platform.Cad.Tekla.Adapter/BridgeTokenReader.cs",
+      "importedSha256": "f770815c71dadcb712d3cfbad2ae8216346dfc17e32fb628ae0004dfaee9b045"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/adapter/src/Platform.Cad.Tekla.Adapter/Platform.Cad.Tekla.Adapter.csproj",
+      "destination": "cad/tekla/adapter/src/Platform.Cad.Tekla.Adapter/Platform.Cad.Tekla.Adapter.csproj",
+      "importedSha256": "491265ab6cbfb3a4b06786a54c9316febafb85cf0fe421c2d2ad3e744f44b5a2"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/adapter/src/Platform.Cad.Tekla.Adapter/TeklaProviderAdapter.cs",
+      "destination": "cad/tekla/adapter/src/Platform.Cad.Tekla.Adapter/TeklaProviderAdapter.cs",
+      "importedSha256": "2da0eb6eb0fdf0c66f5d75982882289b7ea37fcd387d76c8706a3773ae321905"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-desktop/spike/DevelopedPlateStationFrame/DevelopedPlateStationFrame.csproj",
+      "destination": "cad/tekla/bridge-desktop/spike/DevelopedPlateStationFrame/DevelopedPlateStationFrame.csproj",
+      "importedSha256": "c57052b21f5ef63fb42d9804c97fcc049df299e2fcb296cc249e79fe90adb4cb"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-desktop/spike/DevelopedPlateStationFrame/Program.cs",
+      "destination": "cad/tekla/bridge-desktop/spike/DevelopedPlateStationFrame/Program.cs",
+      "importedSha256": "c0adcf58003e40b55efdfeca42069895c22544010c2906e99fb5bf5111dbf8cb"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-desktop/spike/DevelopedPlateStationFrame/README.md",
+      "destination": "cad/tekla/bridge-desktop/spike/DevelopedPlateStationFrame/README.md",
+      "importedSha256": "aa8b062f9690049307f3811308474ebb72fb8d8c2147f825e212b1812e7d1eae"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-desktop/spike/NativeAssembly/NativeAssembly.csproj",
+      "destination": "cad/tekla/bridge-desktop/spike/NativeAssembly/NativeAssembly.csproj",
+      "importedSha256": "2404da5db86788525658106d5d6fe8a9651c64b8c07b524c39df1dfe1c267d3a"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-desktop/spike/NativeAssembly/Program.cs",
+      "destination": "cad/tekla/bridge-desktop/spike/NativeAssembly/Program.cs",
+      "importedSha256": "2637868d035d0c8135d96810479e20682d7421e44b8bfdd80fe40db4d14e419e"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-desktop/spike/NativeBoltGroup/NativeBoltGroup.csproj",
+      "destination": "cad/tekla/bridge-desktop/spike/NativeBoltGroup/NativeBoltGroup.csproj",
+      "importedSha256": "9c4dc72e220c7afbc2f94b1497b9fb201e9204c249ba9f4bea8a11cb9e84e546"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-desktop/spike/NativeBoltGroup/Program.cs",
+      "destination": "cad/tekla/bridge-desktop/spike/NativeBoltGroup/Program.cs",
+      "importedSha256": "9643899431f85b971a9e1f7b213b42fae7dea51d4cbcead50b682db1c03bb9ea"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-desktop/spike/NativeBoltGroup/README.md",
+      "destination": "cad/tekla/bridge-desktop/spike/NativeBoltGroup/README.md",
+      "importedSha256": "63d3f5d746ae7e58c3fa87335533f87c8f0715358591ccae7c5c872834bb93f8"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-desktop/spike/NativeContourCorner/NativeContourCorner.csproj",
+      "destination": "cad/tekla/bridge-desktop/spike/NativeContourCorner/NativeContourCorner.csproj",
+      "importedSha256": "707988001d202a38aa15b9aee2d80b45c977eca918ea6208ceea766b830c2891"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-desktop/spike/NativeContourCorner/Program.cs",
+      "destination": "cad/tekla/bridge-desktop/spike/NativeContourCorner/Program.cs",
+      "importedSha256": "8fcb83c44002de866dafbb03ead4a2c93e19d96939c50cf91711273fbb3789ed"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-desktop/spike/NativeContourCorner/README.md",
+      "destination": "cad/tekla/bridge-desktop/spike/NativeContourCorner/README.md",
+      "importedSha256": "537563b08b81e7b914f0de292da89350abcd488afa1789da19c3a995a042d879"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-desktop/spike/NativeEdgeChamfer/NativeEdgeChamfer.csproj",
+      "destination": "cad/tekla/bridge-desktop/spike/NativeEdgeChamfer/NativeEdgeChamfer.csproj",
+      "importedSha256": "4f0e1e76bec8217da47e8d7b4f979673a6d799ccd33a60677ea0a36a5d099de8"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-desktop/spike/NativeEdgeChamfer/Program.cs",
+      "destination": "cad/tekla/bridge-desktop/spike/NativeEdgeChamfer/Program.cs",
+      "importedSha256": "212f219e1628241f47c8e494f93fa45f23a7ad437c4bef6fe3ae4d78ca182f57"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-desktop/spike/NativeEdgeChamfer/README.md",
+      "destination": "cad/tekla/bridge-desktop/spike/NativeEdgeChamfer/README.md",
+      "importedSha256": "d6903648f1685ee5618255a8daeb70c0b7da98a88602186d7e4f2b8be88188e9"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-desktop/spike/NativeLoftedPlate/NativeLoftedPlate.csproj",
+      "destination": "cad/tekla/bridge-desktop/spike/NativeLoftedPlate/NativeLoftedPlate.csproj",
+      "importedSha256": "76ac21f68b351df78c51354a4702a21022ea69650e8338473805ba06beafaacd"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-desktop/spike/NativeLoftedPlate/Program.cs",
+      "destination": "cad/tekla/bridge-desktop/spike/NativeLoftedPlate/Program.cs",
+      "importedSha256": "97f629081c2ce65960a83cc449b29799949dfadb8d95258433ea12202861842a"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-desktop/spike/NativeRoundHole/NativeRoundHole.csproj",
+      "destination": "cad/tekla/bridge-desktop/spike/NativeRoundHole/NativeRoundHole.csproj",
+      "importedSha256": "aaea82b5b8706c7460baa325d22f8f3f2934913d495a8c0fa73a55cd414d0a8f"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-desktop/spike/NativeRoundHole/Program.cs",
+      "destination": "cad/tekla/bridge-desktop/spike/NativeRoundHole/Program.cs",
+      "importedSha256": "792b1839a0515e1a24190916c3004cc009dc1a76671f91f7de9f3511367e127e"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-desktop/spike/NativeRoundHole/README.md",
+      "destination": "cad/tekla/bridge-desktop/spike/NativeRoundHole/README.md",
+      "importedSha256": "bce5a3a56dc0fdf035900e8bc08eb602e7dbb25fcc4756020a822cab3bebee0b"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-desktop/spike/NativeSlottedHole/NativeSlottedHole.csproj",
+      "destination": "cad/tekla/bridge-desktop/spike/NativeSlottedHole/NativeSlottedHole.csproj",
+      "importedSha256": "f0e5722f7d6be7eb912ad8559c7f7436925a7af65e9d773fbdc19b12be584893"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-desktop/spike/NativeSlottedHole/Program.cs",
+      "destination": "cad/tekla/bridge-desktop/spike/NativeSlottedHole/Program.cs",
+      "importedSha256": "815620f2ac486e76834408eab8d543ae37c113b466ced8df860e82aa4930a49d"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-desktop/spike/NativeSlottedHole/README.md",
+      "destination": "cad/tekla/bridge-desktop/spike/NativeSlottedHole/README.md",
+      "importedSha256": "f41453339f26b192cf705c3abc4c4fe92d264e9e9bb8d3602c80e8213475a397"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-desktop/spike/Phase0Spike/BridgeGirderSchemaV1.json",
+      "destination": "cad/tekla/bridge-desktop/spike/Phase0Spike/BridgeGirderSchemaV1.json",
+      "importedSha256": "5b9a86edea00ae7b8f6c955b3c1850eb62d6fe9fb1f5da0aacd6728933bb7c03"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-desktop/spike/Phase0Spike/Phase0Spike.csproj",
+      "destination": "cad/tekla/bridge-desktop/spike/Phase0Spike/Phase0Spike.csproj",
+      "importedSha256": "9a6b4b21312a744c8c62480d50ff85057a873ea745e0773896d11afe91bb58d3"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-desktop/spike/Phase0Spike/Program.cs",
+      "destination": "cad/tekla/bridge-desktop/spike/Phase0Spike/Program.cs",
+      "importedSha256": "c80482f631ff78b3d8aeeac35eec3fa9f92fe60d8cad88716b2a04f946088ccb"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-desktop/spike/Phase0Spike/README.md",
+      "destination": "cad/tekla/bridge-desktop/spike/Phase0Spike/README.md",
+      "importedSha256": "67d7e6287c4bcdbce2f5023aad8d179ae7e9d74f4a30302f23c8ef0e7d8af089"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-desktop/spike/Phase0Spike/app.config",
+      "destination": "cad/tekla/bridge-desktop/spike/Phase0Spike/app.config",
+      "importedSha256": "f19f9cba1c1f2038957ca8a7b872de54393c73ced99b3f65dfe84931504cacb5"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/Auth/BridgeTokenStore.cs",
+      "destination": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/Auth/BridgeTokenStore.cs",
+      "importedSha256": "5768609fc810a74b27ab8960a6964b171bcfac8c584a8ef9b52d400020417331"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/ComponentRuntime/ComponentAdapterRegistry.cs",
+      "destination": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/ComponentRuntime/ComponentAdapterRegistry.cs",
+      "importedSha256": "4d9e5787b2334e9db1a5d14f47fa72d4795188e42683fc20b1174c480b9ea3a4"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/ComponentRuntime/ComponentCapabilities.cs",
+      "destination": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/ComponentRuntime/ComponentCapabilities.cs",
+      "importedSha256": "2f6985ffcbab0fa4d227394252ac3683665b2d3de04f79c5457a2e35acbf6373"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/ComponentRuntime/ComponentOperationRequest.cs",
+      "destination": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/ComponentRuntime/ComponentOperationRequest.cs",
+      "importedSha256": "038c9464ab96921393d72b31aa42b145e2d9127abbe7421e0d8b999255bbabda"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/ComponentRuntime/ComponentSchema.cs",
+      "destination": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/ComponentRuntime/ComponentSchema.cs",
+      "importedSha256": "1f09855eecd747557955223cfe8abbb2e7f5b3cd1dcbc778ccac3a002008cb2c"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/ComponentRuntime/ITeklaComponentAdapter.cs",
+      "destination": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/ComponentRuntime/ITeklaComponentAdapter.cs",
+      "importedSha256": "e4c998916a83fa7e2f3bbdfa46f04b5fec32d7e2f0df8b923a525b28550dd8a5"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/ComponentRuntime/PluginComponentMapping.cs",
+      "destination": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/ComponentRuntime/PluginComponentMapping.cs",
+      "importedSha256": "ab8372d9073c3914865214337eb27171ab30bfd75cd90ad4d014b93f19756fa7"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/ComponentRuntime/StructuraServiceUdas.cs",
+      "destination": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/ComponentRuntime/StructuraServiceUdas.cs",
+      "importedSha256": "92abc43e0da451ca29d551bd423212253123d92ff7d4658e87dcfa65dac31e41"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/ComponentRuntime/TeklaObjectRef.cs",
+      "destination": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/ComponentRuntime/TeklaObjectRef.cs",
+      "importedSha256": "e9e026c5996ae067a846dcf73ab90cf88513da20b88d90692e7c34f974fe32d5"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/ComponentRuntime/TeklaOperationResult.cs",
+      "destination": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/ComponentRuntime/TeklaOperationResult.cs",
+      "importedSha256": "ea27cace9c35db032c191ee43b64fad75d12a92c7b92803d47ecb95314e8153f"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/ComponentRuntime/TeklaReadResult.cs",
+      "destination": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/ComponentRuntime/TeklaReadResult.cs",
+      "importedSha256": "a47997a99a975b29194d0427cdc09a19cc82a645ffdb35a22bbb33886c6901a5"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/ComponentRuntime/ValidationResult.cs",
+      "destination": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/ComponentRuntime/ValidationResult.cs",
+      "importedSha256": "67b6ccf1a42cb0001df247829bd88e63588c8081cf15d8ab39540709dcfc29ec"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/Components/BridgeGirder/BridgeGirderAdapter.cs",
+      "destination": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/Components/BridgeGirder/BridgeGirderAdapter.cs",
+      "importedSha256": "12dce26cf96cc1260dedabf643a64ba48677067e5bf03abbf6383d06d79c4f2a"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/Components/BridgeGirder/BridgeGirderSchemaV1.cs",
+      "destination": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/Components/BridgeGirder/BridgeGirderSchemaV1.cs",
+      "importedSha256": "04e252bf8f62a16d777a7d251daa9ccac056297d4a18bc84a833689fe63359ca"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/Components/CrossMember/CrossMemberAdapter.cs",
+      "destination": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/Components/CrossMember/CrossMemberAdapter.cs",
+      "importedSha256": "9d78f3b8045992ad175ebadb6a0336c9ea36040e10ed5020181c3b7083657962"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/Components/CrossMember/CrossMemberSchemaV1.cs",
+      "destination": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/Components/CrossMember/CrossMemberSchemaV1.cs",
+      "importedSha256": "b266188e1e635b99db1a26acc31a0f950b11300918724b5e63273284b009b1d3"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/Components/Fachwerk/FachwerkNodeTeklaAdapter.cs",
+      "destination": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/Components/Fachwerk/FachwerkNodeTeklaAdapter.cs",
+      "importedSha256": "3c33826a1263f7da2168542397064d9e0b42e160724783fb66fc9fc86e8d9c77"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/Components/Pier/PierAdapter.cs",
+      "destination": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/Components/Pier/PierAdapter.cs",
+      "importedSha256": "bcea05af6d0eb5ed864fd12d3710192ae05909dee482370c6a7f4ff9e46ecdfa"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/Components/Pier/PierSchemaV1.cs",
+      "destination": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/Components/Pier/PierSchemaV1.cs",
+      "importedSha256": "69758938f52b4f2e95b91355cc0611bf0bc3c0f1f1ab1e5ac36a52c23f700de4"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/ConstructiveRuntime/TeklaApplyBooleanCutExecutor.cs",
+      "destination": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/ConstructiveRuntime/TeklaApplyBooleanCutExecutor.cs",
+      "importedSha256": "532a5286392dca64f21c558e7adfefdf378245cb91434c45585a50e5a5f38887"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/ConstructiveRuntime/TeklaApplyContourCornerExecutor.cs",
+      "destination": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/ConstructiveRuntime/TeklaApplyContourCornerExecutor.cs",
+      "importedSha256": "2a0fdde17795f383ce1b22b2fd8b531c07bda72144b426842778f73cc5d73d0b"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/ConstructiveRuntime/TeklaApplyEdgeTreatmentExecutor.cs",
+      "destination": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/ConstructiveRuntime/TeklaApplyEdgeTreatmentExecutor.cs",
+      "importedSha256": "d1a9353dd0d1887c76dd6de101bba878220f9ecede629ed419f4611d9ac5bbb0"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/ConstructiveRuntime/TeklaApplyFittingExecutor.cs",
+      "destination": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/ConstructiveRuntime/TeklaApplyFittingExecutor.cs",
+      "importedSha256": "104d3c5e331ceff926a812618957536e193b14b87c0830fb1d6235ce6a89bfd9"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/ConstructiveRuntime/TeklaContourPlateGeometry.cs",
+      "destination": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/ConstructiveRuntime/TeklaContourPlateGeometry.cs",
+      "importedSha256": "63ef08c1fdc8308629cb395e3a80a12815421990eaae9d00ebc10f7226ff39aa"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/ConstructiveRuntime/TeklaCreateAssemblyExecutor.cs",
+      "destination": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/ConstructiveRuntime/TeklaCreateAssemblyExecutor.cs",
+      "importedSha256": "4bdbdfa612cd10fa99e3abf1fae01211a68e67d9eabcb49d7cb8349d8a12d031"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/ConstructiveRuntime/TeklaCreateBeamExecutor.cs",
+      "destination": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/ConstructiveRuntime/TeklaCreateBeamExecutor.cs",
+      "importedSha256": "fb841363011a82c8a3af59caa4e1d6cf514e97acb09f70947c1391a0c2babe1f"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/ConstructiveRuntime/TeklaCreateBoltGroupExecutor.cs",
+      "destination": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/ConstructiveRuntime/TeklaCreateBoltGroupExecutor.cs",
+      "importedSha256": "2305c25cb0ae1d9023818f52ffb24e85cc54f720451473b344182dde6c91ab91"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/ConstructiveRuntime/TeklaCreateContourPlateExecutor.cs",
+      "destination": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/ConstructiveRuntime/TeklaCreateContourPlateExecutor.cs",
+      "importedSha256": "4497f6555bd01c5ca31045e12360fb5b373e434ba8e5a84b5bc2f6cb702cd85b"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/ConstructiveRuntime/TeklaCreateHoleExecutor.cs",
+      "destination": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/ConstructiveRuntime/TeklaCreateHoleExecutor.cs",
+      "importedSha256": "583f76d704234f7d376dceb2c18120cc357e927b4ec4b8abb95ec6dd615039ce"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/ConstructiveRuntime/TeklaCreatePolyBeamExecutor.cs",
+      "destination": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/ConstructiveRuntime/TeklaCreatePolyBeamExecutor.cs",
+      "importedSha256": "354d588f4e7004c255398126fb0fd6da624e65842dfa4d44d49a6cb00f7b78cb"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/ConstructiveRuntime/TeklaCreateWeldExecutor.cs",
+      "destination": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/ConstructiveRuntime/TeklaCreateWeldExecutor.cs",
+      "importedSha256": "2911121a4b2aa8efb2a840af57e523b6c6e00c2515b396e07b09d1eb66e43044"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/ConstructiveRuntime/TeklaModelIdentity.cs",
+      "destination": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/ConstructiveRuntime/TeklaModelIdentity.cs",
+      "importedSha256": "350ef9e0c77286cafad2e6fbdc5f1238203d4540029c97728b6011a03f99c45f"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/ConstructiveRuntime/TeklaNativeCapabilityProvider.cs",
+      "destination": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/ConstructiveRuntime/TeklaNativeCapabilityProvider.cs",
+      "importedSha256": "ae7d9d68ce3fe5de475f294bcc089ccb9a8c618954171633ccbef8b2ee8044b2"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/ConstructiveRuntime/TeklaNativeCommandExecutor.cs",
+      "destination": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/ConstructiveRuntime/TeklaNativeCommandExecutor.cs",
+      "importedSha256": "7afbb1c936fc4f7a70c365d7c50a705d85cdba1c0f836a75077e1e4f9bd1ef43"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/ConstructiveRuntime/TeklaPlanNativeTargetResolver.cs",
+      "destination": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/ConstructiveRuntime/TeklaPlanNativeTargetResolver.cs",
+      "importedSha256": "bfd61f86a163b4889c4a061a00ae6364929caca0118bd0acb882f134a920ebd8"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/Http/CapabilitiesHandler.cs",
+      "destination": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/Http/CapabilitiesHandler.cs",
+      "importedSha256": "8e4bff44c73370a2e8a1f9453e8f3e4c150c7a6333009d29b14c667504c1de4f"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/Http/ComponentHandler.cs",
+      "destination": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/Http/ComponentHandler.cs",
+      "importedSha256": "dddf09c664cf7e4bef636f3beaef73714025d22a329d1d3b1bc9ad01f1ddf529"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/Http/FachwerkColumnRefreshHandler.cs",
+      "destination": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/Http/FachwerkColumnRefreshHandler.cs",
+      "importedSha256": "a05aa499c22c493f491ce8e90cd43d19d5a0efa9d659f49e745ffc87e7d38f53"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/Http/HealthHandler.cs",
+      "destination": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/Http/HealthHandler.cs",
+      "importedSha256": "8c5c4c72db22f20d9def3c3e3ad4164d7ea0385b2f84858f53f0aeb59c30f40f"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/Http/HttpRouter.cs",
+      "destination": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/Http/HttpRouter.cs",
+      "importedSha256": "30d9bfa04ce00b79b8713161353090ede178f05a382066461a6d43136113b1f1"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/Http/IfcAttributionHandler.cs",
+      "destination": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/Http/IfcAttributionHandler.cs",
+      "importedSha256": "affab55d66c1b1003f6f730b93d72e659f44f292c1d9050c9ef7f42c65f78a84"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/Http/ModelChangeSetHandler.cs",
+      "destination": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/Http/ModelChangeSetHandler.cs",
+      "importedSha256": "1c3b83ab65a2463d107f12fdf4112b3e65423e7fbd01d978f85769455a2e1c50"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/Http/ModelSelectHandler.cs",
+      "destination": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/Http/ModelSelectHandler.cs",
+      "importedSha256": "d7dfe10238916f7bc61b9c74ae5d8bd9fd6f195c492b18ed04cc881695eda868"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/Http/ModelSelectionHandler.cs",
+      "destination": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/Http/ModelSelectionHandler.cs",
+      "importedSha256": "90950ef2d5ba0da068db238196faae275d11535301ea36ff4ddafc6c8794bc83"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/Http/PickHandler.cs",
+      "destination": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/Http/PickHandler.cs",
+      "importedSha256": "d778014906d224dc6e22963baa586ce0a3e73409ece6f2cf2613074819752f22"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/Http/PluginReloadHandler.cs",
+      "destination": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/Http/PluginReloadHandler.cs",
+      "importedSha256": "4ac8f41c716cd96bf688841632f980d990ab4550b1c31a8517d69f84b2cfd4f9"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/Http/SelectionHandler.cs",
+      "destination": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/Http/SelectionHandler.cs",
+      "importedSha256": "c3aa11ac6ed181edfd8be7fd2f648822d519746028fdeb05ab38da6a4d5d31aa"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/Http/TeklaPlanApplyHandler.cs",
+      "destination": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/Http/TeklaPlanApplyHandler.cs",
+      "importedSha256": "75f646f1213473bd7512333519ada1d467545033993b58007a09da0f2ea4382a"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/Http/TeklaPlanPrepareHandler.cs",
+      "destination": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/Http/TeklaPlanPrepareHandler.cs",
+      "importedSha256": "953c923fbebe3f3ba751c91ae571c123ec77dd78b1fff7ce6cf1ba6fb2295912"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/Http/UdaFilesHandler.cs",
+      "destination": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/Http/UdaFilesHandler.cs",
+      "importedSha256": "17de4071ce1471d751f34de91aadc7c8d7b269ec4eef0f34a7bc17049d836ec6"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/Idempotency/IdempotencyStore.cs",
+      "destination": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/Idempotency/IdempotencyStore.cs",
+      "importedSha256": "d880b1f4fcbd7c13e816c4475c32381e02543f8911e34c179faa0dd7198a86e9"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/Idempotency/ObjectMap.cs",
+      "destination": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/Idempotency/ObjectMap.cs",
+      "importedSha256": "76ce3e792c1581ca09e9eb75b0ecb1b00f6b22d9dded044e3562e4c53ee0ade6"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/Logging/JsonLineLogger.cs",
+      "destination": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/Logging/JsonLineLogger.cs",
+      "importedSha256": "0461458702a20b0b275f989fbca13f52ef73183e4b3b4bca4e88815da05cf2c7"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/Platform.Bridge.Desktop.Tekla.csproj",
+      "destination": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/Platform.Bridge.Desktop.Tekla.csproj",
+      "importedSha256": "e1f5098c8e27755eeaf0028bd0d08a839ddbcca1a5fc6aafbcd2ed084e89900f"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/Polyfill/IsExternalInit.cs",
+      "destination": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/Polyfill/IsExternalInit.cs",
+      "importedSha256": "752d8000e6472f821657fb01c404bfc5a694ba8efe19f6b3ac99ab1e2c583033"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/Program.cs",
+      "destination": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/Program.cs",
+      "importedSha256": "f2675de0435cf7344b203b7aa6eaf350bfcd8e70ff4086a44b32867cb470870c"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/Tekla/StaleTeklaDetection.cs",
+      "destination": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/Tekla/StaleTeklaDetection.cs",
+      "importedSha256": "74ecbf988eab44c8d4e9056fc8b5089df39abbd9627cebda6f69dadada0ff50f"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/Tekla/TeklaConnection.cs",
+      "destination": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/Tekla/TeklaConnection.cs",
+      "importedSha256": "45265090a1cd5787206189df5e703e12165732e889c2d62b73db0d73d02c0a6c"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/Tekla/TeklaSessionBootstrap.cs",
+      "destination": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/Tekla/TeklaSessionBootstrap.cs",
+      "importedSha256": "cfc907e102b19beac50aa30c133a7a45547600c52d42dd4ae91e809dc0fa509a"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/Tekla/TeklaWorker.cs",
+      "destination": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/Tekla/TeklaWorker.cs",
+      "importedSha256": "520138cd1c4125f7abb8448aaf5b179a2ee2a0f9a80504832097ce17c78d9f3d"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/app.config",
+      "destination": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/app.config",
+      "importedSha256": "9bf5dbb4db23f864af82f02dbe029aa4c5ae9f6869c0fe6dd6ed25c4aa23a29c"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/profiles/2020.0/app.config",
+      "destination": "cad/tekla/bridge-desktop/src/Platform.Bridge.Desktop.Tekla/profiles/2020.0/app.config",
+      "importedSha256": "6496fdd557138cdc211cf990f35310c350f88bb014ef996fd47e291214941551"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-plugin/Bridge.Plugin.sln",
+      "destination": "cad/tekla/bridge-plugin/Bridge.Plugin.sln",
+      "importedSha256": "3cb087b747974392399d86e1b0cd84b5e5c962820ff9919fc4de029df2fb8959"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-plugin/README.md",
+      "destination": "cad/tekla/bridge-plugin/README.md",
+      "importedSha256": "205a54f27c17af4b50c457f9e39cf8c78ced85f5296b73299071bb4dfd491584"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-plugin/deploy/component/BridgeGirderPlugin.inp",
+      "destination": "cad/tekla/bridge-plugin/deploy/component/BridgeGirderPlugin.inp",
+      "importedSha256": "bf8404f10290c6d5c5fa90dd5189b6c299713569a88bdc91639416e78fdd50bf"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-plugin/deploy/component/BridgeMvpPlugin.inp",
+      "destination": "cad/tekla/bridge-plugin/deploy/component/BridgeMvpPlugin.inp",
+      "importedSha256": "bf8404f10290c6d5c5fa90dd5189b6c299713569a88bdc91639416e78fdd50bf"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-plugin/deploy/component/CrossMemberPlugin.inp",
+      "destination": "cad/tekla/bridge-plugin/deploy/component/CrossMemberPlugin.inp",
+      "importedSha256": "e2ac5bf2554137464a4cceea291df1a1c044d015745016847373d7cfcc1a0719"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-plugin/deploy/component/FachwerkColumnPlugin.inp",
+      "destination": "cad/tekla/bridge-plugin/deploy/component/FachwerkColumnPlugin.inp",
+      "importedSha256": "92a0e4b07297a539c0075fbc55d8d36652d64510ba18ef11bf1606875f59e87a"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-plugin/deploy/component/FachwerkColumnProfiles.json",
+      "destination": "cad/tekla/bridge-plugin/deploy/component/FachwerkColumnProfiles.json",
+      "importedSha256": "22cb28b9c92d9cd8c7df96fd3ff391f4fb54fea2a720a9fcfdbfbed8b7b1c15a"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-plugin/deploy/component/FachwerkRigelCatalog.json",
+      "destination": "cad/tekla/bridge-plugin/deploy/component/FachwerkRigelCatalog.json",
+      "importedSha256": "520992b03abbdca266d22add0fc2c52150e490ecba08cf94625ef52f5d181400"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-plugin/deploy/macro/ControlledNumbering.cs",
+      "destination": "cad/tekla/bridge-plugin/deploy/macro/ControlledNumbering.cs",
+      "importedSha256": "3b0fe26053070c167428a916373534b87a8c9e63a57dbfcbc3026d224e165042"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-plugin/deploy/macro/ReloadFachwerkPlugin.cs",
+      "destination": "cad/tekla/bridge-plugin/deploy/macro/ReloadFachwerkPlugin.cs",
+      "importedSha256": "5f4a9887f063ffdfebf2e050d3dd5a9b8154ebe963f61c44c52303e3304c079e"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-plugin/scripts/enable_tekla_plugin_developer_mode.ps1",
+      "destination": "cad/tekla/bridge-plugin/scripts/enable_tekla_plugin_developer_mode.ps1",
+      "importedSha256": "47875d5d877992326c8e43a1c7b46fccde7d6a34fc392c6ca65f7a8afa068b03"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-plugin/scripts/export_fachwerk_column_catalog.ps1",
+      "destination": "cad/tekla/bridge-plugin/scripts/export_fachwerk_column_catalog.ps1",
+      "importedSha256": "7a010baada5e443bc11134e1690e6df3a5f153132e3647a7a257a72032913000"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-plugin/scripts/parity_diff.ps1",
+      "destination": "cad/tekla/bridge-plugin/scripts/parity_diff.ps1",
+      "importedSha256": "34129100b222d6eb3ce64af3e0b58768a1d76366abc95cf3d03a1fd87853e149"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-plugin/scripts/parity_snapshot.ps1",
+      "destination": "cad/tekla/bridge-plugin/scripts/parity_snapshot.ps1",
+      "importedSha256": "2c024ac5b3958997a42e547d5d0bf81dee6da1ed57965d365de5eb0d4ffca810"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-plugin/scripts/redeploy_fachwerk_component.ps1",
+      "destination": "cad/tekla/bridge-plugin/scripts/redeploy_fachwerk_component.ps1",
+      "importedSha256": "2a0618df64cfa0f32408900b48c10ddb2d16c09a33409390461de9161200fa40"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-plugin/scripts/redeploy_plugin.ps1",
+      "destination": "cad/tekla/bridge-plugin/scripts/redeploy_plugin.ps1",
+      "importedSha256": "5860bba2da554ba9fad0d36861a0745a45087e30b7ab8aad50b55a0cd827c130"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-plugin/spike/ControlledNumberingMacroSmoke/ControlledNumberingMacroSmoke.csproj",
+      "destination": "cad/tekla/bridge-plugin/spike/ControlledNumberingMacroSmoke/ControlledNumberingMacroSmoke.csproj",
+      "importedSha256": "459fc22183c1c59aa46a6cee224184dd723eb82ee145b0baf03d660dc5a05c0d"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-plugin/spike/ControlledNumberingSmoke/ControlledNumberingSmoke.csproj",
+      "destination": "cad/tekla/bridge-plugin/spike/ControlledNumberingSmoke/ControlledNumberingSmoke.csproj",
+      "importedSha256": "a0f1d41bfaab63e0fe9873ae4d813320e855ec213eaf867eafccd6486b52d8d7"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-plugin/spike/ControlledNumberingSmoke/Program.cs",
+      "destination": "cad/tekla/bridge-plugin/spike/ControlledNumberingSmoke/Program.cs",
+      "importedSha256": "b79db2929dd864491bbd7e468ec2708bb4d1f5a6f3fe0d4bda18ce4a4392c590"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-plugin/spike/FachwerkColumnSmoke/FachwerkColumnSmoke.csproj",
+      "destination": "cad/tekla/bridge-plugin/spike/FachwerkColumnSmoke/FachwerkColumnSmoke.csproj",
+      "importedSha256": "3a0ebf2ed22c28ee7ace05fa57da1ea0da75bb6cb91ddce53367a6888adeacbf"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-plugin/spike/FachwerkColumnSmoke/FachwerkTopSplicePrototype.cs",
+      "destination": "cad/tekla/bridge-plugin/spike/FachwerkColumnSmoke/FachwerkTopSplicePrototype.cs",
+      "importedSha256": "c683fb3def5e20bc9593cf7e2bc0f0f58c7d77f1869bf56e133c7b8774de3b8c"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-plugin/spike/FachwerkColumnSmoke/Program.cs",
+      "destination": "cad/tekla/bridge-plugin/spike/FachwerkColumnSmoke/Program.cs",
+      "importedSha256": "67a973f1ccf4ef69fa2850143325fda29d7d0fd34d022a9f73e8710fa36a14e7"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-plugin/src/BridgeGirderPlugin/BridgeGirderPlugin.cs",
+      "destination": "cad/tekla/bridge-plugin/src/BridgeGirderPlugin/BridgeGirderPlugin.cs",
+      "importedSha256": "abe63e4afa5497c552790b0f0d38a5b6dcf7c9e2796b048784570363df36cb3b"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-plugin/src/BridgeGirderPlugin/BridgeGirderPlugin.csproj",
+      "destination": "cad/tekla/bridge-plugin/src/BridgeGirderPlugin/BridgeGirderPlugin.csproj",
+      "importedSha256": "9ef489ef0ba0b0045dd398031057ac04b8a266ee495e00ef2504df29ff3c3cb6"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-plugin/src/BridgeGirderPlugin/BridgeGirderPluginData.cs",
+      "destination": "cad/tekla/bridge-plugin/src/BridgeGirderPlugin/BridgeGirderPluginData.cs",
+      "importedSha256": "9d946ba88705f46189a862fa5593ae1d936718c08f2841b82e78a49fe27a05ac"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-plugin/src/BridgeMvpPlugin/BridgeMvpPlugin.cs",
+      "destination": "cad/tekla/bridge-plugin/src/BridgeMvpPlugin/BridgeMvpPlugin.cs",
+      "importedSha256": "71d72057dd978455af1eb695d785d4e2bc945bf29bc9ec565c2b50015aece1e8"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-plugin/src/BridgeMvpPlugin/BridgeMvpPlugin.csproj",
+      "destination": "cad/tekla/bridge-plugin/src/BridgeMvpPlugin/BridgeMvpPlugin.csproj",
+      "importedSha256": "f039bb4788e41c5abafb8a9073d56efc499b93ab7cac39075ed3a9ab7b66dcd3"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-plugin/src/BridgeMvpPlugin/BridgeMvpPluginData.cs",
+      "destination": "cad/tekla/bridge-plugin/src/BridgeMvpPlugin/BridgeMvpPluginData.cs",
+      "importedSha256": "f8627ab4d3e2e5e43055b399e160c2724385c06b22f1427d06a7c77ba2033dfc"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-plugin/src/ControlledNumberingTool/ControlledNumberingResultsForm.cs",
+      "destination": "cad/tekla/bridge-plugin/src/ControlledNumberingTool/ControlledNumberingResultsForm.cs",
+      "importedSha256": "8b41796d251fa93eba81de57cb59d7368848928422f8f4ec0d639cfa2b59e798"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-plugin/src/ControlledNumberingTool/ControlledNumberingRunner.cs",
+      "destination": "cad/tekla/bridge-plugin/src/ControlledNumberingTool/ControlledNumberingRunner.cs",
+      "importedSha256": "dfd0f48ece85cb62a6f650a019cb3babdca6b55ba03272f54ad2c7d324a32cec"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-plugin/src/ControlledNumberingTool/ControlledNumberingTool.csproj",
+      "destination": "cad/tekla/bridge-plugin/src/ControlledNumberingTool/ControlledNumberingTool.csproj",
+      "importedSha256": "d011a0b09837940346def1a8671a5d845f159d2c99a38bc74cd8a857d8df3b87"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-plugin/src/ControlledNumberingTool/NumberingHistoryParser.cs",
+      "destination": "cad/tekla/bridge-plugin/src/ControlledNumberingTool/NumberingHistoryParser.cs",
+      "importedSha256": "a81c455cf961ec4b8cb63236334e148eb009f6cf0b7d3ef59ae23c55c427bb78"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-plugin/src/CrossMemberPlugin/CrossMemberPlugin.cs",
+      "destination": "cad/tekla/bridge-plugin/src/CrossMemberPlugin/CrossMemberPlugin.cs",
+      "importedSha256": "060fa841d3e2b58acc509036249afb2ec202256274d717e654a7d4ae30f94a6b"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-plugin/src/CrossMemberPlugin/CrossMemberPlugin.csproj",
+      "destination": "cad/tekla/bridge-plugin/src/CrossMemberPlugin/CrossMemberPlugin.csproj",
+      "importedSha256": "8f3a679a70b53571081249caf896942fba52838aeb8dbe8f21e662be1094aef5"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-plugin/src/CrossMemberPlugin/CrossMemberPluginData.cs",
+      "destination": "cad/tekla/bridge-plugin/src/CrossMemberPlugin/CrossMemberPluginData.cs",
+      "importedSha256": "dcc52db2439bdd1a667048a312abc38b71cf635d44444950462065d35d76d0ab"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-plugin/src/FachwerkColumnPlugin/AssemblyInfo.cs",
+      "destination": "cad/tekla/bridge-plugin/src/FachwerkColumnPlugin/AssemblyInfo.cs",
+      "importedSha256": "3dc1cde385ff8a1f42e4e7cce0523ac56349dc2a12ef068b93f682982fec1768"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-plugin/src/FachwerkColumnPlugin/FachwerkColumnAssemblyPlan.cs",
+      "destination": "cad/tekla/bridge-plugin/src/FachwerkColumnPlugin/FachwerkColumnAssemblyPlan.cs",
+      "importedSha256": "1d00226503f6d1f7e26a220f340bf4848d6d060a8f031ca75445e5b03b6b1391"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-plugin/src/FachwerkColumnPlugin/FachwerkColumnAssemblyTeklaAdapter.cs",
+      "destination": "cad/tekla/bridge-plugin/src/FachwerkColumnPlugin/FachwerkColumnAssemblyTeklaAdapter.cs",
+      "importedSha256": "b0cc588825b5b5be1582245caa89f2b9810644bdfa7776532ca03b6d3d105e52"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-plugin/src/FachwerkColumnPlugin/FachwerkColumnAttributes.cs",
+      "destination": "cad/tekla/bridge-plugin/src/FachwerkColumnPlugin/FachwerkColumnAttributes.cs",
+      "importedSha256": "f581cd08f5dace6791007f39940b10699556cbe4b9003432888a8f01e278fdb2"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-plugin/src/FachwerkColumnPlugin/FachwerkColumnBevelGeometry.cs",
+      "destination": "cad/tekla/bridge-plugin/src/FachwerkColumnPlugin/FachwerkColumnBevelGeometry.cs",
+      "importedSha256": "6ac015f70dde537cc62e6f14267054de0b0a4357944171c5c640c9b5896abe14"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-plugin/src/FachwerkColumnPlugin/FachwerkColumnBevelTeklaAdapter.cs",
+      "destination": "cad/tekla/bridge-plugin/src/FachwerkColumnPlugin/FachwerkColumnBevelTeklaAdapter.cs",
+      "importedSha256": "bb9c17ce85e6a804fa867000f966384c2b2553a22f9496de50734f2e504c3c0f"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-plugin/src/FachwerkColumnPlugin/FachwerkColumnErectionJointGeometry.cs",
+      "destination": "cad/tekla/bridge-plugin/src/FachwerkColumnPlugin/FachwerkColumnErectionJointGeometry.cs",
+      "importedSha256": "5837e46585641f2368e547611588e86cc73967d4ff5999f5979c95135ba05947"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-plugin/src/FachwerkColumnPlugin/FachwerkColumnErectionJointTeklaAdapter.cs",
+      "destination": "cad/tekla/bridge-plugin/src/FachwerkColumnPlugin/FachwerkColumnErectionJointTeklaAdapter.cs",
+      "importedSha256": "3924f826627960108f648797618442a1e3746adff72a695e943ce1731aa9c50b"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-plugin/src/FachwerkColumnPlugin/FachwerkColumnForm.cs",
+      "destination": "cad/tekla/bridge-plugin/src/FachwerkColumnPlugin/FachwerkColumnForm.cs",
+      "importedSha256": "c26abcccb869e8205894c20c4a49872328d3dec0ea96ef17fbccd08691ac2325"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-plugin/src/FachwerkColumnPlugin/FachwerkColumnGeometry.cs",
+      "destination": "cad/tekla/bridge-plugin/src/FachwerkColumnPlugin/FachwerkColumnGeometry.cs",
+      "importedSha256": "ec90c6fd58210063a314533864d3d1339a6f3446e452be769d2ef4ff871c1383"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-plugin/src/FachwerkColumnPlugin/FachwerkColumnJointGeometry.cs",
+      "destination": "cad/tekla/bridge-plugin/src/FachwerkColumnPlugin/FachwerkColumnJointGeometry.cs",
+      "importedSha256": "91d913d889676beabbc7c182ab6978f63b876db6608005d5e0e8a61fed44ecd1"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-plugin/src/FachwerkColumnPlugin/FachwerkColumnPlugin.cs",
+      "destination": "cad/tekla/bridge-plugin/src/FachwerkColumnPlugin/FachwerkColumnPlugin.cs",
+      "importedSha256": "de933e979a2531be4e3cce923fa20fedb8481c4d4b5589ca46f6dc7101594e16"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-plugin/src/FachwerkColumnPlugin/FachwerkColumnPlugin.csproj",
+      "destination": "cad/tekla/bridge-plugin/src/FachwerkColumnPlugin/FachwerkColumnPlugin.csproj",
+      "importedSha256": "5cee5bfe0ad5eebc2633c0c6a21e224298004da361bbd69cd8e6ee80f21a3cad"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-plugin/src/FachwerkColumnPlugin/FachwerkColumnPluginData.cs",
+      "destination": "cad/tekla/bridge-plugin/src/FachwerkColumnPlugin/FachwerkColumnPluginData.cs",
+      "importedSha256": "528d09af70ca8ad171aaf11f77199d106aca3cd8996340d87befa94a13cf389b"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-plugin/src/FachwerkColumnPlugin/FachwerkColumnProfileCatalog.cs",
+      "destination": "cad/tekla/bridge-plugin/src/FachwerkColumnPlugin/FachwerkColumnProfileCatalog.cs",
+      "importedSha256": "4654a9189840de5a484dd91300c31d4162d577802820a085f6460f4ea4894c6d"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-plugin/src/FachwerkColumnPlugin/FachwerkColumnRigelConnectionForm.cs",
+      "destination": "cad/tekla/bridge-plugin/src/FachwerkColumnPlugin/FachwerkColumnRigelConnectionForm.cs",
+      "importedSha256": "f810d9d6e784503f123911bd768da07659ca5765007475ffb7c3e45295925711"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-plugin/src/FachwerkColumnPlugin/FachwerkColumnRigelConnectionGeometry.cs",
+      "destination": "cad/tekla/bridge-plugin/src/FachwerkColumnPlugin/FachwerkColumnRigelConnectionGeometry.cs",
+      "importedSha256": "96413ac3b0dd7b955a22771160c756d3d1a71493a5f66b5c691b9ca5b592e006"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-plugin/src/FachwerkColumnPlugin/FachwerkColumnRigelConnectionPlugin.cs",
+      "destination": "cad/tekla/bridge-plugin/src/FachwerkColumnPlugin/FachwerkColumnRigelConnectionPlugin.cs",
+      "importedSha256": "da61c08fbb27844ba49ae0f3c0255b4f4c2c3a9e43e89bcbf29e7e079d7821a4"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-plugin/src/FachwerkColumnPlugin/FachwerkColumnRigelConnectionPluginData.cs",
+      "destination": "cad/tekla/bridge-plugin/src/FachwerkColumnPlugin/FachwerkColumnRigelConnectionPluginData.cs",
+      "importedSha256": "9f41ccbcacc60ddb2c7bb74cf10f4ef795bd6fa0e7f372c4f59c4d43fd6ce1ad"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-plugin/src/FachwerkColumnPlugin/FachwerkColumnRigelConnectionTeklaAdapter.cs",
+      "destination": "cad/tekla/bridge-plugin/src/FachwerkColumnPlugin/FachwerkColumnRigelConnectionTeklaAdapter.cs",
+      "importedSha256": "014a85f8cc13249df537b18388bcefda5093c846b071fd0ec8be7fc0eae9387c"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-plugin/src/FachwerkColumnPlugin/FachwerkColumnRigelInsertConnectionForm.cs",
+      "destination": "cad/tekla/bridge-plugin/src/FachwerkColumnPlugin/FachwerkColumnRigelInsertConnectionForm.cs",
+      "importedSha256": "90eb3a1d76a2af923b48e139986eb985e1dc3d88859a951192fe6012244aaa90"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-plugin/src/FachwerkColumnPlugin/FachwerkColumnRigelInsertConnectionGeometry.cs",
+      "destination": "cad/tekla/bridge-plugin/src/FachwerkColumnPlugin/FachwerkColumnRigelInsertConnectionGeometry.cs",
+      "importedSha256": "d6bbfbc14b7747b102aca4dc68caa50da72bae1a7e9444b19700c224a4be4960"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-plugin/src/FachwerkColumnPlugin/FachwerkColumnRigelInsertConnectionPlugin.cs",
+      "destination": "cad/tekla/bridge-plugin/src/FachwerkColumnPlugin/FachwerkColumnRigelInsertConnectionPlugin.cs",
+      "importedSha256": "3af3f8554272f8fe860e1f48368f7f0cecab94a856894e4374c7288c92062aad"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-plugin/src/FachwerkColumnPlugin/FachwerkColumnRigelInsertConnectionPluginData.cs",
+      "destination": "cad/tekla/bridge-plugin/src/FachwerkColumnPlugin/FachwerkColumnRigelInsertConnectionPluginData.cs",
+      "importedSha256": "0a99a604adcb75eec5f56cc870fef44902f06fc57c5abf828af45b8b09834e73"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-plugin/src/FachwerkColumnPlugin/FachwerkColumnRigelInsertConnectionTeklaAdapter.cs",
+      "destination": "cad/tekla/bridge-plugin/src/FachwerkColumnPlugin/FachwerkColumnRigelInsertConnectionTeklaAdapter.cs",
+      "importedSha256": "4101ccfa4d91913c89c63bf876013521fbf24d28940532012ad638cfc4d13274"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-plugin/src/FachwerkColumnPlugin/FachwerkColumnSectionGeometry.cs",
+      "destination": "cad/tekla/bridge-plugin/src/FachwerkColumnPlugin/FachwerkColumnSectionGeometry.cs",
+      "importedSha256": "7b0266dddc638bf5725d9cb6676c7db65b1140b1b5f253e3466ac48a3026db61"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-plugin/src/FachwerkColumnPlugin/FachwerkColumnStiffenerGeometry.cs",
+      "destination": "cad/tekla/bridge-plugin/src/FachwerkColumnPlugin/FachwerkColumnStiffenerGeometry.cs",
+      "importedSha256": "736a3511757da5f75a02dcab3bf566524bf3f1e323dd8af7b50d74d127a5f432"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-plugin/src/FachwerkColumnPlugin/FachwerkColumnStiffenerTeklaAdapter.cs",
+      "destination": "cad/tekla/bridge-plugin/src/FachwerkColumnPlugin/FachwerkColumnStiffenerTeklaAdapter.cs",
+      "importedSha256": "f57ae3af2943c0beefa42bd3110ea81b0dc031c8ec2349ac48f5a982c5a095cf"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-plugin/src/FachwerkColumnPlugin/FachwerkLowerRigelNodeAutoLength.cs",
+      "destination": "cad/tekla/bridge-plugin/src/FachwerkColumnPlugin/FachwerkLowerRigelNodeAutoLength.cs",
+      "importedSha256": "2195599ebfdaa26302fb5b84b9ba25861a106fb06c5afd9b1cffbb5695630d70"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-plugin/src/FachwerkColumnPlugin/FachwerkLowerRigelNodeForm.cs",
+      "destination": "cad/tekla/bridge-plugin/src/FachwerkColumnPlugin/FachwerkLowerRigelNodeForm.cs",
+      "importedSha256": "f55a2b5180c1488bbd83ad9d0ceae2308d52239ad3e1d5a1d748d3960fcb2a5d"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-plugin/src/FachwerkColumnPlugin/FachwerkLowerRigelNodeGeometry.cs",
+      "destination": "cad/tekla/bridge-plugin/src/FachwerkColumnPlugin/FachwerkLowerRigelNodeGeometry.cs",
+      "importedSha256": "45128b981e471aa9f8982bd9b5e301f2abd6cdb8f041f9dd8008a93c8a4fef73"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-plugin/src/FachwerkColumnPlugin/FachwerkLowerRigelNodePlugin.cs",
+      "destination": "cad/tekla/bridge-plugin/src/FachwerkColumnPlugin/FachwerkLowerRigelNodePlugin.cs",
+      "importedSha256": "809a5b08f405fdd5d241774e402d6bc180b184bf97ca90b8e4c6de12ad5525c6"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-plugin/src/FachwerkColumnPlugin/FachwerkLowerRigelNodePluginData.cs",
+      "destination": "cad/tekla/bridge-plugin/src/FachwerkColumnPlugin/FachwerkLowerRigelNodePluginData.cs",
+      "importedSha256": "4bf4b87ebdfab38202e464311beb15a2671521b98048aa5e829b57a81326ef1b"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-plugin/src/FachwerkColumnPlugin/FachwerkLowerRigelNodeTeklaAdapter.cs",
+      "destination": "cad/tekla/bridge-plugin/src/FachwerkColumnPlugin/FachwerkLowerRigelNodeTeklaAdapter.cs",
+      "importedSha256": "4dc04b768bf46c917ab2c4e9d4f0dd454c3ce91a2951878b2a57b0996fc2bba8"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-plugin/src/FachwerkColumnPlugin/FachwerkRigelForm.cs",
+      "destination": "cad/tekla/bridge-plugin/src/FachwerkColumnPlugin/FachwerkRigelForm.cs",
+      "importedSha256": "e61b511ad9d726489bf6c3e014271f7f641eb104c5bad4caaf5d5f935e08ce5a"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-plugin/src/FachwerkRigelPlugin/FachwerkRigelCatalog.cs",
+      "destination": "cad/tekla/bridge-plugin/src/FachwerkRigelPlugin/FachwerkRigelCatalog.cs",
+      "importedSha256": "e7f39c70641b8a3f6cafb179109327486e0e6937b7846bfcccbf7d9304fe619b"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-plugin/src/FachwerkRigelPlugin/FachwerkRigelClearanceVisualization.cs",
+      "destination": "cad/tekla/bridge-plugin/src/FachwerkRigelPlugin/FachwerkRigelClearanceVisualization.cs",
+      "importedSha256": "3f73962dd8fb085eade8b98b48d2676a60ffc09b639333257d1006e8cc4adb98"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-plugin/src/FachwerkRigelPlugin/FachwerkRigelGeometry.cs",
+      "destination": "cad/tekla/bridge-plugin/src/FachwerkRigelPlugin/FachwerkRigelGeometry.cs",
+      "importedSha256": "ff13667d3ac3c94ef25ae261c374144ed3edaf7b70e76690d0181420d7b57587"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-plugin/src/FachwerkRigelPlugin/FachwerkRigelPlugin.cs",
+      "destination": "cad/tekla/bridge-plugin/src/FachwerkRigelPlugin/FachwerkRigelPlugin.cs",
+      "importedSha256": "16293b7000d37c2bad6ad5ecaf6f0b32cc5352ccbad9d9752fe9e649cfa9c9ff"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-plugin/src/FachwerkRigelPlugin/FachwerkRigelPluginData.cs",
+      "destination": "cad/tekla/bridge-plugin/src/FachwerkRigelPlugin/FachwerkRigelPluginData.cs",
+      "importedSha256": "3631d953f718d608ea669ebda1ef0f9339675f1f08b5285da315125505800997"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-plugin/src/FachwerkRigelPlugin/FachwerkRigelVisualization.cs",
+      "destination": "cad/tekla/bridge-plugin/src/FachwerkRigelPlugin/FachwerkRigelVisualization.cs",
+      "importedSha256": "9ff6b9afebb9528524d3322249af236afa445aa5ace303086bf71e0b754ef702"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-plugin/src/TeklaBridge/BridgeCommands.cs",
+      "destination": "cad/tekla/bridge-plugin/src/TeklaBridge/BridgeCommands.cs",
+      "importedSha256": "10f96459aaf15cdbec42ed7b55b9d408eb255f06b2f4d22712d9974595ae5151"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-plugin/src/TeklaBridge/CrossMembers/CrossMemberCommands.cs",
+      "destination": "cad/tekla/bridge-plugin/src/TeklaBridge/CrossMembers/CrossMemberCommands.cs",
+      "importedSha256": "1dc28cc6f6db97dc2acb07b691b1e58873819556aee9f51c79db02f4f1c60e0a"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-plugin/src/TeklaBridge/CrossMembers/CrossMemberPayloadV1.cs",
+      "destination": "cad/tekla/bridge-plugin/src/TeklaBridge/CrossMembers/CrossMemberPayloadV1.cs",
+      "importedSha256": "876992ef33cfddc3697f75503fe4bb659e9908c2e7156d54b47ba670219db564"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-plugin/src/TeklaBridge/Infrastructure/CommandFileStore.cs",
+      "destination": "cad/tekla/bridge-plugin/src/TeklaBridge/Infrastructure/CommandFileStore.cs",
+      "importedSha256": "2b61c56d2885a0021345e80977b4fb8981c95ad0d37808131e08b64694b0bed2"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-plugin/src/TeklaBridge/Program.cs",
+      "destination": "cad/tekla/bridge-plugin/src/TeklaBridge/Program.cs",
+      "importedSha256": "940d355de01efd4926a2788b56d6b018727b11e4bef16a9cba8b361c61c40cb2"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-plugin/src/TeklaBridge/TeklaBridge.csproj",
+      "destination": "cad/tekla/bridge-plugin/src/TeklaBridge/TeklaBridge.csproj",
+      "importedSha256": "2a1d17289e8e4952cc701971093be7dffe504868157d3a662a6cc3a02b5a533c"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-plugin/src/TeklaBridge/TeklaShim/BooleanOperations.cs",
+      "destination": "cad/tekla/bridge-plugin/src/TeklaBridge/TeklaShim/BooleanOperations.cs",
+      "importedSha256": "7e6580318a363580b4c8deb28dea5864b4600fe09ae52f3c7102d42b6c24f54f"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-plugin/src/TeklaBridge/TeklaShim/CutterPartFactory.cs",
+      "destination": "cad/tekla/bridge-plugin/src/TeklaBridge/TeklaShim/CutterPartFactory.cs",
+      "importedSha256": "9d57a610ba49fe7b096d9edf26474a3d38b1c37adda7df45aca0935bf16eb2a2"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-plugin/src/TeklaBridge/TeklaShim/DeckStripFactory.cs",
+      "destination": "cad/tekla/bridge-plugin/src/TeklaBridge/TeklaShim/DeckStripFactory.cs",
+      "importedSha256": "e3d8cdb9f78383e7ca2ac9a8212cf0176bf1cc1bc6fc1300642d990e1dd8fd9c"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-plugin/src/TeklaBridge/TeklaShim/PartCleanup.cs",
+      "destination": "cad/tekla/bridge-plugin/src/TeklaBridge/TeklaShim/PartCleanup.cs",
+      "importedSha256": "2c3fbe8de9ab34eceef4d50d08c6343c41515b3109b6da16072890527a18065f"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-plugin/src/TeklaBridge/TeklaShim/PlatePartFactory.cs",
+      "destination": "cad/tekla/bridge-plugin/src/TeklaBridge/TeklaShim/PlatePartFactory.cs",
+      "importedSha256": "fb59cf2272c488c7c216489fd466eb25855b93ac2d2b8fb253bad16e53ec0c00"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-plugin/src/TeklaBridge/TeklaShim/PointAdapter.cs",
+      "destination": "cad/tekla/bridge-plugin/src/TeklaBridge/TeklaShim/PointAdapter.cs",
+      "importedSha256": "a7b254757e2c71a9f342b6a17cc51b7a76a72180dcff3456fdefb7c446cc681c"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "cad/tekla/bridge-plugin/src/TeklaBridge/TeklaShim/RibFactory.cs",
+      "destination": "cad/tekla/bridge-plugin/src/TeklaBridge/TeklaShim/RibFactory.cs",
+      "importedSha256": "62ce5dd9cd5b4414a690818f0729796f34fca8d14c2dce5a04c6cd1043fec1ff"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "shared/fachwerk-geometry/src/FachwerkNodeGeometry.cs",
+      "destination": "shared/fachwerk-geometry/src/FachwerkNodeGeometry.cs",
+      "importedSha256": "39cfff62a3d187d8ce8691e7b3e2b14a0046be980361111ee15b9e1fe151bc1c"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "shared/fachwerk-geometry/src/Platform.Fachwerk.Geometry.csproj",
+      "destination": "shared/fachwerk-geometry/src/Platform.Fachwerk.Geometry.csproj",
+      "importedSha256": "380ad9520428d640a853a6f24e5cd2829830a8f51f1aeefdb9a1f39ef3a29a0a"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "shared/fachwerk-geometry/src/Polyfill/IsExternalInit.cs",
+      "destination": "shared/fachwerk-geometry/src/Polyfill/IsExternalInit.cs",
+      "importedSha256": "c646743071605922abfcea1f781979313ef298eaba51ef23516f7ea5c3af092a"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "shared/fachwerk-geometry/tests/FachwerkNodeGeometryTests.cs",
+      "destination": "shared/fachwerk-geometry/tests/FachwerkNodeGeometryTests.cs",
+      "importedSha256": "00321326fe250f8a6658f37afa583f8b8e8217c16792eaadb9abe50eaf5adb27"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "shared/fachwerk-geometry/tests/Platform.Fachwerk.Geometry.Tests.csproj",
+      "destination": "shared/fachwerk-geometry/tests/Platform.Fachwerk.Geometry.Tests.csproj",
+      "importedSha256": "0970a387107472199ce6a70ce9b6743093e0456a418dc5f54615e960ccd4f494"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "shared/bridge-geometry/src/Cuts/CutterPolygon.cs",
+      "destination": "shared/bridge-geometry/src/Cuts/CutterPolygon.cs",
+      "importedSha256": "274d8ad10fb74256cb7e7e65eb66d68be325121236116c7bbba66961478e6fbe"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "shared/bridge-geometry/src/Cuts/FlangeCutters.cs",
+      "destination": "shared/bridge-geometry/src/Cuts/FlangeCutters.cs",
+      "importedSha256": "601b73459b01ecaf3d490976e45ce3f752711efd8aa1cf7b156959e9bff1f69e"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "shared/bridge-geometry/src/Cuts/WebCutters.cs",
+      "destination": "shared/bridge-geometry/src/Cuts/WebCutters.cs",
+      "importedSha256": "ba4af59af6328ad78ad0888b25d65d36ae7c4a1b7c7275f0ccfdfe956250215c"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "shared/bridge-geometry/src/Dto/DetailBoundary.cs",
+      "destination": "shared/bridge-geometry/src/Dto/DetailBoundary.cs",
+      "importedSha256": "3baed88607130024ba382ba9c8c9ffeb97f106b6193b7cdb042c0e384195ee1f"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "shared/bridge-geometry/src/Dto/FlangeTransitionSpec.cs",
+      "destination": "shared/bridge-geometry/src/Dto/FlangeTransitionSpec.cs",
+      "importedSha256": "9edb47b7bf345f6a4bbc57b95fd2e1aedb605181bdfe8362938a7e1fde0e1b77"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "shared/bridge-geometry/src/Dto/SegLwt.cs",
+      "destination": "shared/bridge-geometry/src/Dto/SegLwt.cs",
+      "importedSha256": "08b7ff9c37fb8f2ed76ce9ab575c292027b8e03e57e107344e767a64939b69fa"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "shared/bridge-geometry/src/Dto/SlopeSeg.cs",
+      "destination": "shared/bridge-geometry/src/Dto/SlopeSeg.cs",
+      "importedSha256": "50c30e8933313b917f9ebb5ea70e38c3073f10edc643ff38903d7576535771b4"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "shared/bridge-geometry/src/Dto/ThicknessCutSpec.cs",
+      "destination": "shared/bridge-geometry/src/Dto/ThicknessCutSpec.cs",
+      "importedSha256": "9aa91921b3f9143230e05d55f4410f081c292375577e943438fff4ce53abe9ef"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "shared/bridge-geometry/src/Dto/WebLongRibSpec.cs",
+      "destination": "shared/bridge-geometry/src/Dto/WebLongRibSpec.cs",
+      "importedSha256": "3057edf9c8ba25593f96b65ff55e53b405496890ba93913dac60de7f046bcee0"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "shared/bridge-geometry/src/Dto/WebTransRibSpec.cs",
+      "destination": "shared/bridge-geometry/src/Dto/WebTransRibSpec.cs",
+      "importedSha256": "766385c35fc76ae033cf98d89d9ba5765401066fd3d352d0203f641cd519e7c1"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "shared/bridge-geometry/src/FlangeRef.cs",
+      "destination": "shared/bridge-geometry/src/FlangeRef.cs",
+      "importedSha256": "c6bd56fc00ccbc871df82a136a39e0ba1b7a3e3559944b6504f21c42d7772f54"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "shared/bridge-geometry/src/Geometry3d/Vec3.cs",
+      "destination": "shared/bridge-geometry/src/Geometry3d/Vec3.cs",
+      "importedSha256": "b44009e005c314fdb26b467a1c973ac762e4df3420e587cbb1f79e5270def750"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "shared/bridge-geometry/src/Parsing/Normalize.cs",
+      "destination": "shared/bridge-geometry/src/Parsing/Normalize.cs",
+      "importedSha256": "4a96dce541946f66e55b8e2c4fda4de791872c224c1ab3fe1992a5cc82ea6579"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "shared/bridge-geometry/src/Parsing/Parsers.cs",
+      "destination": "shared/bridge-geometry/src/Parsing/Parsers.cs",
+      "importedSha256": "846e4c1ed2449afbda54580d57649a521daf24b1855474cb993d8a9e69ace94f"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "shared/bridge-geometry/src/Parsing/RibParsers.cs",
+      "destination": "shared/bridge-geometry/src/Parsing/RibParsers.cs",
+      "importedSha256": "660a1a59209de0b02d724a5db59fceb04fcf1ebd5b5b213167b4e57475b5eeb1"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "shared/bridge-geometry/src/Placement/BeamFrame.cs",
+      "destination": "shared/bridge-geometry/src/Placement/BeamFrame.cs",
+      "importedSha256": "191cc54576bdf61ef784a8ab3866948c1069dfe3f4b28f15cb115ddd70003d8b"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "shared/bridge-geometry/src/Placement/BeamPlacement.cs",
+      "destination": "shared/bridge-geometry/src/Placement/BeamPlacement.cs",
+      "importedSha256": "1dd9b9f9afdb3cf96628e98ce35d14f02497abd22cc7e26093a0c7fc8968cbea"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "shared/bridge-geometry/src/Placement/DeckPlacement.cs",
+      "destination": "shared/bridge-geometry/src/Placement/DeckPlacement.cs",
+      "importedSha256": "f4fa5d0a05041d46e767d2c694e884d66fd711a50ff3e0627ecee2e6837aca0f"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "shared/bridge-geometry/src/Placement/PlateSpec.cs",
+      "destination": "shared/bridge-geometry/src/Placement/PlateSpec.cs",
+      "importedSha256": "426bf97e7f3eebdb87ed6dfeabd70712961a9ba8da0f653d3f8a22175bbd7d96"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "shared/bridge-geometry/src/Placement/SystemFrame.cs",
+      "destination": "shared/bridge-geometry/src/Placement/SystemFrame.cs",
+      "importedSha256": "8aec9c0fe211255a4961b301001f1c88283dcc925045323c6dd7bcf81ec1811f"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "shared/bridge-geometry/src/Platform.Bridge.Geometry.csproj",
+      "destination": "shared/bridge-geometry/src/Platform.Bridge.Geometry.csproj",
+      "importedSha256": "c8e0ed73d7afea9e5f894872bf78e7aee9a1b54c0b6fffdddae75374711fb39f"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "shared/bridge-geometry/src/Polyfill/IsExternalInit.cs",
+      "destination": "shared/bridge-geometry/src/Polyfill/IsExternalInit.cs",
+      "importedSha256": "d6d1271fdc92d73dd1fd6b8f81881aa1ee1d30678af8adc706f3b68faae322b0"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "shared/bridge-geometry/src/Rules/FlangeTransitionRules.cs",
+      "destination": "shared/bridge-geometry/src/Rules/FlangeTransitionRules.cs",
+      "importedSha256": "4e2800b86de0fce66d1c2e6ec7932fcad9650b1fe323a179412d999ee1784651"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "shared/bridge-geometry/src/Rules/RibGeometry.cs",
+      "destination": "shared/bridge-geometry/src/Rules/RibGeometry.cs",
+      "importedSha256": "691f4b96e6fa2bfaefc4a88e3b2b9d4311f8dd3d5425ebcb8480791942edf9da"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "shared/bridge-geometry/src/Rules/SegmentMath.cs",
+      "destination": "shared/bridge-geometry/src/Rules/SegmentMath.cs",
+      "importedSha256": "5da39fa7b551d7b16b02f431c74fffe4bf787dde5499ecc582a7ce63aae3ffc5"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "shared/bridge-geometry/src/StressZone.cs",
+      "destination": "shared/bridge-geometry/src/StressZone.cs",
+      "importedSha256": "0348066e0b877d9e2270c40ff6710a0ab4f6c5b48293f4b8d3c841c5c3ffb5a0"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "shared/bridge-geometry/tests/Cuts/FlangeCuttersTests.cs",
+      "destination": "shared/bridge-geometry/tests/Cuts/FlangeCuttersTests.cs",
+      "importedSha256": "6c726f6f2ba004547358df97f1bd3a3c01312cbd16aa8d40701d51e94ccd0e9f"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "shared/bridge-geometry/tests/Geometry3d/Vec3Tests.cs",
+      "destination": "shared/bridge-geometry/tests/Geometry3d/Vec3Tests.cs",
+      "importedSha256": "f673f06cc3327177062a46d9611c7caac79a770def9a5cb8ebb43cd517233569"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "shared/bridge-geometry/tests/Parsing/NormalizeTests.cs",
+      "destination": "shared/bridge-geometry/tests/Parsing/NormalizeTests.cs",
+      "importedSha256": "e6fdad5cd08d3084a06fc209428d2e647f49fc54368a81cd4d5e431458f2f70f"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "shared/bridge-geometry/tests/Parsing/ParsersTests.cs",
+      "destination": "shared/bridge-geometry/tests/Parsing/ParsersTests.cs",
+      "importedSha256": "a3b9e3a79cc20394ed193fc12ec8b15c134a5fffeabbaed5dac3437c34fe98c6"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "shared/bridge-geometry/tests/Parsing/RibParsersTests.cs",
+      "destination": "shared/bridge-geometry/tests/Parsing/RibParsersTests.cs",
+      "importedSha256": "12549a7618bd2c01522d8af11a4be66f296fcead2008d748b4dee78279296ae7"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "shared/bridge-geometry/tests/Placement/BeamFrameTests.cs",
+      "destination": "shared/bridge-geometry/tests/Placement/BeamFrameTests.cs",
+      "importedSha256": "6864942725fcc89673ff58c52aec002caa6db8372142d93561c92571ed959950"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "shared/bridge-geometry/tests/Placement/DeckPlacementTests.cs",
+      "destination": "shared/bridge-geometry/tests/Placement/DeckPlacementTests.cs",
+      "importedSha256": "3a0bf11ed2f02d5b43071a7e46b9eda57f093a39d0f9de20a2c8718a92157ec9"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "shared/bridge-geometry/tests/Placement/PlacementTests.cs",
+      "destination": "shared/bridge-geometry/tests/Placement/PlacementTests.cs",
+      "importedSha256": "9fb01f1319d153d6ee63a57acd2f43665e87c3f238579e6e1c079105687edc70"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "shared/bridge-geometry/tests/Placement/SystemFrameTests.cs",
+      "destination": "shared/bridge-geometry/tests/Placement/SystemFrameTests.cs",
+      "importedSha256": "9cc056a0ab30905a7ca890101471dcd6fe342e5cec6700ef938c87044309ed54"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "shared/bridge-geometry/tests/Platform.Bridge.Geometry.Tests.csproj",
+      "destination": "shared/bridge-geometry/tests/Platform.Bridge.Geometry.Tests.csproj",
+      "importedSha256": "9a964e0e58afe9dde034f77cf3e12e620dbde6a501ffd1a45a9c471bd5521a76"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "shared/bridge-geometry/tests/Rules/FlangeTransitionRulesTests.cs",
+      "destination": "shared/bridge-geometry/tests/Rules/FlangeTransitionRulesTests.cs",
+      "importedSha256": "90c1dab5899492fcea07c7b49452416e2d60037bf43bf162b66d1c55034b98eb"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "shared/bridge-geometry/tests/Rules/RibGeometryTests.cs",
+      "destination": "shared/bridge-geometry/tests/Rules/RibGeometryTests.cs",
+      "importedSha256": "6da2aa38eb8485227b8c7fbcbef5cddcd924a6ec01a5aa3e282fb9db047ca107"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "shared/bridge-geometry/tests/Rules/SegmentMathTests.cs",
+      "destination": "shared/bridge-geometry/tests/Rules/SegmentMathTests.cs",
+      "importedSha256": "dbc361c1d40a3f43545f14a1a856ff223832fb66ff7dcc160be4f1bfd73fc67a"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "shared/bridge-geometry/tests/StressZoneTests.cs",
+      "destination": "shared/bridge-geometry/tests/StressZoneTests.cs",
+      "importedSha256": "13416f2baa76177c7e671debf0477b679de07db61a3167f33fbb6dd978879b07"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "shared/bridge-geometry/tests/fixtures/flange-transition-cases.json",
+      "destination": "shared/bridge-geometry/tests/fixtures/flange-transition-cases.json",
+      "importedSha256": "b2df9ba1e517094749f2ab99b0518eee7f0a669dd9588f33805b142e0a2ff6e9"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "shared/contracts/connector-job-envelope-v1.schema.json",
+      "destination": "shared/contracts/connector-job-envelope-v1.schema.json",
+      "importedSha256": "ebf2a4a707cb592aa975882ff5054685b3aae84f7aec6d3849cf1e4a2d89a6c9"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "shared/contracts/connector-job-status-v1.schema.json",
+      "destination": "shared/contracts/connector-job-status-v1.schema.json",
+      "importedSha256": "9bb6b6e78f8b0810e261d88fd6908521431490224190806544da87660c92b4a7"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "shared/contracts/dotnet/Platform.Contracts.Geometry.Tests/Platform.Contracts.Geometry.Tests.csproj",
+      "destination": "shared/contracts/dotnet/Platform.Contracts.Geometry.Tests/Platform.Contracts.Geometry.Tests.csproj",
+      "importedSha256": "540b75e9b4ae260da8cc6387bb98b64a88afefc2ab31341b7b16e4a36e941fe7"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "shared/contracts/dotnet/Platform.Contracts.Geometry.Tests/RoundTripTests.cs",
+      "destination": "shared/contracts/dotnet/Platform.Contracts.Geometry.Tests/RoundTripTests.cs",
+      "importedSha256": "148c5061b2a35974f4fd86ea5de61ff73adceb80490bd422138c29e74f245cf8"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "shared/contracts/dotnet/Platform.Contracts.Geometry/Curves.cs",
+      "destination": "shared/contracts/dotnet/Platform.Contracts.Geometry/Curves.cs",
+      "importedSha256": "a4664ab99da61943b7a3c723d762e6291e48527ac1619a5f84f1caf0de8d5a91"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "shared/contracts/dotnet/Platform.Contracts.Geometry/GeometryGraph.cs",
+      "destination": "shared/contracts/dotnet/Platform.Contracts.Geometry/GeometryGraph.cs",
+      "importedSha256": "91bdc1faddb4f59d54faa4a4bfa6ccdfa631569e908a08330fda945194903064"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "shared/contracts/dotnet/Platform.Contracts.Geometry/Platform.Contracts.Geometry.csproj",
+      "destination": "shared/contracts/dotnet/Platform.Contracts.Geometry/Platform.Contracts.Geometry.csproj",
+      "importedSha256": "1ed42545c2746f233e51d8c01656ecba357784bbdc422bf7ad7bae2af97b35fb"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "shared/contracts/dotnet/Platform.Contracts.Geometry/Profiles.cs",
+      "destination": "shared/contracts/dotnet/Platform.Contracts.Geometry/Profiles.cs",
+      "importedSha256": "e2df71e21e71d580d7b72170282afd4b376683423c4a7473f2f00e9f41411a29"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "shared/contracts/dotnet/Platform.Contracts.Geometry/SolidNodes.cs",
+      "destination": "shared/contracts/dotnet/Platform.Contracts.Geometry/SolidNodes.cs",
+      "importedSha256": "2a90ab9026802c2dbac6c2d8d0633c82a051cf5df4ac8e0e94e702c407cefbcf"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "shared/contracts/dotnet/Platform.Contracts.Geometry/Vec.cs",
+      "destination": "shared/contracts/dotnet/Platform.Contracts.Geometry/Vec.cs",
+      "importedSha256": "7d07916674218905b2a3f91340e135af1a3ccd0b7f0124913da8728e93ef691a"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "shared/contracts/dotnet/Platform.Contracts.TeklaPlan.Tests/Fixtures/developed-plate-actual.json",
+      "destination": "shared/contracts/dotnet/Platform.Contracts.TeklaPlan.Tests/Fixtures/developed-plate-actual.json",
+      "importedSha256": "bf1ec7f103c003b271d7b5e3855fb9b708ef175cbdff6165d9d72972a8668c14"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "shared/contracts/dotnet/Platform.Contracts.TeklaPlan.Tests/Fixtures/developed-plate-processed.json",
+      "destination": "shared/contracts/dotnet/Platform.Contracts.TeklaPlan.Tests/Fixtures/developed-plate-processed.json",
+      "importedSha256": "ea09b8612e8be97441b5d8e465af6f6b0becd5c2d56df97c4f02cda6569fa2cb"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "shared/contracts/dotnet/Platform.Contracts.TeklaPlan.Tests/Fixtures/edge-preparation-K.json",
+      "destination": "shared/contracts/dotnet/Platform.Contracts.TeklaPlan.Tests/Fixtures/edge-preparation-K.json",
+      "importedSha256": "b0cd494a3fa758172b22780a2ada6f98094e8007eaa8ff8b1dec085266339c85"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "shared/contracts/dotnet/Platform.Contracts.TeklaPlan.Tests/Fixtures/edge-preparation-V.json",
+      "destination": "shared/contracts/dotnet/Platform.Contracts.TeklaPlan.Tests/Fixtures/edge-preparation-V.json",
+      "importedSha256": "b046bb150ccc3110f44590f41f58c012259c0b6ca0b95010964c906ec1e403f1"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "shared/contracts/dotnet/Platform.Contracts.TeklaPlan.Tests/Fixtures/edge-preparation-X.json",
+      "destination": "shared/contracts/dotnet/Platform.Contracts.TeklaPlan.Tests/Fixtures/edge-preparation-X.json",
+      "importedSha256": "f4ae36f8da4181dfdc5a3e2206f06df76436f40d79d1d54caefbba8e2fc2017f"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "shared/contracts/dotnet/Platform.Contracts.TeklaPlan.Tests/Platform.Contracts.TeklaPlan.Tests.csproj",
+      "destination": "shared/contracts/dotnet/Platform.Contracts.TeklaPlan.Tests/Platform.Contracts.TeklaPlan.Tests.csproj",
+      "importedSha256": "b44aab6fe336d78f11e852092ff8af55b87c2d25d706d42999fe27fd9a84f73e"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "shared/contracts/dotnet/Platform.Contracts.TeklaPlan.Tests/TeklaDevelopedPlateReadbackTests.cs",
+      "destination": "shared/contracts/dotnet/Platform.Contracts.TeklaPlan.Tests/TeklaDevelopedPlateReadbackTests.cs",
+      "importedSha256": "f0bfc2e991eb59c6dabd02293fdb6ccbeea1285299a798e848a2ecdb67ab640c"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "shared/contracts/dotnet/Platform.Contracts.TeklaPlan.Tests/TeklaPlanExtendedPayloadTests.cs",
+      "destination": "shared/contracts/dotnet/Platform.Contracts.TeklaPlan.Tests/TeklaPlanExtendedPayloadTests.cs",
+      "importedSha256": "f8f91498713c66c38f59093c4c7110abeb3af6d58d4a69105f716289fe7dbc0e"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "shared/contracts/dotnet/Platform.Contracts.TeklaPlan.Tests/TeklaPlanFeatureResolverTests.cs",
+      "destination": "shared/contracts/dotnet/Platform.Contracts.TeklaPlan.Tests/TeklaPlanFeatureResolverTests.cs",
+      "importedSha256": "6526c25adf1c64aef81736183a343334c9f4119d0e20bb2e6809f0fa1b5e6b46"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "shared/contracts/dotnet/Platform.Contracts.TeklaPlan.Tests/TeklaPlanOwnershipIdentityTests.cs",
+      "destination": "shared/contracts/dotnet/Platform.Contracts.TeklaPlan.Tests/TeklaPlanOwnershipIdentityTests.cs",
+      "importedSha256": "bc7922c5d3eee7e63db8f96d4f22478d45a8e16f80fdada493dae3662c40e229"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "shared/contracts/dotnet/Platform.Contracts.TeklaPlan.Tests/TeklaPlanPreparerTests.cs",
+      "destination": "shared/contracts/dotnet/Platform.Contracts.TeklaPlan.Tests/TeklaPlanPreparerTests.cs",
+      "importedSha256": "8327d35ea5d264e810a837d00f67eab48b8b1b86ecda2c27af0b592aab588976"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "shared/contracts/dotnet/Platform.Contracts.TeklaPlan.Tests/TeklaPlanTransactionTests.cs",
+      "destination": "shared/contracts/dotnet/Platform.Contracts.TeklaPlan.Tests/TeklaPlanTransactionTests.cs",
+      "importedSha256": "8da845d70a5b58bfb57fe1a5943ca6d362c9af78f6c46085b534c98730fc1937"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "shared/contracts/dotnet/Platform.Contracts.TeklaPlan.Tests/TeklaPlanValidatorTests.cs",
+      "destination": "shared/contracts/dotnet/Platform.Contracts.TeklaPlan.Tests/TeklaPlanValidatorTests.cs",
+      "importedSha256": "a02a0a6ff89f5af2390e60be284b98c2308921cfb461f85c2f7cb5297f3e5ed7"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "shared/contracts/dotnet/Platform.Contracts.TeklaPlan/Platform.Contracts.TeklaPlan.csproj",
+      "destination": "shared/contracts/dotnet/Platform.Contracts.TeklaPlan/Platform.Contracts.TeklaPlan.csproj",
+      "importedSha256": "7e0d8d35d6afd7a53bb7d3fbe4097bf0ceace36faf979ab6d6ab4b2425241c41"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "shared/contracts/dotnet/Platform.Contracts.TeklaPlan/TeklaDevelopedPlateReadback.cs",
+      "destination": "shared/contracts/dotnet/Platform.Contracts.TeklaPlan/TeklaDevelopedPlateReadback.cs",
+      "importedSha256": "c1ffb4a9da19c8ca6e2bbb84344ec5ed5af38a6efbfcaa375c851d4b988cf4c7"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "shared/contracts/dotnet/Platform.Contracts.TeklaPlan/TeklaPlanContracts.cs",
+      "destination": "shared/contracts/dotnet/Platform.Contracts.TeklaPlan/TeklaPlanContracts.cs",
+      "importedSha256": "8553967783d440ef6a16286010ea97420b129a8950df43993c231d5a9e4797b0"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "shared/contracts/dotnet/Platform.Contracts.TeklaPlan/TeklaPlanExecution.cs",
+      "destination": "shared/contracts/dotnet/Platform.Contracts.TeklaPlan/TeklaPlanExecution.cs",
+      "importedSha256": "20d1e8a04e072a59e6048b97981f197ee824e30e95fa4dfc22c1812cfbe737de"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "shared/contracts/dotnet/Platform.Contracts.TeklaPlan/TeklaPlanFeatureResolver.cs",
+      "destination": "shared/contracts/dotnet/Platform.Contracts.TeklaPlan/TeklaPlanFeatureResolver.cs",
+      "importedSha256": "3c9d612e4dbeb92ab12731353b8e9db2d11fdc2f94f4701ab1e4fc340107e421"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "shared/contracts/dotnet/Platform.Contracts.TeklaPlan/TeklaPlanOwnershipIdentity.cs",
+      "destination": "shared/contracts/dotnet/Platform.Contracts.TeklaPlan/TeklaPlanOwnershipIdentity.cs",
+      "importedSha256": "e5731c5f48978b24cb7cc858ae961accdf5e5d56ec7407f7ab181c96de75a605"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "shared/contracts/dotnet/Platform.Contracts.TeklaPlan/TeklaPlanPayloads.cs",
+      "destination": "shared/contracts/dotnet/Platform.Contracts.TeklaPlan/TeklaPlanPayloads.cs",
+      "importedSha256": "ebebbcad913f4178c4f486cade9a338854a02119fc1bd91dcc3c28dcb66c64db"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "shared/contracts/dotnet/Platform.Contracts.TeklaPlan/TeklaPlanTransaction.cs",
+      "destination": "shared/contracts/dotnet/Platform.Contracts.TeklaPlan/TeklaPlanTransaction.cs",
+      "importedSha256": "074dc21c77aecf2739d9c38373c148569ce2d5806da4fd327872f76d5dc09806"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "shared/contracts/dotnet/Platform.Contracts.TeklaPlan/TeklaPlanValidation.cs",
+      "destination": "shared/contracts/dotnet/Platform.Contracts.TeklaPlan/TeklaPlanValidation.cs",
+      "importedSha256": "9e39431584548e9a2d1441c4770a505726f7980abdbbf831909a3d413fc744d4"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "shared/contracts/entity-id-parity.json",
+      "destination": "shared/contracts/entity-id-parity.json",
+      "importedSha256": "d4cd6c1db6386fab9ea43d4f7a7ca7965c49cfd6887758f0ace7480d1cc3a46b"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "shared/contracts/modeling/constructive/constructive-document-v1.schema.json",
+      "destination": "shared/contracts/modeling/constructive/constructive-document-v1.schema.json",
+      "importedSha256": "2a9588a139af0edff51bb0a28d0087a86b69344f664251854870a270053e0bcd"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "shared/contracts/modeling/constructive/tekla-plan-v1.schema.json",
+      "destination": "shared/contracts/modeling/constructive/tekla-plan-v1.schema.json",
+      "importedSha256": "d1b4eae69e210c961e67678b46fd30d59db5aeed08c1b90587a0a2924bd571a3"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "shared/contracts/modules/agr-publication/profiles/moscow-agr-2024-05-30.json",
+      "destination": "shared/contracts/modules/agr-publication/profiles/moscow-agr-2024-05-30.json",
+      "importedSha256": "135a8a4736a7396faa7524832fc841ca736e4a32b1e0d44aff13fbdc849d10ee"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "shared/contracts/modules/agr-publication/profiles/moscow-agr-2025-08-22.json",
+      "destination": "shared/contracts/modules/agr-publication/profiles/moscow-agr-2025-08-22.json",
+      "importedSha256": "1452346bf11a8de7fe3c1bcdd148f54fa2209f52e17c4a56048b7610b993bf4d"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "shared/contracts/modules/agr-publication/publication-build-manifest-v1.schema.json",
+      "destination": "shared/contracts/modules/agr-publication/publication-build-manifest-v1.schema.json",
+      "importedSha256": "24d6aa0dc9bb4e778e50ad2edaae72efe4c0ce1951466c9a75e625266b8d320d"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "shared/contracts/modules/agr-publication/publication-mesh-package-v1.schema.json",
+      "destination": "shared/contracts/modules/agr-publication/publication-mesh-package-v1.schema.json",
+      "importedSha256": "de0d1ce2f67c9aa1ae2f0302f933785af6679e82faef72562fd5f73752496988"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "shared/contracts/modules/agr-publication/requirements-profile-v1.schema.json",
+      "destination": "shared/contracts/modules/agr-publication/requirements-profile-v1.schema.json",
+      "importedSha256": "d6e3743dbda0f2b5fcf55a863b035358cf7a20fac9fdfe226f5f58b16acfd2a2"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "shared/contracts/modules/bns-piles/autocad-build-v1.schema.json",
+      "destination": "shared/contracts/modules/bns-piles/autocad-build-v1.schema.json",
+      "importedSha256": "95283208f77025050bfbbd6b3a8aa83625e8e1a414621941526ae95e0e8f6439"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "shared/contracts/modules/bns-piles/tekla-apply-v1.schema.json",
+      "destination": "shared/contracts/modules/bns-piles/tekla-apply-v1.schema.json",
+      "importedSha256": "8fd99a58f8fd12ed10122cd5d97dc19fc5b038e2451c1571e2ded6ad588efabe"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "shared/contracts/modules/bridge/autocad-build-v1.schema.json",
+      "destination": "shared/contracts/modules/bridge/autocad-build-v1.schema.json",
+      "importedSha256": "028db0582371606e8aae68ac2df14aff934f306537587d955d93fd4ade3663e1"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "shared/contracts/modules/bridge/tekla-apply-v1.schema.json",
+      "destination": "shared/contracts/modules/bridge/tekla-apply-v1.schema.json",
+      "importedSha256": "5a916a3f2cc809ba9f2d8f78a6a0f67be80fdafc54da30a5dad0832a8a33598d"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "shared/contracts/modules/shze/autocad-build-v1.schema.json",
+      "destination": "shared/contracts/modules/shze/autocad-build-v1.schema.json",
+      "importedSha256": "b49f65d7b7fc602b89aa7b3a0f787c576d9141cc64a25b706ef81f1818d6f78c"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "shared/contracts/modules/shze/tekla-apply-v1.schema.json",
+      "destination": "shared/contracts/modules/shze/tekla-apply-v1.schema.json",
+      "importedSha256": "402d80eaf9c0ba4ff77d18645f5f0d25bdc1fd57e5da1d9e29bb64265d6053f0"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "shared/contracts/modules/tekla-kmd/change-set.schema.json",
+      "destination": "shared/contracts/modules/tekla-kmd/change-set.schema.json",
+      "importedSha256": "acca6d8614ee0bbf74275773f4e7052cb797642d5decf3a068665c65e05d8d3c"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "shared/contracts/modules/tekla-kmd/model-scan.schema.json",
+      "destination": "shared/contracts/modules/tekla-kmd/model-scan.schema.json",
+      "importedSha256": "3da2428c98b0747e76c137c8f5ff9b6ed4ffcdd061410d9279afd3ea98b8aeb4"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "shared/contracts/norms/index.ts",
+      "destination": "shared/contracts/norms/index.ts",
+      "importedSha256": "47619b2c402fb11361c69c44c38ea9c65e350231897a73412353f5ee9f5dffe9"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "shared/contracts/norms/norm-document.schema.json",
+      "destination": "shared/contracts/norms/norm-document.schema.json",
+      "importedSha256": "6ce35a0a0fcf3220c120145b9f1a47e008bf89668165820bc2d5f4953c92878f"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/platform",
+      "revision": "c889f4a087998b14896d695e401be5a6bbfb227c",
+      "source": "shared/contracts/norms/normative-document.schema.json",
+      "destination": "shared/contracts/norms/normative-document.schema.json",
+      "importedSha256": "4639ef64af161ac1da892deef9229d33f71cf51ab16c93ca39b0b5cf9b93a5c3"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/structura",
+      "revision": "1c625fe46a8b1e7b4f1476428eb853e6b279c399",
+      "source": "apps/ifc-optimizer-desktop/engine/README.md",
+      "destination": "workers/ifc-optimizer/README.md",
+      "importedSha256": "457eafc4c00f8d17df5ec8ff4758584678dc50b8ee9604799be3850ea510f309"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/structura",
+      "revision": "1c625fe46a8b1e7b4f1476428eb853e6b279c399",
+      "source": "apps/ifc-optimizer-desktop/engine/packaging/engine_entry.py",
+      "destination": "workers/ifc-optimizer/packaging/engine_entry.py",
+      "importedSha256": "4aa9fe25e169de234f24dd311f9867a49a6360daf1731b47babca7895076b7fb"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/structura",
+      "revision": "1c625fe46a8b1e7b4f1476428eb853e6b279c399",
+      "source": "apps/ifc-optimizer-desktop/engine/pyproject.toml",
+      "destination": "workers/ifc-optimizer/pyproject.toml",
+      "importedSha256": "1db816dd4720c0e49e969dc5ac4c327e109f8353ca62aae1d9d0945418bb7175"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/structura",
+      "revision": "1c625fe46a8b1e7b4f1476428eb853e6b279c399",
+      "source": "apps/ifc-optimizer-desktop/engine/src/structura_ifc_optimizer/__init__.py",
+      "destination": "workers/ifc-optimizer/src/structura_ifc_optimizer/__init__.py",
+      "importedSha256": "1a07a36211a2b3299e3c3641e031e0c2a5a92ee79a54aa476cd5bb541f4d3c81"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/structura",
+      "revision": "1c625fe46a8b1e7b4f1476428eb853e6b279c399",
+      "source": "apps/ifc-optimizer-desktop/engine/src/structura_ifc_optimizer/__main__.py",
+      "destination": "workers/ifc-optimizer/src/structura_ifc_optimizer/__main__.py",
+      "importedSha256": "935a1c1166b0c1ea35a82256345000bf2c73ded718d77773bc27a71ecce28f7d"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/structura",
+      "revision": "1c625fe46a8b1e7b4f1476428eb853e6b279c399",
+      "source": "apps/ifc-optimizer-desktop/engine/src/structura_ifc_optimizer/analysis.py",
+      "destination": "workers/ifc-optimizer/src/structura_ifc_optimizer/analysis.py",
+      "importedSha256": "7773fe33c9e0fa6db21ba2f29b4addc1c1ac40d0f65a1b0c2fb95d4703b34507"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/structura",
+      "revision": "1c625fe46a8b1e7b4f1476428eb853e6b279c399",
+      "source": "apps/ifc-optimizer-desktop/engine/src/structura_ifc_optimizer/cli.py",
+      "destination": "workers/ifc-optimizer/src/structura_ifc_optimizer/cli.py",
+      "importedSha256": "531e96cefcfa49d07cba5bcff60ba3ad777ec8cabf47ee0d06adc35b3da3d964"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/structura",
+      "revision": "1c625fe46a8b1e7b4f1476428eb853e6b279c399",
+      "source": "apps/ifc-optimizer-desktop/engine/src/structura_ifc_optimizer/events.py",
+      "destination": "workers/ifc-optimizer/src/structura_ifc_optimizer/events.py",
+      "importedSha256": "0c8b37557519f4994042b9bb9b730982d839c0b4d62ae6606d5f76282e0c38f4"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/structura",
+      "revision": "1c625fe46a8b1e7b4f1476428eb853e6b279c399",
+      "source": "apps/ifc-optimizer-desktop/engine/src/structura_ifc_optimizer/extrusion.py",
+      "destination": "workers/ifc-optimizer/src/structura_ifc_optimizer/extrusion.py",
+      "importedSha256": "4dac8f26434a067c962e421058ff8bd42ebe180b00c5640e676287784b52bcec"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/structura",
+      "revision": "1c625fe46a8b1e7b4f1476428eb853e6b279c399",
+      "source": "apps/ifc-optimizer-desktop/engine/src/structura_ifc_optimizer/geometry_validation.py",
+      "destination": "workers/ifc-optimizer/src/structura_ifc_optimizer/geometry_validation.py",
+      "importedSha256": "b0946e57dbf66cd8b8adaad332f2f85c18a5618d81b7c162bb514290156ddabc"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/structura",
+      "revision": "1c625fe46a8b1e7b4f1476428eb853e6b279c399",
+      "source": "apps/ifc-optimizer-desktop/engine/src/structura_ifc_optimizer/io_utils.py",
+      "destination": "workers/ifc-optimizer/src/structura_ifc_optimizer/io_utils.py",
+      "importedSha256": "f05f10a54ce983c6275bf28e50e4f4e940a669a5800b05c0d0041a16370cceb4"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/structura",
+      "revision": "1c625fe46a8b1e7b4f1476428eb853e6b279c399",
+      "source": "apps/ifc-optimizer-desktop/engine/src/structura_ifc_optimizer/jobs.py",
+      "destination": "workers/ifc-optimizer/src/structura_ifc_optimizer/jobs.py",
+      "importedSha256": "120cefbd4205af405dea0dd7a6344350c1f2190342c38ba3f3c1fff4b8f8f4be"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/structura",
+      "revision": "1c625fe46a8b1e7b4f1476428eb853e6b279c399",
+      "source": "apps/ifc-optimizer-desktop/engine/src/structura_ifc_optimizer/manifest.py",
+      "destination": "workers/ifc-optimizer/src/structura_ifc_optimizer/manifest.py",
+      "importedSha256": "176a01fc68664af7a93623d19cec20258ef63fd9cc195a5d9b8f63bb4df4956d"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/structura",
+      "revision": "1c625fe46a8b1e7b4f1476428eb853e6b279c399",
+      "source": "apps/ifc-optimizer-desktop/engine/src/structura_ifc_optimizer/normalization.py",
+      "destination": "workers/ifc-optimizer/src/structura_ifc_optimizer/normalization.py",
+      "importedSha256": "2ed13a2cfaa93fb2707a5c44008bf83e131554a7cc110539b24130306333bebd"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/structura",
+      "revision": "1c625fe46a8b1e7b4f1476428eb853e6b279c399",
+      "source": "apps/ifc-optimizer-desktop/engine/src/structura_ifc_optimizer/optimize.py",
+      "destination": "workers/ifc-optimizer/src/structura_ifc_optimizer/optimize.py",
+      "importedSha256": "6babbcc5c1a23b906771f783b784ad2e5b2f908ff5121263bbc94d60e8e7cb0f"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/structura",
+      "revision": "1c625fe46a8b1e7b4f1476428eb853e6b279c399",
+      "source": "apps/ifc-optimizer-desktop/engine/src/structura_ifc_optimizer/orientation.py",
+      "destination": "workers/ifc-optimizer/src/structura_ifc_optimizer/orientation.py",
+      "importedSha256": "64339610c879fd8f115a90fbb7b8f8b5faf6e957785b97bbb1084a4f540491fc"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/structura",
+      "revision": "1c625fe46a8b1e7b4f1476428eb853e6b279c399",
+      "source": "apps/ifc-optimizer-desktop/engine/src/structura_ifc_optimizer/pipeline.py",
+      "destination": "workers/ifc-optimizer/src/structura_ifc_optimizer/pipeline.py",
+      "importedSha256": "95ddab5cb469ecca2693ba14fbeeb34ffeb2aef579fb33f6db654cd34bddb785"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/structura",
+      "revision": "1c625fe46a8b1e7b4f1476428eb853e6b279c399",
+      "source": "apps/ifc-optimizer-desktop/engine/src/structura_ifc_optimizer/planar.py",
+      "destination": "workers/ifc-optimizer/src/structura_ifc_optimizer/planar.py",
+      "importedSha256": "aaeb63d782a13e6a2fb43fed3e1e3a4b270902315298e78b251d019ec5a1c71d"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/structura",
+      "revision": "1c625fe46a8b1e7b4f1476428eb853e6b279c399",
+      "source": "apps/ifc-optimizer-desktop/engine/src/structura_ifc_optimizer/protocol.py",
+      "destination": "workers/ifc-optimizer/src/structura_ifc_optimizer/protocol.py",
+      "importedSha256": "61a83e9bc8cfdde274f44a06c0b48526aadace675d79aef3f85dbba49ac96e5b"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/structura",
+      "revision": "1c625fe46a8b1e7b4f1476428eb853e6b279c399",
+      "source": "apps/ifc-optimizer-desktop/engine/src/structura_ifc_optimizer/validation.py",
+      "destination": "workers/ifc-optimizer/src/structura_ifc_optimizer/validation.py",
+      "importedSha256": "e853b28a0ed392864762f62ba82a8caac0977e8b828db0fdd9e61032025e8141"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/structura",
+      "revision": "1c625fe46a8b1e7b4f1476428eb853e6b279c399",
+      "source": "apps/ifc-optimizer-desktop/engine/tests/test_cli.py",
+      "destination": "workers/ifc-optimizer/tests/test_cli.py",
+      "importedSha256": "993896b9346c7c5a34139866d8f1e7673eb1cf48fd0c89a130e69619350d7f35"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/structura",
+      "revision": "1c625fe46a8b1e7b4f1476428eb853e6b279c399",
+      "source": "apps/ifc-optimizer-desktop/engine/tests/test_mapping_reuse.py",
+      "destination": "workers/ifc-optimizer/tests/test_mapping_reuse.py",
+      "importedSha256": "5a4256b04df0a4805fc44f8911bd960bebcc782432adf80fd47d387557377cdd"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/structura",
+      "revision": "1c625fe46a8b1e7b4f1476428eb853e6b279c399",
+      "source": "apps/ifc-optimizer-desktop/engine/tests/test_orientation.py",
+      "destination": "workers/ifc-optimizer/tests/test_orientation.py",
+      "importedSha256": "710df8a740caabe8c836c7766a758d093e88621dc514cfc8da64da3fb92dd9bf"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/structura",
+      "revision": "1c625fe46a8b1e7b4f1476428eb853e6b279c399",
+      "source": "apps/ifc-optimizer-desktop/engine/tests/test_pipeline.py",
+      "destination": "workers/ifc-optimizer/tests/test_pipeline.py",
+      "importedSha256": "4f84f2749bfc86e89305f74880d34733dbeadc6c3ffc7d51be5bad5a7b6c239e"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/structura",
+      "revision": "1c625fe46a8b1e7b4f1476428eb853e6b279c399",
+      "source": "apps/ifc-optimizer-desktop/engine/tests/test_planar.py",
+      "destination": "workers/ifc-optimizer/tests/test_planar.py",
+      "importedSha256": "c0522e3c6e2aaa0d9c9376a44ec8c51cbe5e631bd7b43255beec42b4d2205585"
+    },
+    {
+      "repository": "https://github.com/PROBIM55/structura",
+      "revision": "1c625fe46a8b1e7b4f1476428eb853e6b279c399",
+      "source": "apps/ifc-optimizer-desktop/engine/tests/test_protocol.py",
+      "destination": "workers/ifc-optimizer/tests/test_protocol.py",
+      "importedSha256": "3aa35b0d3dd10b1a6feff7de6b5234c8a363872cddd9e62bbd26c1c53b43cdbc"
+    }
+  ]
+}

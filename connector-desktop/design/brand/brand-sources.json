@@ -1,0 +1,30 @@
+{
+  "structura": {
+    "source": "G:/00_Projects/Structura_Main/frontend/src/assets/logos/structura_logo.png",
+    "productionPage": "https://app.structura-most.ru/",
+    "productionAsset": "https://app.structura-most.ru/assets/structura_logo-DDW_b-Jm.png",
+    "sha256": "b65dce4e6e2923d279653b3a8d5cdd8c27de09f4b3d5e52eef21f1a046e7fd2d",
+    "treatment": "Exact source copy, no brand modifications"
+  },
+  "platform": {
+    "status": "Form approved by user on 2026-10-01; vector and responsive favicon geometry follow in D3",
+    "revision": 3,
+    "default": "platform-field-refined-v3.png",
+    "directions": [
+      "field"
+    ],
+    "rejectedDirections": [
+      "portal",
+      "plan",
+      "section",
+      "shell",
+      "joint",
+      "space",
+      "assembly"
+    ],
+    "generator": "built-in image_gen, transparent_background=true",
+    "promptSet": "platform-logo-v3-prompts.json",
+    "sourceDirectory": "C:/Users/Lagom/.codex/generated_images/01a0f5b1-1c15-79d0-b7dc-6eda4bc887bd",
+    "deliverableStatus": "Approved raster direction; production SVG, ICO and 16-24px geometry are not completed"
+  }
+}

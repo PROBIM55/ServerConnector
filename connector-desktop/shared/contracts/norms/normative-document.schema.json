@@ -1,0 +1,271 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://structura/contracts/norms/normative-document.schema.json",
+  "title": "Normative Document (Structura.Norms)",
+  "description": "Внутренний стандарт машиночитаемой нормативки: документ как набор проверяемых объектов (пункты/формулы/переменные/условия/рисунки/таблицы/алгоритмы), каждый с источником (страница+bbox+хеш PDF), представлениями формул (image/latex/mathml/ast) и статусом верификации. НЕ PDF→Markdown, а PDF→база нормативных положений. См. docs/модуль_нормативка/01_архитектура_и_формат.md.",
+  "type": "object",
+  "required": ["schemaVersion", "document", "nodes", "provenance"],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": { "const": 2 },
+    "document": { "$ref": "#/$defs/document" },
+    "nodes": { "type": "array", "items": { "$ref": "#/$defs/node" }, "description": "Дерево документа (уровень 2): разделы/приложения/пункты/абзацы/подписи." },
+    "variables": { "type": "array", "items": { "$ref": "#/$defs/variable" }, "description": "Глобальный реестр переменных с единицами. Формулы ссылаются на variable.id." },
+    "formulas": { "type": "array", "items": { "$ref": "#/$defs/formula" } },
+    "figures": { "type": "array", "items": { "$ref": "#/$defs/figure" } },
+    "tables": { "type": "array", "items": { "$ref": "#/$defs/table" } },
+    "algorithms": { "type": "array", "items": { "$ref": "#/$defs/algorithm" }, "description": "Уровень 5: алгоритм применения формул (ветвления по условиям)." },
+    "provenance": { "$ref": "#/$defs/provenance" }
+  },
+
+  "$defs": {
+    "document": {
+      "type": "object",
+      "required": ["id", "code", "title"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "description": "sp63_13330_2018" },
+        "code": { "type": "string", "description": "СП 63.13330.2018" },
+        "title": { "type": "string" },
+        "edition": { "type": "string" },
+        "version": { "type": "string", "description": "2018_with_changes_1_2" },
+        "status": { "enum": ["active", "superseded", "draft"] },
+        "supersedes": { "type": "string" },
+        "language": { "type": "string", "default": "ru" },
+        "sourceType": { "enum": ["pdf_born_digital", "pdf_scanned"] },
+        "officialSourceUrl": { "type": "string" },
+        "pdfHash": { "type": "string", "description": "SHA-256 исходного PDF (неизменяемый источник, уровень 0)." }
+      }
+    },
+
+    "source": {
+      "type": "object",
+      "description": "Привязка элемента к исходной странице (уровень 0): чтобы доказать «вот формула, вот её место на странице».",
+      "required": ["page"],
+      "additionalProperties": false,
+      "properties": {
+        "page": { "type": "integer", "minimum": 0, "description": "Индекс страницы PDF (0-based)." },
+        "clause": { "type": "string", "description": "Номер пункта-источника, напр. '7.62' или 'табл. 7.24'." },
+        "label": { "type": "string", "description": "Метка формулы в документе, напр. 'Д.8' или '(7.19)'." },
+        "bbox": {
+          "type": "array", "items": { "type": "number" }, "minItems": 4, "maxItems": 4,
+          "description": "[x0,y0,x1,y1] в координатах страницы PDF."
+        },
+        "pageImage": { "type": "string", "description": "Путь к рендеру страницы." },
+        "cropImage": { "type": "string", "description": "Путь к вырезке элемента (формула/рисунок/пункт)." },
+        "pdfHash": { "type": "string" }
+      }
+    },
+
+    "verification": {
+      "type": "object",
+      "description": "Многоэтапная верификация человеком. Без неё объект — черновик, не нормативная база.",
+      "additionalProperties": false,
+      "properties": {
+        "status": { "enum": ["draft", "needs_review", "verified", "rejected"], "default": "draft" },
+        "ocrChecked": { "type": "boolean", "default": false, "description": "Текст/распознавание сверены с оригиналом." },
+        "formulaChecked": { "type": "boolean", "default": false, "description": "LaTeX/AST формулы сверены с картинкой." },
+        "engineeringChecked": { "type": "boolean", "default": false, "description": "Инженер подтвердил смысл/применимость." },
+        "verifiedBy": { "type": ["string", "null"] },
+        "verifiedAt": { "type": ["string", "null"], "format": "date-time" }
+      }
+    },
+
+    "confidence": { "enum": ["high", "medium", "low"], "description": "Уверенность авто-извлечения (до верификации)." },
+
+    "node": {
+      "type": "object",
+      "required": ["id", "type"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "description": "sp63.app_d.clause_d_2" },
+        "type": { "enum": ["section", "appendix", "clause", "subclause", "paragraph", "figureCaption", "tableCaption", "note"] },
+        "number": { "type": "string", "description": "'Д.2', '7.62'." },
+        "title": { "type": "string" },
+        "text": { "type": "string", "description": "Текст пункта (если born-digital и сверен)." },
+        "summary": { "type": "string", "description": "Краткий пересказ (НЕ дословный текст) — для просмотра." },
+        "parent": { "type": "string" },
+        "children": { "type": "array", "items": { "type": "string" }, "description": "id вложенных узлов." },
+        "introduces": { "type": "array", "items": { "type": "string" }, "description": "id формул/таблиц/рисунков, вводимых пунктом." },
+        "references": { "type": "array", "items": { "type": "string" }, "description": "id пунктов/формул/документов, на которые ссылается." },
+        "source": { "$ref": "#/$defs/source" },
+        "verification": { "$ref": "#/$defs/verification" },
+        "confidence": { "$ref": "#/$defs/confidence" }
+      }
+    },
+
+    "variable": {
+      "type": "object",
+      "required": ["id", "symbol", "name"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "description": "sp63.var.xi_cir" },
+        "symbol": { "type": "string", "description": "ASCII-символ для AST/кода: 'xi_cir'." },
+        "displaySymbol": { "type": "string", "description": "LaTeX/юникод для показа: '\\xi_{cir}'." },
+        "name": { "type": "string" },
+        "unit": { "type": ["string", "null"], "description": "Единица (Pint/UCUM): 'MPa', 'mm', 'mm^2', null=безразмерная." },
+        "kind": { "enum": ["material_property", "geometry", "force", "coefficient", "result", "derived", "other"] },
+        "definedIn": { "type": "string", "description": "id узла/таблицы, где переменная определена (реюз между пунктами)." },
+        "source": { "$ref": "#/$defs/source" },
+        "verification": { "$ref": "#/$defs/verification" },
+        "confidence": { "$ref": "#/$defs/confidence" }
+      }
+    },
+
+    "ast": {
+      "description": "Вычислимое выражение (уровень 4). Лёгкий JSON-S-expression, отображается 1:1 в SymPy. Рекурсивный.",
+      "oneOf": [
+        { "type": "object", "required": ["num"], "additionalProperties": false,
+          "properties": { "num": { "type": "number" } } },
+        { "type": "object", "required": ["var"], "additionalProperties": false,
+          "properties": { "var": { "type": "string", "description": "variable.id или symbol." } } },
+        { "type": "object", "required": ["op", "args"], "additionalProperties": false,
+          "properties": {
+            "op": { "enum": ["+", "-", "*", "/", "^", "=", "<=", ">=", "<", ">", "and", "or", "neg"] },
+            "args": { "type": "array", "items": { "$ref": "#/$defs/ast" }, "minItems": 1 }
+          } },
+        { "type": "object", "required": ["fn", "args"], "additionalProperties": false,
+          "properties": {
+            "fn": { "type": "string", "description": "sqrt|abs|min|max|sin|cos|tan|atan|exp|ln|…" },
+            "args": { "type": "array", "items": { "$ref": "#/$defs/ast" } }
+          } },
+        { "type": "object", "required": ["cases"], "additionalProperties": false,
+          "description": "Кусочная функция / ветвление (напр. Д.7→Д.8 иначе Д.9).",
+          "properties": {
+            "cases": { "type": "array", "items": {
+              "type": "object", "required": ["when", "value"], "additionalProperties": false,
+              "properties": { "when": { "$ref": "#/$defs/ast" }, "value": { "$ref": "#/$defs/ast" } } } },
+            "else": { "$ref": "#/$defs/ast" }
+          } }
+      ]
+    },
+
+    "formula": {
+      "type": "object",
+      "required": ["id", "kind", "source"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "description": "sp63_2018_d_8" },
+        "label": { "type": "string", "description": "'Д.8'." },
+        "title": { "type": "string" },
+        "kind": { "enum": ["equation", "condition", "definition", "inequality"] },
+        "purpose": { "type": "string", "description": "determination_of_xi_cir." },
+        "display": {
+          "type": "object", "additionalProperties": false,
+          "description": "Представления для человека (истина при сверке — image).",
+          "properties": {
+            "image": { "type": "string", "description": "Вырезка формулы (истина для сверки)." },
+            "latex": { "type": "string" },
+            "mathml": { "type": "string" }
+          }
+        },
+        "ast": { "$ref": "#/$defs/ast", "description": "Вычислимое выражение (может быть пустым до верификации)." },
+        "result": { "type": "string", "description": "symbol/var.id, который определяет формула (для equation)." },
+        "expression": { "type": "string", "description": "Плоское выражение (черновик/быстрый показ), пока нет ast." },
+        "variables": { "type": "array", "items": { "type": "string" }, "description": "variable.id или symbol, входящие в формулу." },
+        "unknowns": { "type": "array", "items": { "type": "string" }, "description": "Что ищем (для решателя)." },
+        "conditions": {
+          "type": "array",
+          "description": "Когда формула применима: ссылки на формулы-условия.",
+          "items": {
+            "type": "object", "required": ["conditionFormulaId", "when"], "additionalProperties": false,
+            "properties": {
+              "conditionFormulaId": { "type": "string" },
+              "when": { "type": ["boolean", "string"] }
+            }
+          }
+        },
+        "applicability": {
+          "type": "object", "additionalProperties": true,
+          "description": "Область применения для расчётного слоя (отбор по объекту).",
+          "properties": {
+            "material": { "type": "string" },
+            "sectionTypes": { "type": "array", "items": { "type": "string" } },
+            "limitState": { "type": "string" },
+            "action": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "notes": { "type": "string" },
+        "source": { "$ref": "#/$defs/source" },
+        "verification": { "$ref": "#/$defs/verification" },
+        "confidence": { "$ref": "#/$defs/confidence" }
+      }
+    },
+
+    "figure": {
+      "type": "object",
+      "required": ["id", "image", "source"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "label": { "type": "string", "description": "'Рисунок Д.2'." },
+        "caption": { "type": "string" },
+        "image": { "type": "string" },
+        "source": { "$ref": "#/$defs/source" },
+        "verification": { "$ref": "#/$defs/verification" }
+      }
+    },
+
+    "table": {
+      "type": "object",
+      "required": ["id", "source"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "label": { "type": "string", "description": "'Таблица 7.24'." },
+        "caption": { "type": "string" },
+        "image": { "type": "string", "description": "Вырезка таблицы (истина для сверки)." },
+        "columns": { "type": "array", "items": { "type": "string" } },
+        "rows": { "type": "array", "items": { "type": "array", "items": { "type": ["string", "number", "null"] } },
+          "description": "Структурированные значения (напр. классы бетона → Rb/Rbt/...)." },
+        "source": { "$ref": "#/$defs/source" },
+        "verification": { "$ref": "#/$defs/verification" },
+        "confidence": { "$ref": "#/$defs/confidence" }
+      }
+    },
+
+    "algorithm": {
+      "type": "object",
+      "required": ["id", "steps"],
+      "additionalProperties": false,
+      "description": "Алгоритм интерпретации нормы — ОТДЕЛЬНО от текста нормы и от кода расчёта.",
+      "properties": {
+        "id": { "type": "string", "description": "sp63.circular_column_strength" },
+        "title": { "type": "string" },
+        "appliesTo": {
+          "type": "object", "additionalProperties": true,
+          "description": "К каким объектам расчётной модели применим (материал/тип сечения/ПС)."
+        },
+        "steps": {
+          "type": "array",
+          "items": {
+            "type": "object", "required": ["step", "action"], "additionalProperties": false,
+            "properties": {
+              "step": { "type": "integer" },
+              "action": { "enum": ["check_condition", "solve_equation", "evaluate", "check_strength", "select"] },
+              "formulaId": { "type": "string" },
+              "target": { "type": "string", "description": "Какую переменную определяет шаг." },
+              "if": { "type": "string", "description": "Условие выполнения шага, напр. 'D.7 == true'." },
+              "note": { "type": "string" }
+            }
+          }
+        },
+        "verification": { "$ref": "#/$defs/verification" }
+      }
+    },
+
+    "provenance": {
+      "type": "object",
+      "required": ["extractedAt"],
+      "additionalProperties": true,
+      "properties": {
+        "extractedBy": { "type": "string" },
+        "extractedAt": { "type": "string" },
+        "pipelineVersion": { "type": "string" },
+        "sources": { "type": "array", "items": { "type": "string" } },
+        "verified": { "type": "boolean", "default": false },
+        "notes": { "type": "string" }
+      }
+    }
+  }
+}

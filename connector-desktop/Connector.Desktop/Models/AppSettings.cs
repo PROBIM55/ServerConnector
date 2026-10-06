@@ -1,3 +1,6 @@
+using System.Text.Json;
+using System.Text.Json.Serialization;
+
 namespace Connector.Desktop.Models;
 
 public sealed class AppSettings
@@ -73,6 +76,12 @@ public sealed class AppSettings
     public string ModelSharingIdentityEmail { get; set; } = "";
     public DateTimeOffset? ModelSharingLastAppliedUtc { get; set; }
 
+    // Persist Graphite's native selections; blank values are backward-compatible
+    // with settings files written before the Graphite workspace existed.
+    public string IfcPatchingTeklaBin { get; set; } = "";
+    public string IfcPatchingStagingDir { get; set; } = "";
+    public string ConverterOutputDirectory { get; set; } = "";
+
     // VPN access to the firm SMB share (AmneziaWG), delivered by the server via bootstrap.
     // Everything is gated by VpnEnabled; absent/false => connector behaves exactly as before.
     public bool VpnEnabled { get; set; }
@@ -84,4 +93,10 @@ public sealed class AppSettings
     // The client .conf (contains a private key) encrypted at rest with DPAPI (CurrentUser),
     // same as the device token / SMB password. Lets "Enable VPN" work after a restart.
     public string VpnConfigCipherBase64 { get; set; } = "";
+
+    // Keep forward-compatible settings written by a newer desktop client when
+    // this client reads and saves its known fields.
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; set; }
+
 }

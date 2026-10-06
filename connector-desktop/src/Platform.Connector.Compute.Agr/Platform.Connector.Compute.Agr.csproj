@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Platform.Connector.Core\Platform.Connector.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="..\..\runtime\agr-blender\agr_worker.py">
+      <Link>agr-blender\agr_worker.py</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
+    <Content Include="..\..\runtime\agr-blender\blender-runtime-5.2.0-win-x64.json">
+      <Link>agr-blender\blender-runtime-5.2.0-win-x64.json</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
+  </ItemGroup>
+
+</Project>

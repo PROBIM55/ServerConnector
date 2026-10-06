@@ -1,0 +1,593 @@
+{
+  "capabilities": {
+    "assembly": true,
+    "beam": false,
+    "bend": false,
+    "boltGroup": false,
+    "booleanPart": true,
+    "contourArcEdges": false,
+    "contourChamfer": false,
+    "contourPlate": true,
+    "developedPlate": false,
+    "developedPlatePolyBeamStationFrameV1": false,
+    "edgeChamfer": false,
+    "fitting": false,
+    "loftedPlate": false,
+    "polyBeam": false,
+    "polyBeamArcSegments": false,
+    "polygonWeld": false,
+    "reinforcement": false,
+    "roundHole": false,
+    "slottedHole": false,
+    "udaStamp": true,
+    "weld": true
+  },
+  "commands": [
+    {
+      "commandId": "element:support:create-contour-plate",
+      "contour": {
+        "edges": [
+          {
+            "endVertexId": "b",
+            "id": "e0",
+            "kind": "line",
+            "startVertexId": "a"
+          },
+          {
+            "endVertexId": "c",
+            "id": "e1",
+            "kind": "line",
+            "startVertexId": "b"
+          },
+          {
+            "endVertexId": "d",
+            "id": "e2",
+            "kind": "line",
+            "startVertexId": "c"
+          },
+          {
+            "endVertexId": "a",
+            "id": "e3",
+            "kind": "line",
+            "startVertexId": "d"
+          }
+        ],
+        "id": "outer",
+        "vertices": [
+          {
+            "id": "a",
+            "point": [
+              0,
+              0
+            ]
+          },
+          {
+            "id": "b",
+            "point": [
+              100,
+              0
+            ]
+          },
+          {
+            "id": "c",
+            "point": [
+              100,
+              50
+            ]
+          },
+          {
+            "id": "d",
+            "point": [
+              0,
+              50
+            ]
+          }
+        ]
+      },
+      "dependsOn": [],
+      "extrusionSide": "symmetric",
+      "kind": "create-contour-plate",
+      "material": {
+        "id": "steel"
+      },
+      "owner": {
+        "entityId": "support-owner",
+        "moduleId": "bridge"
+      },
+      "ownership": {
+        "documentSourceHash": "hash",
+        "generationId": "g",
+        "moduleId": "bridge",
+        "moduleVariantId": "v",
+        "namespace": "bimplatforma",
+        "revisionId": "r",
+        "sourceId": "support",
+        "sourceKind": "element",
+        "stableKey": "bridge/support"
+      },
+      "phase": "base-parts",
+      "plane": {
+        "axisX": [
+          0.8,
+          0.6,
+          0
+        ],
+        "axisY": [
+          -0.3,
+          0.4,
+          0.8660254037844386
+        ],
+        "axisZ": [
+          0.5196152422706631,
+          -0.6928203230275509,
+          0.5
+        ],
+        "origin": [
+          135,
+          -90,
+          1.6987298107780688
+        ]
+      },
+      "revisionProvenance": {
+        "adapterId": "test",
+        "adapterVersion": "1",
+        "revisionId": "r",
+        "sourceHash": "hash"
+      },
+      "source": {
+        "id": "support",
+        "kind": "element",
+        "role": "web",
+        "sourceLayer": "generated",
+        "stableKey": "bridge/support"
+      },
+      "thicknessMm": 20
+    },
+    {
+      "commandId": "element:web:create-contour-plate",
+      "contour": {
+        "edges": [
+          {
+            "endVertexId": "b",
+            "id": "e0",
+            "kind": "line",
+            "startVertexId": "a"
+          },
+          {
+            "endVertexId": "c",
+            "id": "e1",
+            "kind": "line",
+            "startVertexId": "b"
+          },
+          {
+            "endVertexId": "d",
+            "id": "e2",
+            "kind": "line",
+            "startVertexId": "c"
+          },
+          {
+            "endVertexId": "a",
+            "id": "e3",
+            "kind": "line",
+            "startVertexId": "d"
+          }
+        ],
+        "id": "outer",
+        "vertices": [
+          {
+            "id": "a",
+            "point": [
+              0,
+              0
+            ]
+          },
+          {
+            "id": "b",
+            "point": [
+              100,
+              0
+            ]
+          },
+          {
+            "id": "c",
+            "point": [
+              100,
+              50
+            ]
+          },
+          {
+            "id": "d",
+            "point": [
+              0,
+              50
+            ]
+          }
+        ]
+      },
+      "dependsOn": [],
+      "extrusionSide": "symmetric",
+      "kind": "create-contour-plate",
+      "material": {
+        "id": "steel"
+      },
+      "owner": {
+        "entityId": "web-owner",
+        "moduleId": "bridge"
+      },
+      "ownership": {
+        "documentSourceHash": "hash",
+        "generationId": "g",
+        "moduleId": "bridge",
+        "moduleVariantId": "v",
+        "namespace": "bimplatforma",
+        "revisionId": "r",
+        "sourceId": "web",
+        "sourceKind": "element",
+        "stableKey": "bridge/web"
+      },
+      "phase": "base-parts",
+      "plane": {
+        "axisX": [
+          0.8,
+          0.6,
+          0
+        ],
+        "axisY": [
+          -0.3,
+          0.4,
+          0.8660254037844386
+        ],
+        "axisZ": [
+          0.5196152422706631,
+          -0.6928203230275509,
+          0.5
+        ],
+        "origin": [
+          120,
+          -70,
+          45
+        ]
+      },
+      "revisionProvenance": {
+        "adapterId": "test",
+        "adapterVersion": "1",
+        "revisionId": "r",
+        "sourceHash": "hash"
+      },
+      "source": {
+        "id": "web",
+        "kind": "element",
+        "role": "web",
+        "sourceLayer": "generated",
+        "stableKey": "bridge/web"
+      },
+      "thicknessMm": 20
+    },
+    {
+      "commandId": "feature:prep:edge-preparation-positive",
+      "cutter": {
+        "contour": {
+          "edges": [
+            {
+              "endVertexId": "prep/cutter-positive/run",
+              "id": "prep/cutter-positive/edge-run",
+              "kind": "line",
+              "startVertexId": "prep/cutter-positive/origin"
+            },
+            {
+              "endVertexId": "prep/cutter-positive/depth",
+              "id": "prep/cutter-positive/edge-slope",
+              "kind": "line",
+              "startVertexId": "prep/cutter-positive/run"
+            },
+            {
+              "endVertexId": "prep/cutter-positive/origin",
+              "id": "prep/cutter-positive/edge-depth",
+              "kind": "line",
+              "startVertexId": "prep/cutter-positive/depth"
+            }
+          ],
+          "id": "prep/cutter-positive",
+          "vertices": [
+            {
+              "id": "prep/cutter-positive/origin",
+              "point": [
+                0,
+                0
+              ]
+            },
+            {
+              "id": "prep/cutter-positive/run",
+              "point": [
+                9.237604307034012,
+                0
+              ]
+            },
+            {
+              "id": "prep/cutter-positive/depth",
+              "point": [
+                0,
+                16
+              ]
+            }
+          ]
+        },
+        "extrusionSide": "positive",
+        "kind": "through-contour",
+        "plane": {
+          "axisX": [
+            -0.3,
+            0.4,
+            0.8660254037844386
+          ],
+          "axisY": [
+            -0.5196152422706631,
+            0.6928203230275509,
+            -0.5
+          ],
+          "axisZ": [
+            -0.8,
+            -0.6,
+            0
+          ],
+          "origin": [
+            205.19615242270663,
+            -16.928203230275507,
+            50
+          ]
+        },
+        "thicknessMm": 100
+      },
+      "dependsOn": [
+        "element:web:create-contour-plate"
+      ],
+      "kind": "apply-boolean-cut",
+      "owner": {
+        "entityId": "web-owner",
+        "moduleId": "bridge"
+      },
+      "ownership": {
+        "documentSourceHash": "hash",
+        "generationId": "g",
+        "moduleId": "bridge",
+        "moduleVariantId": "v",
+        "namespace": "bimplatforma",
+        "revisionId": "r",
+        "sourceId": "prep",
+        "sourceKind": "feature",
+        "stableKey": "bridge/contact/prep"
+      },
+      "phase": "boolean-cuts",
+      "revisionProvenance": {
+        "adapterId": "test",
+        "adapterVersion": "1",
+        "revisionId": "r",
+        "sourceHash": "hash"
+      },
+      "source": {
+        "id": "prep",
+        "kind": "feature",
+        "role": "preparation",
+        "sourceLayer": "generated",
+        "stableKey": "bridge/contact/prep"
+      },
+      "target": {
+        "elementId": "web",
+        "path": [
+          "support-contact"
+        ],
+        "role": "joint-contact"
+      }
+    },
+    {
+      "commandId": "feature:weld:create-weld",
+      "dependsOn": [
+        "element:support:create-contour-plate",
+        "element:web:create-contour-plate",
+        "feature:prep:edge-preparation-positive"
+      ],
+      "edgePreparationCommandId": "feature:prep:edge-preparation-positive",
+      "kind": "create-weld",
+      "owner": {
+        "entityId": "web-owner",
+        "moduleId": "bridge"
+      },
+      "ownership": {
+        "documentSourceHash": "hash",
+        "generationId": "g",
+        "moduleId": "bridge",
+        "moduleVariantId": "v",
+        "namespace": "bimplatforma",
+        "revisionId": "r",
+        "sourceId": "weld",
+        "sourceKind": "feature",
+        "stableKey": "bridge/contact/weld"
+      },
+      "participants": [
+        {
+          "elementId": "support",
+          "role": "part"
+        }
+      ],
+      "phase": "welds",
+      "revisionProvenance": {
+        "adapterId": "test",
+        "adapterVersion": "1",
+        "revisionId": "r",
+        "sourceHash": "hash"
+      },
+      "shopSite": "shop",
+      "side": "arrow",
+      "sizeMm": 4,
+      "source": {
+        "id": "weld",
+        "kind": "feature",
+        "role": "joint-weld",
+        "sourceLayer": "generated",
+        "stableKey": "bridge/contact/weld"
+      },
+      "target": {
+        "elementId": "web",
+        "path": [
+          "support-contact"
+        ],
+        "role": "joint-contact"
+      },
+      "weldType": "fillet"
+    },
+    {
+      "commandId": "assembly:assembly:create-assembly",
+      "dependsOn": [
+        "element:support:create-contour-plate",
+        "element:web:create-contour-plate",
+        "feature:prep:edge-preparation-positive",
+        "feature:weld:create-weld"
+      ],
+      "featureIds": [
+        "prep",
+        "weld"
+      ],
+      "kind": "create-assembly",
+      "mainElementId": "web",
+      "owner": {
+        "entityId": "assembly-owner",
+        "moduleId": "bridge"
+      },
+      "ownership": {
+        "documentSourceHash": "hash",
+        "generationId": "g",
+        "moduleId": "bridge",
+        "moduleVariantId": "v",
+        "namespace": "bimplatforma",
+        "revisionId": "r",
+        "sourceId": "assembly",
+        "sourceKind": "assembly",
+        "stableKey": "bridge/assembly"
+      },
+      "phase": "assemblies",
+      "revisionProvenance": {
+        "adapterId": "test",
+        "adapterVersion": "1",
+        "revisionId": "r",
+        "sourceHash": "hash"
+      },
+      "secondaryElementIds": [
+        "support"
+      ],
+      "source": {
+        "id": "assembly",
+        "kind": "assembly",
+        "role": "plate-assembly",
+        "sourceLayer": "generated",
+        "stableKey": "bridge/assembly"
+      }
+    }
+  ],
+  "diagnostics": [],
+  "executable": true,
+  "mappings": [
+    {
+      "commandIds": [
+        "assembly:assembly:create-assembly"
+      ],
+      "expectedNativeKinds": [
+        "Assembly"
+      ],
+      "ownershipStableKey": "bridge/assembly",
+      "source": {
+        "id": "assembly",
+        "kind": "assembly",
+        "role": "plate-assembly",
+        "sourceLayer": "generated",
+        "stableKey": "bridge/assembly"
+      },
+      "strategy": "native-single"
+    },
+    {
+      "commandIds": [
+        "element:support:create-contour-plate"
+      ],
+      "expectedNativeKinds": [
+        "ContourPlate"
+      ],
+      "ownershipStableKey": "bridge/support",
+      "source": {
+        "id": "support",
+        "kind": "element",
+        "role": "web",
+        "sourceLayer": "generated",
+        "stableKey": "bridge/support"
+      },
+      "strategy": "native-single"
+    },
+    {
+      "commandIds": [
+        "element:web:create-contour-plate"
+      ],
+      "expectedNativeKinds": [
+        "ContourPlate"
+      ],
+      "ownershipStableKey": "bridge/web",
+      "source": {
+        "id": "web",
+        "kind": "element",
+        "role": "web",
+        "sourceLayer": "generated",
+        "stableKey": "bridge/web"
+      },
+      "strategy": "native-single"
+    },
+    {
+      "commandIds": [
+        "feature:prep:edge-preparation-positive"
+      ],
+      "expectedNativeKinds": [
+        "BooleanPart"
+      ],
+      "ownershipStableKey": "bridge/contact/prep",
+      "source": {
+        "id": "prep",
+        "kind": "feature",
+        "role": "preparation",
+        "sourceLayer": "generated",
+        "stableKey": "bridge/contact/prep"
+      },
+      "strategy": "native-single"
+    },
+    {
+      "commandIds": [
+        "feature:weld:create-weld"
+      ],
+      "expectedNativeKinds": [
+        "Weld"
+      ],
+      "ownershipStableKey": "bridge/contact/weld",
+      "source": {
+        "id": "weld",
+        "kind": "feature",
+        "role": "joint-weld",
+        "sourceLayer": "generated",
+        "stableKey": "bridge/contact/weld"
+      },
+      "strategy": "native-single"
+    }
+  ],
+  "schemaVersion": 1,
+  "source": {
+    "address": {
+      "moduleId": "bridge",
+      "moduleVariantId": "v",
+      "projectId": "p",
+      "revisionId": "r"
+    },
+    "constructiveContentHash": "sha256:c090c24601b6e3922e4c9ef7e32d1faba2dee377fa29a23aad991c62970bb4ee",
+    "constructiveSchemaVersion": 1,
+    "generationId": "g",
+    "sourceHash": "hash"
+  },
+  "target": {
+    "adapterId": "tekla-native",
+    "adapterVersion": "1.0.0",
+    "teklaVersion": "2025.0"
+  }
+}

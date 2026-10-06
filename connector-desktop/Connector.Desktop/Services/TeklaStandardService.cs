@@ -16,10 +16,11 @@ public sealed class TeklaStandardService
     private readonly string _bundledGitRoot;
     private readonly string _managedSyncRoot;
 
-    public TeklaStandardService(HttpClient http)
+    public TeklaStandardService(HttpClient http, string? stateRoot = null)
     {
         _http = http;
-        var root = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ConnectorAgentDesktop");
+        var root = stateRoot ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ConnectorAgentDesktop");
+        root = Path.GetFullPath(root);
         Directory.CreateDirectory(root);
         LogFilePath = Path.Combine(root, "tekla-standard.log");
         _bundledGitRoot = Path.Combine(root, "bundled-tools", "git");

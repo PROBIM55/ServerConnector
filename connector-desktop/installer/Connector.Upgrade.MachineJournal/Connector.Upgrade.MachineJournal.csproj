@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Connector.Upgrade.Core\Connector.Upgrade.Core.csproj" />
+    <ProjectReference Include="..\Connector.Upgrade.MachinePipe\Connector.Upgrade.MachinePipe.csproj" />
+    <ProjectReference Include="..\Connector.Upgrade.WindowsJournal\Connector.Upgrade.WindowsJournal.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Connector.Upgrade.MachineJournal.Tests" />
+  </ItemGroup>
+</Project>

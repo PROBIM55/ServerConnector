@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "version": "0.79.0",
+  "minimumSecureVersion": "0.76.0",
+  "releaseUrl": "https://github.com/netbirdio/netbird/releases/tag/v0.79.0",
+  "installerName": "netbird_installer_0.79.0_windows_amd64.msi",
+  "installerBytes": 23543808,
+  "installerSha256": "50f822c0f5f6e54e7618096cdd36b63bf4b169e125c9da06052fd4fd96115210",
+  "signerSubjectPrefix": "CN=NetBird GmbH,",
+  "signerThumbprint": "7B41FCCAFCB794720FE07D381F9CBDF18AB5900F"
+}

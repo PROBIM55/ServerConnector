@@ -1,0 +1,70 @@
+services:
+  netbird-server:
+    image: netbirdio/netbird-server:0.78.2@sha256:ac6317722f6f269e0a02a592a31f7557eaeb4012fc609785bd46f213e0e5e669
+    restart: unless-stopped
+    command: ["--config", "/etc/netbird/config.yaml"]
+    environment:
+      NB_SETUP_PAT_ENABLED: ${NB_SETUP_PAT_ENABLED:-false}
+    ports:
+      - "3479:3479/udp"
+      - "127.0.0.1:18080:80"
+    volumes:
+      - /etc/structura/netbird/config.yaml:/etc/netbird/config.yaml:ro
+      - netbird-data:/var/lib/netbird
+    networks:
+      - bim_web
+    labels:
+      - traefik.enable=${NETBIRD_PUBLIC_ENABLED:-false}
+      - traefik.docker.network=bim_web
+      - traefik.http.routers.netbird-grpc.rule=Host(`netbird.structura-most.ru`) && (PathPrefix(`/signalexchange.SignalExchange/`) || PathPrefix(`/management.ManagementService/`))
+      - traefik.http.routers.netbird-grpc.entrypoints=websecure
+      - traefik.http.routers.netbird-grpc.tls=true
+      - traefik.http.routers.netbird-grpc.tls.certresolver=letsencrypt
+      - traefik.http.routers.netbird-grpc.service=netbird-server-h2c
+      - traefik.http.routers.netbird-grpc.priority=100
+      - traefik.http.routers.netbird-backend.rule=Host(`netbird.structura-most.ru`) && (PathPrefix(`/relay`) || PathPrefix(`/ws-proxy/`) || PathPrefix(`/api`) || PathPrefix(`/oauth2`))
+      - traefik.http.routers.netbird-backend.entrypoints=websecure
+      - traefik.http.routers.netbird-backend.tls=true
+      - traefik.http.routers.netbird-backend.tls.certresolver=letsencrypt
+      - traefik.http.routers.netbird-backend.service=netbird-server
+      - traefik.http.routers.netbird-backend.priority=100
+      - traefik.http.services.netbird-server.loadbalancer.server.port=80
+      - traefik.http.services.netbird-server-h2c.loadbalancer.server.port=80
+      - traefik.http.services.netbird-server-h2c.loadbalancer.server.scheme=h2c
+    logging:
+      driver: json-file
+      options:
+        max-size: 50m
+        max-file: "3"
+
+  dashboard:
+    image: netbirdio/dashboard:v2.94.0@sha256:70e0fc6dd3b7758148d182fb55ecd8d4f9ce01e9bba56c9389224e0b8354009d
+    restart: unless-stopped
+    env_file:
+      - /etc/structura/netbird/dashboard.env
+    networks:
+      - bim_web
+    labels:
+      - traefik.enable=${NETBIRD_PUBLIC_ENABLED:-false}
+      - traefik.docker.network=bim_web
+      - traefik.http.routers.netbird-dashboard.rule=Host(`netbird.structura-most.ru`)
+      - traefik.http.routers.netbird-dashboard.entrypoints=websecure
+      - traefik.http.routers.netbird-dashboard.tls=true
+      - traefik.http.routers.netbird-dashboard.tls.certresolver=letsencrypt
+      - traefik.http.routers.netbird-dashboard.priority=1
+      - traefik.http.routers.netbird-dashboard.service=netbird-dashboard
+      - traefik.http.services.netbird-dashboard.loadbalancer.server.port=80
+    logging:
+      driver: json-file
+      options:
+        max-size: 20m
+        max-file: "3"
+
+networks:
+  bim_web:
+    external: true
+    name: bim_web
+
+volumes:
+  netbird-data:
+    name: structura-netbird-data

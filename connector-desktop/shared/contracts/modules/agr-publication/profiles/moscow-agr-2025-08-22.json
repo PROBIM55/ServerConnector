@@ -1,0 +1,79 @@
+{
+  "id": "moscow-agr/2025-08-22",
+  "title": "Актуальные требования АГР после изменений 2025 года",
+  "maturity": "transcribed",
+  "sources": [
+    {
+      "id": "mos-ru-current-agr-requirements",
+      "title": "Актуальное официальное приложение с требованиями к НПМ и ВПМ",
+      "effectiveDate": "2025-08-22",
+      "url": "https://www.mos.ru/upload/content/files/7227a0c8c1f0cc792f38f4e50f773468/Rasporyajenies19012026trebovaniya.pdf",
+      "notes": "Профиль требует независимой второй сверки и контрольной загрузки."
+    }
+  ],
+  "fbxFormatVersion": "7.4",
+  "fbxCompatibilityVersion": "2014",
+  "metersPerUnit": 1,
+  "allowedShaders": ["standard-legacy", "physical-material", "principled-bsdf"],
+  "lowPoly": {
+    "archiveMaxBytes": 1000000000,
+    "minOksFiles": 1,
+    "maxOksFiles": 20,
+    "requiredGroundFiles": 1,
+    "oksTriangleMax": 150000,
+    "groundTriangleMax": 180000,
+    "maxTransparentMaterials": 7,
+    "maxGeometryObjects": 40,
+    "maxOpaqueGeometryObjects": 20,
+    "maxTransparentGeometryObjects": 20,
+    "maxOksTextureSets": 1,
+    "maxGroundTextureSets": 22,
+    "minGroundTextureDensityPxPerSquareMeter": 10,
+    "maxGroundTextureDensityPxPerSquareMeter": 40,
+    "requiredTextureKinds": ["diffuse"],
+    "texture": {
+      "allowedDimensions": [256, 512, 1024, 2048],
+      "maxBytes": 3000000,
+      "allowAlpha": false,
+      "minPaddingByDimension": { "256": 8, "512": 8, "1024": 8, "2048": 8 },
+      "storage": "embedded"
+    }
+  },
+  "highPoly": {
+    "oksArchiveMaxBytes": 500000000,
+    "groundArchiveMaxBytes": 1000000000,
+    "oksTriangleMax": 1000000,
+    "groundTriangleBands": [
+      { "maxAreaHa": 0.05, "maxTriangles": 300000 },
+      { "maxAreaHa": 0.1, "maxTriangles": 705000 },
+      { "maxAreaHa": 0.25, "maxTriangles": 1125000 },
+      { "maxAreaHa": 0.5, "maxTriangles": 1650000 },
+      { "maxAreaHa": 0.75, "maxTriangles": 1950000 },
+      { "maxAreaHa": 1, "maxTriangles": 2625000 },
+      { "maxAreaHa": 1.5, "maxTriangles": 3150000 },
+      { "maxAreaHa": null, "maxTriangles": 4500000 }
+    ],
+    "maxMaterialsPerGeometry": 7,
+    "minTextureFiles": 3,
+    "maxTextureFiles": 2100,
+    "minTexelDensityPxPerMeter": 512,
+    "maxTexelDensityPxPerMeter": 1706,
+    "maxUdimTilesPerMaterial": 100,
+    "udimTileMin": 1001,
+    "udimTileMax": 1100,
+    "requiredTextureKinds": ["diffuse", "erm", "normal"],
+    "texture": {
+      "allowedDimensions": [2048, 4096],
+      "allowAlpha": true,
+      "bitsPerChannel": 8,
+      "minPaddingByDimension": { "2048": 16, "4096": 32 },
+      "storage": "external"
+    },
+    "collision": {
+      "smallModelTriangleThreshold": 50000,
+      "smallModelTriangleMax": 15000,
+      "largeModelRatio": 0.05
+    },
+    "maxLightingObjects": 250
+  }
+}

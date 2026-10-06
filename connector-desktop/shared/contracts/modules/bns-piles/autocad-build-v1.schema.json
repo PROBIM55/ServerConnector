@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://platform.structura/contracts/modules/bns-piles/autocad-build-v1.schema.json",
+  "title": "BNS Piles AutoCAD Build Payload",
+  "type": "object",
+  "required": ["autoCadExePath"],
+  "oneOf": [
+    { "required": ["scriptPath"] },
+    { "required": ["bridgePluginDllPath"] }
+  ],
+  "properties": {
+    "scriptPath": { "type": "string", "minLength": 1 },
+    "autoCadExePath": { "type": "string", "minLength": 1 },
+    "bridgePluginDllPath": { "type": "string", "minLength": 1 },
+    "jobPath": { "type": "string" },
+    "workingDirectory": { "type": "string" },
+    "jobPointerPath": { "type": "string" },
+    "buildStatusPath": { "type": "string" },
+    "commandName": { "type": "string" },
+    "jobTimeoutSeconds": { "type": "integer", "minimum": 1, "maximum": 86400 },
+    "diagnostics": { "type": "boolean" }
+  },
+  "additionalProperties": true
+}

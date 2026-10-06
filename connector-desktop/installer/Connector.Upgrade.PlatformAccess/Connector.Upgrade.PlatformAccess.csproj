@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Connector.Upgrade.Core\Connector.Upgrade.Core.csproj" />
+    <ProjectReference Include="..\Connector.Upgrade.WindowsEnvironment\Connector.Upgrade.WindowsEnvironment.csproj" />
+    <ProjectReference Include="..\Connector.Upgrade.WindowsHost\Connector.Upgrade.WindowsHost.csproj" />
+    <ProjectReference Include="..\..\src\Connector.Network\Connector.Network.csproj" />
+    <ProjectReference Include="..\..\src\Connector.SmbAccess\Connector.SmbAccess.csproj" />
+    <ProjectReference Include="..\..\src\Platform.Connector.Core\Platform.Connector.Core.csproj" />
+    <ProjectReference Include="..\..\..\connector-access\src\Connector.Access.Client\Connector.Access.Client.csproj" />
+    <ProjectReference Include="..\..\..\connector-access\src\Connector.Access.Contracts\Connector.Access.Contracts.csproj" />
+  </ItemGroup>
+</Project>

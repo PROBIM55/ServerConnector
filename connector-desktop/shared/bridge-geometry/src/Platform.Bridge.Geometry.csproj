@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <LangVersion>10.0</LangVersion>
+    <Nullable>enable</Nullable>
+    <AssemblyName>Platform.Bridge.Geometry</AssemblyName>
+    <RootNamespace>Platform.Bridge.Geometry</RootNamespace>
+    <!--
+      Pure geometry module. No Tekla SDK dependencies — must build and run
+      without any Tekla install. Hosts FlangeTransitionRules, SegmentMath,
+      Placement и DTOs. Consumed:
+      - cad/tekla/bridge-desktop (через ProjectReference, для Insert/Modify
+        в BridgeGirderAdapter — Этап 4 миграции с легаси-DLL на наш код).
+      - shared/bridge-geometry/tests (xUnit 163 теста).
+
+      net48 фиксирован под bridge-desktop target. Multi-target на net8.0
+      добавится если потребуется в Platform.Server (например для server-side
+      preview геометрии).
+    -->
+  </PropertyGroup>
+
+</Project>

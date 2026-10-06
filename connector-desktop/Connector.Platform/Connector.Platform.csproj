@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\src\Platform.Connector.Core\Platform.Connector.Core.csproj" />
+    <ProjectReference Include="..\src\Platform.Connector.Compute.Agr\Platform.Connector.Compute.Agr.csproj" />
+    <ProjectReference Include="..\cad\autocad\adapter\src\Platform.Cad.AutoCad.Adapter\Platform.Cad.AutoCad.Adapter.csproj" />
+    <ProjectReference Include="..\cad\tekla\adapter\src\Platform.Cad.Tekla.Adapter\Platform.Cad.Tekla.Adapter.csproj" />
+  </ItemGroup>
+</Project>

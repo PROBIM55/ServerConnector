@@ -1,6 +1,6 @@
 {
-  "version": "1.0.27",
-  "msiUrl": "https://github.com/PROBIM55/ServerConnector/releases/download/v1.0.27/Connector.Desktop.Setup.msi",
-  "sha256": "cd737382e5e8cc22a6d075a9a940c6f79ded2f6c5e18c56e6967d50c7e33226d",
-  "notes": "Fallback manifest for the latest verified Connector Desktop release."
+  "version": "1.0.31",
+  "msiUrl": "https://github.com/PROBIM55/ServerConnector/releases/download/v1.0.31/Connector.Desktop.Setup.msi",
+  "sha256": "47b5b3434ced41c3b9a71615906cbaf835b6cb45433554be612e7bf2d88ef515",
+  "notes": "Проверенная версия прежнего Structura Connector. Переход на единый коннектор выполняется отдельным установщиком."
 }

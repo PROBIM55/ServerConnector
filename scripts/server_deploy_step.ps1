@@ -5,7 +5,7 @@
 #   - либо вручную с VPS (`opwork_admin`) при необходимости.
 #
 # Делает:
-#   1. git fetch + reset --hard origin/master в C:\Connector\src
+#   1. clean-tree preflight + git fetch + fast-forward к точному SHA в C:\Connector\src
 #   2. pip install -r requirements.txt в runtime venv
 #   3. backup активной БД (verified pg_dump для PostgreSQL либо SQLite copy)
 #   4. python run_migrations.py (применяет pending миграции)
@@ -19,6 +19,7 @@
 
 param(
     [Parameter(Mandatory = $true)]
+    [ValidatePattern('^[a-fA-F0-9]{40}$')]
     [string]$CommitSha
 )
 
@@ -30,6 +31,39 @@ $backup     = 'C:\Connector\backup'
 $venvPython = Join-Path $runtime '.venv\Scripts\python.exe'
 $serverDir  = Join-Path $src 'connector\server'
 $reqsFile   = Join-Path $serverDir 'requirements.txt'
+
+function Assert-CleanSource([string]$Path) {
+    $status = @(& git -C $Path status --porcelain=v1 --untracked-files=all)
+    if ($LASTEXITCODE -ne 0) { throw 'Cannot inspect the server source checkout.' }
+    if ($status.Count -ne 0) {
+        throw 'Server source has local changes; deployment preserves them and stops.'
+    }
+}
+
+function Move-SourceForward([string]$Path, [string]$Target) {
+    Assert-CleanSource $Path
+    & git -C $Path fetch origin master
+    if ($LASTEXITCODE -ne 0) { throw 'Cannot fetch the approved release branch.' }
+    & git -C $Path merge-base --is-ancestor $Target origin/master
+    if ($LASTEXITCODE -ne 0) { throw 'Target SHA is not contained in origin/master.' }
+    & git -C $Path merge-base --is-ancestor HEAD $Target
+    if ($LASTEXITCODE -ne 0) { throw 'Target SHA is not a fast-forward from the deployed source.' }
+    Assert-CleanSource $Path
+    & git -C $Path merge --ff-only --no-edit $Target
+    if ($LASTEXITCODE -ne 0) { throw 'Fast-forward to the approved SHA failed.' }
+}
+
+function Restore-CleanSource([string]$Path, [string]$ExpectedCurrent, [string]$Previous) {
+    Assert-CleanSource $Path
+    $current = (& git -C $Path rev-parse HEAD).Trim()
+    if ($LASTEXITCODE -ne 0 -or $current -cne $ExpectedCurrent) {
+        throw 'Source changed after deployment; automatic rollback cannot replace it.'
+    }
+    # A detached checkout preserves branch history and refuses conflicting changes.
+    # A later successful deployment can fast-forward this clean checkout normally.
+    & git -C $Path checkout --detach $Previous
+    if ($LASTEXITCODE -ne 0) { throw 'Safe source rollback failed.' }
+}
 
 function Invoke-Step([string]$Name, [scriptblock]$Block) {
     Write-Host "==> $Name"
@@ -78,13 +112,17 @@ function Import-RuntimeEnv([string]$Path) {
 }
 
 # Запомнить текущий SHA для rollback
+Assert-CleanSource $src
 $prevSha = (& git -C $src rev-parse HEAD).Trim()
+if ($LASTEXITCODE -ne 0) { throw 'Cannot resolve the current server source SHA.' }
+$sourceAdvanced = $false
+$CommitSha = $CommitSha.ToLowerInvariant()
 Write-Host "PREV_SHA=$prevSha"
 Write-Host "TARGET_SHA=$CommitSha"
 
 try {
-    Invoke-Step 'git fetch' { & git -C $src fetch origin master 2>&1 | Out-Host }
-    Invoke-Step 'git reset --hard' { & git -C $src reset --hard origin/master 2>&1 | Out-Host }
+    Move-SourceForward $src $CommitSha
+    $sourceAdvanced = $true
 
     $newSha = (& git -C $src rev-parse HEAD).Trim()
     Write-Host "NEW_SHA=$newSha"
@@ -146,10 +184,14 @@ try {
 catch {
     $err = $_
     Write-Warning "DEPLOY_FAIL: $err"
-    Write-Warning "Rolling back to $prevSha"
+    if (-not $sourceAdvanced) {
+        Write-Warning 'Source was not advanced; running service is preserved.'
+        throw $err
+    }
+    Write-Warning "Rolling back clean source to $prevSha"
 
     try {
-        & git -C $src reset --hard $prevSha 2>&1 | Out-Host
+        Restore-CleanSource $src $CommitSha $prevSha
         schtasks /End /TN ConnectorApi 2>&1 | Out-Host
         Start-Sleep -Seconds 2
         schtasks /Run /TN ConnectorApi 2>&1 | Out-Host

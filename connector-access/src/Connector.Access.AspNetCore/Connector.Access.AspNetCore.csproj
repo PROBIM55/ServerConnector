@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <PackageId>Connector.Access.AspNetCore</PackageId>
+    <Version>0.2.13</Version>
+    <Authors>Structura</Authors>
+  </PropertyGroup>
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <ProjectReference Include="..\Connector.Access\Connector.Access.csproj" />
+    <ProjectReference Include="..\Connector.Access.Api\Connector.Access.Api.csproj" />
+    <ProjectReference Include="..\Connector.Access.Smb\Connector.Access.Smb.csproj" />
+  </ItemGroup>
+</Project>

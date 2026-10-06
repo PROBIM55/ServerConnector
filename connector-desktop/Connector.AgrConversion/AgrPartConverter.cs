@@ -798,7 +798,7 @@ public static class AgrPartConverter
             var spec = options.Levels.First(s => s.Name == lr.Name);
             var geo = lr.Geometry ?? spec;
             levelDesc[lr.Name] = lr.Simplified
-                ? $"упрощение до {F(geo.SimplifyRatio)} треугольников, предел ошибки {F(spec.ErrorM)} м (-se {lr.SeRelative?.ToString("0.##########", CultureInfo.InvariantCulture)}), текстуры ≤ {spec.TextureLimit}" +
+                ? $"целевая доля {F(geo.SimplifyRatio * 100)}%; фактически {lr.TrianglesGlb} ({F(result.TrianglesRef > 0 ? 100d * lr.TrianglesGlb / result.TrianglesRef : 0)}%) треугольников, предел ошибки {F(spec.ErrorM)} м (-se {lr.SeRelative?.ToString("0.##########", CultureInfo.InvariantCulture)}), текстуры ≤ {spec.TextureLimit}" +
                   (lr.Fallback != null ? $"; геометрия {lr.Fallback.GeometryOf} (fallback)" : "")
                 : $"полная геометрия, текстуры ≤ {spec.TextureLimit}" + (lr.Fallback != null ? $" (fallback к {lr.Fallback.GeometryOf})" : "");
             bool fullGeometry = !lr.Simplified;

@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Connector.Upgrade.Core\Connector.Upgrade.Core.csproj" />
+    <ProjectReference Include="..\Connector.Upgrade.HelperReleaseTrust\Connector.Upgrade.HelperReleaseTrust.csproj" />
+    <ProjectReference Include="..\Connector.Upgrade.HelperLauncher\Connector.Upgrade.HelperLauncher.csproj" />
+    <ProjectReference Include="..\Connector.Upgrade.MachineCommandChannel\Connector.Upgrade.MachineCommandChannel.csproj" />
+    <ProjectReference Include="..\Connector.Upgrade.MachineDispatcher\Connector.Upgrade.MachineDispatcher.csproj" />
+    <ProjectReference Include="..\Connector.Upgrade.MachineIpc\Connector.Upgrade.MachineIpc.csproj" />
+    <ProjectReference Include="..\Connector.Upgrade.MachineJournal\Connector.Upgrade.MachineJournal.csproj" />
+    <ProjectReference Include="..\Connector.Upgrade.NetBirdPackageStage\Connector.Upgrade.NetBirdPackageStage.csproj" />
+    <ProjectReference Include="..\Connector.Upgrade.NetBirdWindowsState\Connector.Upgrade.NetBirdWindowsState.csproj" />
+    <ProjectReference Include="..\Connector.Upgrade.OriginalUserCaller\Connector.Upgrade.OriginalUserCaller.csproj" />
+    <ProjectReference Include="..\Connector.Upgrade.OriginalUserMachineAdapter\Connector.Upgrade.OriginalUserMachineAdapter.csproj" />
+    <ProjectReference Include="..\Connector.Upgrade.OriginalUserSession\Connector.Upgrade.OriginalUserSession.csproj" />
+    <ProjectReference Include="..\Connector.Upgrade.PlatformAccess\Connector.Upgrade.PlatformAccess.csproj" />
+    <ProjectReference Include="..\Connector.Upgrade.VelopackPayload\Connector.Upgrade.VelopackPayload.csproj" />
+    <ProjectReference Include="..\Connector.Upgrade.WindowsEnvironment\Connector.Upgrade.WindowsEnvironment.csproj" />
+    <ProjectReference Include="..\Connector.Upgrade.WindowsHost\Connector.Upgrade.WindowsHost.csproj" />
+    <ProjectReference Include="..\Connector.Upgrade.WindowsJournal\Connector.Upgrade.WindowsJournal.csproj" />
+    <ProjectReference Include="..\Connector.Upgrade.WindowsPayload\Connector.Upgrade.WindowsPayload.csproj" />
+    <ProjectReference Include="..\Connector.Upgrade.WindowsUserStage\Connector.Upgrade.WindowsUserStage.csproj" />
+    <ProjectReference Include="..\..\src\Connector.Network\Connector.Network.csproj" />
+    <ProjectReference Include="..\..\src\Platform.Connector.Core\Platform.Connector.Core.csproj" />
+    <ProjectReference Include="..\..\..\connector-access\src\Connector.Access.Client\Connector.Access.Client.csproj" />
+  </ItemGroup>
+</Project>

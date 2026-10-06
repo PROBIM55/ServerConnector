@@ -1,243 +1,28 @@
 <Window x:Class="Connector.Desktop.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        xmlns:patch="clr-namespace:Connector.Desktop.Features.Tekla.Patching"
-        mc:Ignorable="d"
-        Title="Structura Connector"
-        Height="940"
-        Width="1024"
-        MinHeight="820"
-        MinWidth="920"
-        Background="#090B10"
-        Loaded="Window_Loaded">
-    <Window.Resources>
-        <!-- Shared brushes + keyed styles (CardStyle, *Button) moved to Resources/Theme.xaml (merged in App.xaml).
-             Only implicit (TargetType-only) styles + the TabControl/TabItem chrome remain here, scoped to this Window. -->
-
-        <Style TargetType="TextBlock">
-            <Setter Property="Foreground" Value="#F4F7FB" />
-            <Setter Property="FontFamily" Value="Segoe UI Variable Display" />
-        </Style>
-
-        <Style TargetType="Label">
-            <Setter Property="Foreground" Value="#92A5C3" />
-            <Setter Property="FontFamily" Value="Segoe UI Variable Display" />
-        </Style>
-
-        <Style TargetType="TextBox">
-            <Setter Property="Foreground" Value="#F7FAFF" />
-            <Setter Property="Background" Value="#0D121B" />
-            <Setter Property="BorderBrush" Value="#2A3444" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="Padding" Value="12,8" />
-            <Setter Property="FontFamily" Value="Segoe UI Variable Text" />
-            <Setter Property="Height" Value="36" />
-            <Setter Property="VerticalContentAlignment" Value="Center" />
-        </Style>
-
-        <Style TargetType="PasswordBox">
-            <Setter Property="Foreground" Value="#F7FAFF" />
-            <Setter Property="Background" Value="#0D121B" />
-            <Setter Property="BorderBrush" Value="#2A3444" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="Padding" Value="12,8" />
-            <Setter Property="FontFamily" Value="Segoe UI Variable Text" />
-            <Setter Property="Height" Value="36" />
-        </Style>
-
-        <Style TargetType="CheckBox">
-            <Setter Property="Foreground" Value="#DCE7F8" />
-            <Setter Property="FontFamily" Value="Segoe UI Variable Text" />
-        </Style>
-
-        <Style TargetType="TabControl">
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="TabControl">
-                        <Grid>
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="*" />
-                            </Grid.RowDefinitions>
-                            <Border Grid.Row="0"
-                                    Background="#0D121A"
-                                    BorderBrush="{StaticResource PanelBorder}"
-                                    BorderThickness="1"
-                                    CornerRadius="18"
-                                    Padding="8"
-                                    Margin="0,0,0,14">
-                                <TabPanel IsItemsHost="True" Background="Transparent" />
-                            </Border>
-                            <ContentPresenter Grid.Row="1" ContentSource="SelectedContent" />
-                        </Grid>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-
-        <Style TargetType="TabItem">
-            <Setter Property="Foreground" Value="#9FB1CC" />
-            <Setter Property="FontFamily" Value="Segoe UI Variable Text" />
-            <Setter Property="FontWeight" Value="SemiBold" />
-            <Setter Property="Margin" Value="0,0,10,0" />
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="TabItem">
-                        <Border x:Name="TabBorder"
-                                Background="#0D121A"
-                                BorderBrush="#0D121A"
-                                BorderThickness="1"
-                                CornerRadius="14"
-                                Padding="18,10">
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" ContentSource="Header" />
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsSelected" Value="True">
-                                <Setter TargetName="TabBorder" Property="Background" Value="{StaticResource TabActiveBrush}" />
-                                <Setter TargetName="TabBorder" Property="BorderBrush" Value="#F6FAFF" />
-                                <Setter Property="Foreground" Value="#0B0F17" />
-                            </Trigger>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="TabBorder" Property="BorderBrush" Value="#354154" />
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-    </Window.Resources>
-
-    <Grid>
-        <Border Background="{StaticResource WindowBackground}" />
-
-        <Canvas IsHitTestVisible="False" Opacity="0.52">
-            <Ellipse Width="430" Height="430" Fill="#13243D" Canvas.Top="-180" Canvas.Left="-160" />
-            <Ellipse Width="320" Height="320" Fill="#0E1930" Canvas.Top="-60" Canvas.Left="720" />
-            <Ellipse Width="520" Height="520" Fill="#0B1221" Canvas.Top="420" Canvas.Left="600" />
-        </Canvas>
-
-        <Grid Margin="14">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="*" />
-                <RowDefinition Height="Auto" />
-            </Grid.RowDefinitions>
-
-            <Border Grid.Row="0"
-                    CornerRadius="26"
-                    BorderBrush="#243246"
-                    BorderThickness="1"
-                    Background="#0F141D"
-                    Padding="16"
-                    Margin="0,0,0,10">
-                <StackPanel>
-                    <TextBlock Text="Structura" FontSize="34" FontWeight="SemiBold" />
-                    <TextBlock x:Name="HeaderServerStatusTextBlock"
-                               Text="Сервер: подключение не выполнено"
-                               Margin="0,8,0,0"
-                               Foreground="#93A5BE" />
-                    <TextBlock x:Name="HeaderFirmStatusTextBlock"
-                               Text="Tekla Sync: проверка еще не выполнялась"
-                               Margin="0,4,0,0"
-                               Foreground="#93A5BE" />
-                </StackPanel>
-            </Border>
-
-            <Grid Grid.Row="1">
-                <TabControl Background="Transparent" BorderThickness="0">
-                    <TabItem Header="Коннектор">
-                        <!-- hosted from ShellViewModel (Connector domain -> Connector module). The login/heartbeat
-                             FRONT-END view was lifted into Features\Connector\ConnectorView; the connect/heartbeat
-                             ENGINE stays in MainWindow and is reached through the IConnectorHost seam. -->
-                        <ContentControl x:Name="ConnectorHost" />
-                    </TabItem>
-
-                    <TabItem Header="Structura">
-                        <!-- hosted from ShellViewModel (Structura domain -> Structura module) -->
-                        <ContentControl x:Name="StructuraHost" />
-                    </TabItem>
-
-                    <!-- ДОМЕН Tekla: объединяет Стандарт (папка фирмы), Model Sharing, Патчинг и будущие Tekla-модули -->
-                    <TabItem Header="Tekla">
-                        <!-- DATA-DRIVEN: tabs render from ShellViewModel.Tekla.Modules (ItemsSource set in code-behind,
-                             ComposeFeatureModules). Each module supplies its Title (tab header, as a string — same
-                             rendering as the old hand-authored Header="...") and its View (tab body). Adding a Tekla
-                             module = register it in ShellViewModel; NO XAML change here. The module views self-wrap
-                             in ScrollViewer + CardStyle, so the content template is a bare host. -->
-                        <TabControl x:Name="TeklaTabs" Margin="0,0,0,4">
-                            <TabControl.ItemContainerStyle>
-                                <Style TargetType="TabItem" BasedOn="{StaticResource {x:Type TabItem}}">
-                                    <Setter Property="Header" Value="{Binding Title}" />
-                                </Style>
-                            </TabControl.ItemContainerStyle>
-                            <TabControl.ContentTemplate>
-                                <DataTemplate>
-                                    <ContentControl Content="{Binding View}" />
-                                </DataTemplate>
-                            </TabControl.ContentTemplate>
-                        </TabControl>
-                    </TabItem>
-                    <!-- /ДОМЕН Tekla -->
-
-                    <TabItem Header="Атрибуты">
-                        <!-- hosted from ShellViewModel (Атрибуты domain -> placeholder module) -->
-                        <ContentControl x:Name="AttributesHost" />
-                    </TabItem>
-
-                    <TabItem Header="Общая папка (VPN)">
-                        <!-- hosted from ShellViewModel (VPN domain -> VPN module) -->
-                        <ContentControl x:Name="VpnHost" />
-                    </TabItem>
-
-                    <!-- ДОМЕН Конвертер (C2b): подвкладки «Конвертация | История» по образцу TeklaTabs, модули — из
-                         ShellViewModel.Converter. -->
-                    <TabItem Header="Конвертер">
-                        <TabControl x:Name="ConverterTabs" Margin="0,0,0,4">
-                            <TabControl.ItemContainerStyle>
-                                <Style TargetType="TabItem" BasedOn="{StaticResource {x:Type TabItem}}">
-                                    <Setter Property="Header" Value="{Binding Title}" />
-                                </Style>
-                            </TabControl.ItemContainerStyle>
-                            <TabControl.ContentTemplate>
-                                <DataTemplate>
-                                    <ContentControl Content="{Binding View}" />
-                                </DataTemplate>
-                            </TabControl.ContentTemplate>
-                        </TabControl>
-                    </TabItem>
-                    <!-- /ДОМЕН Конвертер -->
-                </TabControl>
-            </Grid>
-
-            <Border Grid.Row="2"
-                    CornerRadius="16"
-                    BorderBrush="#2A3E5C"
-                    BorderThickness="1"
-                    Background="#0F1928"
-                    Padding="14"
-                    Margin="0,0,0,0">
-                <Grid>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="Auto" />
-                    </Grid.RowDefinitions>
-                    <TextBlock Text="Журнал (последние события)" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8" />
-                    <TextBox x:Name="LogTextBox"
-                             Grid.Row="1"
-                             IsReadOnly="True"
-                             Height="92"
-                             TextWrapping="Wrap"
-                             VerticalScrollBarVisibility="Auto"
-                             HorizontalScrollBarVisibility="Disabled"
-                             FontFamily="Consolas"
-                             FontSize="13"
-                             Background="#0B1320"
-                             BorderBrush="#2A3E5C"
-                             Foreground="#EDF5FF" />
-                </Grid>
-            </Border>
+        xmlns:graphite="clr-namespace:Connector.Desktop.Features.GraphiteWeb"
+        Title="Connector" Height="900" Width="1180" MinHeight="720" MinWidth="920"
+        Background="#12171D" Loaded="Window_Loaded">
+    <Grid Background="#12171D">
+        <graphite:GraphiteWebView x:Name="GraphiteWebHost" />
+        <!-- Existing feature controls retain their settings/commands during the renderer migration.
+             The approved HTML/CSS is the only visible product interface. -->
+        <Grid Visibility="Collapsed">
+            <TabControl x:Name="MainTabs">
+                <TabItem><ContentControl x:Name="ConnectorHost" /></TabItem>
+                <TabItem><ContentControl x:Name="StructuraHost" /></TabItem>
+                <TabItem><TabControl x:Name="TeklaTabs" /></TabItem>
+                <TabItem><ContentControl x:Name="AttributesHost" /></TabItem>
+                <TabItem><ContentControl x:Name="VpnHost" /></TabItem>
+                <TabItem><TabControl x:Name="ConverterTabs" /></TabItem>
+            </TabControl>
+            <ContentControl x:Name="PlatformHost" />
+            <ContentControl x:Name="ConverterWorkspaceHost" />
+            <ContentControl x:Name="PlatformToolsHost" />
+            <TextBlock x:Name="HeaderServerStatusTextBlock" />
+            <TextBlock x:Name="HeaderFirmStatusTextBlock" />
+            <TextBox x:Name="LogTextBox" />
         </Grid>
     </Grid>
 </Window>

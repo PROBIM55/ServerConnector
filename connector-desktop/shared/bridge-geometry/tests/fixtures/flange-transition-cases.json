@@ -1,0 +1,134 @@
+{
+  "$schema": "TS-port consumes this JSON. Keep in sync with FlangeTransitionRulesTests.cs.",
+  "version": 1,
+  "generatedFrom": "FlangeTransitionRulesTests.cs (Phase C, 2026-05-11)",
+  "ratiosByStressZone": {
+    "BottomTension": { "bottom": 8.0, "top": 4.0 },
+    "TopTension":    { "bottom": 4.0, "top": 8.0 }
+  },
+  "cases": [
+    {
+      "id": "T1_SingleSegment",
+      "segs": [[24000, 400, 30]],
+      "ratio": 8.0,
+      "expectedDetails": [
+        { "start": 0, "end": 24000, "width": 400, "thickness": 30, "transitionStart": 0, "transitionEnd": 0 }
+      ],
+      "expectedCuts": []
+    },
+    {
+      "id": "T2_TwoSameSegments_Merged",
+      "segs": [[12000, 400, 30], [12000, 400, 30]],
+      "ratio": 8.0,
+      "expectedDetails": [
+        { "start": 0, "end": 24000, "width": 400, "thickness": 30, "transitionStart": 0, "transitionEnd": 0 }
+      ],
+      "expectedCuts": []
+    },
+    {
+      "id": "T3_WidthOnly_NextWider",
+      "segs": [[8000, 400, 30], [16000, 500, 30]],
+      "ratio": 8.0,
+      "expectedDetails": [
+        { "start": 0,    "end": 7600,  "width": 400, "thickness": 30, "transitionStart": 0,   "transitionEnd": 0 },
+        { "start": 7600, "end": 24000, "width": 500, "thickness": 30, "transitionStart": 400, "transitionEnd": 0 }
+      ],
+      "expectedCuts": []
+    },
+    {
+      "id": "T3b_WidthOnly_CurrentWider",
+      "segs": [[8000, 500, 30], [16000, 400, 30]],
+      "ratio": 8.0,
+      "expectedDetails": [
+        { "start": 0,    "end": 8400,  "width": 500, "thickness": 30, "transitionStart": 0, "transitionEnd": 400 },
+        { "start": 8400, "end": 24000, "width": 400, "thickness": 30, "transitionStart": 0, "transitionEnd": 0 }
+      ],
+      "expectedCuts": []
+    },
+    {
+      "id": "T4_ThicknessOnly_NextThicker",
+      "segs": [[8000, 400, 30], [16000, 400, 50]],
+      "ratio": 8.0,
+      "expectedDetails": [
+        { "start": 0,    "end": 7840,  "width": 400, "thickness": 30, "transitionStart": 0, "transitionEnd": 0 },
+        { "start": 7840, "end": 24000, "width": 400, "thickness": 50, "transitionStart": 0, "transitionEnd": 0 }
+      ],
+      "expectedCuts": [
+        { "boundaryIndex": 0, "decrease": false, "theoretical": 8000, "start": 7840, "end": 8000, "thickT": 50, "thinT": 30, "widthOffset": 0, "targetDetailIndex": 1 }
+      ]
+    },
+    {
+      "id": "T4b_ThicknessOnly_CurrentThicker",
+      "segs": [[8000, 400, 50], [16000, 400, 30]],
+      "ratio": 8.0,
+      "expectedCuts": [
+        { "boundaryIndex": 0, "decrease": true, "theoretical": 8000, "start": 8000, "end": 8160, "thickT": 50, "thinT": 30, "widthOffset": 0, "targetDetailIndex": 0 }
+      ]
+    },
+    {
+      "id": "T5_BothWidthAndThickness_WidthDrives",
+      "segs": [[8000, 400, 30], [16000, 600, 50]],
+      "ratio": 8.0,
+      "expectedDetails": [
+        { "start": 0,    "end": 7200,  "width": 400, "thickness": 30, "transitionStart": 0,   "transitionEnd": 0 },
+        { "start": 7200, "end": 24000, "width": 600, "thickness": 50, "transitionStart": 800, "transitionEnd": 0 }
+      ],
+      "expectedCuts": [
+        { "boundaryIndex": 0, "decrease": false, "theoretical": 8000, "start": 7200, "end": 7360, "thickT": 50, "thinT": 30, "widthOffset": 640, "targetDetailIndex": 1 }
+      ]
+    },
+    {
+      "id": "T5b_BothWidthAndThickness_ThicknessDrives",
+      "segs": [[8000, 400, 30], [16000, 420, 60]],
+      "ratio": 8.0,
+      "expectedCuts": [
+        { "boundaryIndex": 0, "decrease": false, "theoretical": 8000, "start": 7920, "end": 8160, "thickT": 60, "thinT": 30, "widthOffset": -160, "targetDetailIndex": 1 }
+      ]
+    },
+    {
+      "id": "T6_CascadeWidth_UpUp",
+      "segs": [[8000, 400, 30], [8000, 500, 30], [8000, 600, 30]],
+      "ratio": 8.0,
+      "expectedDetails": [
+        { "start": 0,     "end": 7600,  "width": 400, "thickness": 30, "transitionStart": 0,   "transitionEnd": 0 },
+        { "start": 7600,  "end": 15600, "width": 500, "thickness": 30, "transitionStart": 400, "transitionEnd": 0 },
+        { "start": 15600, "end": 24000, "width": 600, "thickness": 30, "transitionStart": 400, "transitionEnd": 0 }
+      ]
+    },
+    {
+      "id": "T7_ThicknessPeak_TwoCuts",
+      "segs": [[8000, 400, 30], [8000, 400, 50], [8000, 400, 30]],
+      "ratio": 8.0,
+      "expectedDetails": [
+        { "start": 0,     "end": 7840,  "width": 400, "thickness": 30, "transitionStart": 0, "transitionEnd": 0 },
+        { "start": 7840,  "end": 16160, "width": 400, "thickness": 50, "transitionStart": 0, "transitionEnd": 0 },
+        { "start": 16160, "end": 24000, "width": 400, "thickness": 30, "transitionStart": 0, "transitionEnd": 0 }
+      ],
+      "expectedCuts": [
+        { "boundaryIndex": 0, "decrease": false, "theoretical": 8000,  "start": 7840,  "end": 8000,  "thickT": 50, "thinT": 30, "widthOffset": 0, "targetDetailIndex": 1 },
+        { "boundaryIndex": 1, "decrease": true,  "theoretical": 16000, "start": 16000, "end": 16160, "thickT": 50, "thinT": 30, "widthOffset": 0, "targetDetailIndex": 1 }
+      ]
+    },
+    {
+      "id": "T9_RatioBottomTension_GentleSlope",
+      "segs": [[8000, 400, 30], [16000, 400, 50]],
+      "ratio": 8.0,
+      "expectedCutLength": 160
+    },
+    {
+      "id": "T9_RatioTopTension_SteepSlope",
+      "segs": [[8000, 400, 30], [16000, 400, 50]],
+      "ratio": 4.0,
+      "expectedCutLength": 80
+    },
+    {
+      "id": "T11_SubEpsilonChange_NotTransition",
+      "segs": [[8000, 400.0, 30], [16000, 400.005, 30]],
+      "ratio": 8.0,
+      "expectedDetails": [
+        { "start": 0, "end": 24000, "width": 400.005, "thickness": 30, "transitionStart": 0, "transitionEnd": 0 }
+      ],
+      "expectedCuts": []
+    }
+  ]
+}

@@ -17,6 +17,14 @@ public sealed class SettingsService
         _settingsPath = Path.Combine(root, "settings.json");
     }
 
+    // Test seam only: production continues to use LocalAppData/ConnectorAgentDesktop/settings.json.
+    public SettingsService(string settingsPath)
+    {
+        if (string.IsNullOrWhiteSpace(settingsPath)) throw new ArgumentException("Нужен путь настроек.", nameof(settingsPath));
+        _settingsPath = settingsPath;
+        Directory.CreateDirectory(Path.GetDirectoryName(settingsPath) ?? throw new ArgumentException("Нужна папка настроек.", nameof(settingsPath)));
+    }
+
     public AppSettings Load()
     {
         if (!File.Exists(_settingsPath))
@@ -121,7 +129,21 @@ public sealed class SettingsService
     public void Save(AppSettings settings)
     {
         var json = JsonSerializer.Serialize(settings, new JsonSerializerOptions { WriteIndented = true });
-        File.WriteAllText(_settingsPath, json, Encoding.UTF8);
+        var temporary = _settingsPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
+        try
+        {
+            using (var stream = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+            {
+                var content = Encoding.UTF8.GetBytes(json);
+                stream.Write(content);
+                stream.Flush(flushToDisk: true);
+            }
+            File.Move(temporary, _settingsPath, overwrite: true);
+        }
+        finally
+        {
+            if (File.Exists(temporary)) File.Delete(temporary);
+        }
     }
 
     public static string EncryptToken(string token)

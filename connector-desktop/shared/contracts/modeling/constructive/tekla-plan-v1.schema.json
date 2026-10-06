@@ -1,0 +1,213 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://bimplatforma.ru/schemas/modeling/tekla-plan-v1.schema.json",
+  "title": "TeklaPlan v1",
+  "description": "Детерминированный план нативных операций Tekla. Mesh/BRep fallback не входит в контракт.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "source", "target", "capabilities", "executable", "commands", "mappings", "diagnostics"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "source": { "$ref": "#/$defs/planSource" },
+    "target": { "$ref": "#/$defs/target" },
+    "capabilities": { "$ref": "#/$defs/capabilities" },
+    "executable": { "type": "boolean" },
+    "commands": { "type": "array", "items": { "$ref": "#/$defs/command" } },
+    "mappings": { "type": "array", "items": { "$ref": "#/$defs/mapping" } },
+    "diagnostics": { "type": "array", "items": { "$ref": "#/$defs/diagnostic" } }
+  },
+  "$defs": {
+    "nonEmptyString": { "type": "string", "minLength": 1 },
+    "address": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["projectId", "moduleId", "moduleVariantId", "revisionId"],
+      "properties": {
+        "projectId": { "$ref": "#/$defs/nonEmptyString" },
+        "scenarioId": { "$ref": "#/$defs/nonEmptyString" },
+        "moduleId": { "$ref": "#/$defs/nonEmptyString" },
+        "moduleVariantId": { "$ref": "#/$defs/nonEmptyString" },
+        "revisionId": { "$ref": "#/$defs/nonEmptyString" }
+      }
+    },
+    "planSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["address", "constructiveSchemaVersion", "generationId", "sourceHash", "constructiveContentHash"],
+      "properties": {
+        "address": { "$ref": "#/$defs/address" },
+        "constructiveSchemaVersion": { "type": "integer", "minimum": 1 },
+        "generationId": { "$ref": "#/$defs/nonEmptyString" },
+        "sourceHash": { "$ref": "#/$defs/nonEmptyString" },
+        "constructiveContentHash": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" }
+      }
+    },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["adapterId", "adapterVersion"],
+      "properties": {
+        "adapterId": { "$ref": "#/$defs/nonEmptyString" },
+        "adapterVersion": { "$ref": "#/$defs/nonEmptyString" },
+        "teklaVersion": { "$ref": "#/$defs/nonEmptyString" }
+      }
+    },
+    "capabilityName": {
+      "enum": [
+        "beam", "polyBeam", "polyBeamArcSegments", "developedPlate", "developedPlatePolyBeamStationFrameV1", "contourPlate", "contourArcEdges",
+        "loftedPlate", "fitting", "booleanPart", "roundHole", "slottedHole",
+        "boltGroup", "weld", "polygonWeld", "contourChamfer", "edgeChamfer",
+        "bend", "reinforcement", "assembly", "udaStamp"
+      ]
+    },
+    "capabilities": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "beam", "polyBeam", "polyBeamArcSegments", "developedPlate", "developedPlatePolyBeamStationFrameV1", "contourPlate", "contourArcEdges",
+        "loftedPlate", "fitting", "booleanPart", "roundHole", "slottedHole",
+        "boltGroup", "weld", "polygonWeld", "contourChamfer", "edgeChamfer",
+        "bend", "reinforcement", "assembly", "udaStamp"
+      ],
+      "properties": {
+        "beam": { "type": "boolean" },
+        "polyBeam": { "type": "boolean" },
+        "polyBeamArcSegments": { "type": "boolean" },
+        "developedPlate": { "type": "boolean" },
+        "developedPlatePolyBeamStationFrameV1": { "type": "boolean" },
+        "contourPlate": { "type": "boolean" },
+        "contourArcEdges": { "type": "boolean" },
+        "loftedPlate": { "type": "boolean" },
+        "fitting": { "type": "boolean" },
+        "booleanPart": { "type": "boolean" },
+        "roundHole": { "type": "boolean" },
+        "slottedHole": { "type": "boolean" },
+        "boltGroup": { "type": "boolean" },
+        "weld": { "type": "boolean" },
+        "polygonWeld": { "type": "boolean" },
+        "contourChamfer": { "type": "boolean" },
+        "edgeChamfer": { "type": "boolean" },
+        "bend": { "type": "boolean" },
+        "reinforcement": { "type": "boolean" },
+        "assembly": { "type": "boolean" },
+        "udaStamp": { "type": "boolean" }
+      }
+    },
+    "sourceRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "id", "stableKey", "role", "sourceLayer"],
+      "properties": {
+        "kind": { "enum": ["element", "feature", "assembly"] },
+        "id": { "$ref": "#/$defs/nonEmptyString" },
+        "stableKey": { "$ref": "#/$defs/nonEmptyString" },
+        "role": { "$ref": "#/$defs/nonEmptyString" },
+        "sourceLayer": { "enum": ["generated", "manual"] }
+      }
+    },
+    "owner": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["moduleId", "entityId"],
+      "properties": {
+        "moduleId": { "$ref": "#/$defs/nonEmptyString" },
+        "entityId": { "$ref": "#/$defs/nonEmptyString" },
+        "partPath": { "type": "array", "items": { "$ref": "#/$defs/nonEmptyString" } }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["revisionId", "sourceHash", "adapterId", "adapterVersion"],
+      "properties": {
+        "revisionId": { "$ref": "#/$defs/nonEmptyString" },
+        "sourceHash": { "$ref": "#/$defs/nonEmptyString" },
+        "adapterId": { "$ref": "#/$defs/nonEmptyString" },
+        "adapterVersion": { "$ref": "#/$defs/nonEmptyString" },
+        "sourcePath": { "type": "array", "items": { "$ref": "#/$defs/nonEmptyString" } }
+      }
+    },
+    "ownership": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["namespace", "documentSourceHash", "generationId", "sourceKind", "sourceId", "stableKey", "moduleId", "moduleVariantId", "revisionId"],
+      "properties": {
+        "namespace": { "const": "bimplatforma" },
+        "documentSourceHash": { "$ref": "#/$defs/nonEmptyString" },
+        "generationId": { "$ref": "#/$defs/nonEmptyString" },
+        "sourceKind": { "enum": ["element", "feature", "assembly"] },
+        "sourceId": { "$ref": "#/$defs/nonEmptyString" },
+        "stableKey": { "$ref": "#/$defs/nonEmptyString" },
+        "moduleId": { "$ref": "#/$defs/nonEmptyString" },
+        "moduleVariantId": { "$ref": "#/$defs/nonEmptyString" },
+        "revisionId": { "$ref": "#/$defs/nonEmptyString" }
+      }
+    },
+    "commandKind": {
+      "enum": [
+        "create-beam", "create-poly-beam", "create-contour-plate", "create-lofted-plate",
+        "create-reinforcement", "apply-fitting", "apply-boolean-cut", "create-hole",
+        "create-bolt-group", "create-weld", "apply-contour-corner", "apply-edge-treatment",
+        "apply-bend", "create-assembly"
+      ]
+    },
+    "phase": {
+      "enum": ["base-parts", "fittings", "boolean-cuts", "edge-treatments", "holes-and-bolts", "welds", "assemblies"]
+    },
+    "command": {
+      "type": "object",
+      "required": ["commandId", "kind", "phase", "source", "owner", "revisionProvenance", "dependsOn", "ownership"],
+      "properties": {
+        "commandId": { "$ref": "#/$defs/nonEmptyString" },
+        "kind": { "$ref": "#/$defs/commandKind" },
+        "phase": { "$ref": "#/$defs/phase" },
+        "source": { "$ref": "#/$defs/sourceRef" },
+        "owner": { "$ref": "#/$defs/owner" },
+        "revisionProvenance": { "$ref": "#/$defs/provenance" },
+        "dependsOn": { "type": "array", "items": { "$ref": "#/$defs/nonEmptyString" }, "uniqueItems": true },
+        "ownership": { "$ref": "#/$defs/ownership" }
+      },
+      "allOf": [
+        { "if": { "properties": { "kind": { "const": "create-beam" } } }, "then": { "required": ["start", "end", "profile", "material"] } },
+        { "if": { "properties": { "kind": { "const": "create-poly-beam" } } }, "then": { "required": ["path", "profile", "material"] } },
+        { "if": { "properties": { "kind": { "const": "create-contour-plate" } } }, "then": { "required": ["plane", "contour", "thicknessMm", "extrusionSide", "material"] } },
+        { "if": { "properties": { "kind": { "const": "create-lofted-plate" } } }, "then": { "required": ["sections", "thicknessMm", "material"] } },
+        { "if": { "properties": { "kind": { "const": "create-reinforcement" } } }, "then": { "required": ["path", "diameterMm"] } },
+        { "if": { "properties": { "kind": { "const": "apply-fitting" } } }, "then": { "required": ["target", "plane", "keepSide"] } },
+        { "if": { "properties": { "kind": { "const": "apply-boolean-cut" } } }, "then": { "required": ["target", "cutter"] } },
+        { "if": { "properties": { "kind": { "const": "create-hole" } } }, "then": { "required": ["target", "center", "axis", "diameterMm", "holeType"], "allOf": [{ "if": { "properties": { "holeType": { "const": "slotted" } } }, "then": { "required": ["slotLengthMm", "slotDirection"] }, "else": { "not": { "anyOf": [{ "required": ["slotLengthMm"] }, { "required": ["slotDirection"] }] } } }] } },
+        { "if": { "properties": { "kind": { "const": "create-bolt-group" } } }, "then": { "required": ["target", "participants", "frame", "boltStandard", "diameterMm", "toleranceMm", "boltType", "pattern", "createHoles"] } },
+        { "if": { "properties": { "kind": { "const": "create-weld" } } }, "then": { "required": ["target", "participants", "weldType", "sizeMm", "shopSite", "side"] } },
+        { "if": { "properties": { "kind": { "const": "apply-contour-corner" } } }, "then": { "required": ["target", "targetTopology", "cornerType", "sizeXmm"] } },
+        { "if": { "properties": { "kind": { "const": "apply-edge-treatment" } } }, "then": { "required": ["target", "targetTopology", "treatmentType", "sizeMm"] } },
+        { "if": { "properties": { "kind": { "const": "apply-bend" } } }, "then": { "required": ["target", "radiusMm"] } },
+        { "if": { "properties": { "kind": { "const": "create-assembly" } } }, "then": { "required": ["mainElementId", "secondaryElementIds", "featureIds"] } }
+      ]
+    },
+    "mapping": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "strategy", "commandIds", "expectedNativeKinds", "ownershipStableKey"],
+      "properties": {
+        "source": { "$ref": "#/$defs/sourceRef" },
+        "strategy": { "enum": ["native-single", "native-composite", "blocked"] },
+        "commandIds": { "type": "array", "items": { "$ref": "#/$defs/nonEmptyString" }, "uniqueItems": true },
+        "expectedNativeKinds": { "type": "array", "items": { "$ref": "#/$defs/nonEmptyString" } },
+        "ownershipStableKey": { "$ref": "#/$defs/nonEmptyString" }
+      }
+    },
+    "diagnostic": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["severity", "code", "message"],
+      "properties": {
+        "severity": { "enum": ["info", "warning", "error"] },
+        "code": { "$ref": "#/$defs/nonEmptyString" },
+        "message": { "$ref": "#/$defs/nonEmptyString" },
+        "source": { "$ref": "#/$defs/sourceRef" },
+        "commandId": { "$ref": "#/$defs/nonEmptyString" },
+        "requiredCapability": { "$ref": "#/$defs/capabilityName" }
+      }
+    }
+  }
+}

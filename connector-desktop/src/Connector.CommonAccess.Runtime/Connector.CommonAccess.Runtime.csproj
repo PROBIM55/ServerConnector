@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Connector.Network\Connector.Network.csproj" />
+    <ProjectReference Include="..\Platform.Connector.Core\Platform.Connector.Core.csproj" />
+    <ProjectReference Include="..\..\..\connector-access\src\Connector.Access.Client\Connector.Access.Client.csproj" />
+    <ProjectReference Include="..\..\..\connector-access\src\Connector.Access.Contracts\Connector.Access.Contracts.csproj" />
+  </ItemGroup>
+</Project>

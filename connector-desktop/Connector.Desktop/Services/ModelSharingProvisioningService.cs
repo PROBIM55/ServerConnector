@@ -1,8 +1,10 @@
 using System.Diagnostics;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using Microsoft.Win32.SafeHandles;
 using dnlib.DotNet;
 using dnlib.DotNet.Emit;
 
@@ -13,19 +15,28 @@ namespace Connector.Desktop.Services;
 //       local user, so NOTHING calls Trimble Identity). Per-PC identity is baked from the connected device.
 //   (2) writes bin\SharingConfiguration.xml redirecting the client to our on-prem coordinator (VPS net.tcp).
 // Nothing else in the Tekla install is touched. Re-runnable (idempotent): always patches from the pristine
-// backup, and detects when a Tekla service pack replaced the DLL (then re-captures the new pristine).
+// backup. Unknown changes (including a possible Tekla service pack) require review before touching the installation.
 public sealed class ModelSharingProvisioningService
 {
     private const string FeatureDllName = "SharingUIFeature.dll";
     private const string PristineBackupSuffix = ".trimble-orig";
     private const string StateSuffix = ".structura-ms.json";
-    private const int FileReplaceMaxAttempts = 3;
+    private readonly Func<byte[], byte[]>? _assemblyPatcher;
+    private readonly Action<ModelSharingProvisionStage>? _stageHook;
+    private readonly Action<ModelSharingWriteStage>? _writeHook;
 
     public string LogFilePath { get; }
 
-    public ModelSharingProvisioningService()
+    public ModelSharingProvisioningService(string? stateRoot = null) : this(stateRoot, null, null, null) { }
+
+    internal ModelSharingProvisioningService(string? stateRoot, Func<byte[], byte[]>? assemblyPatcher,
+        Action<ModelSharingProvisionStage>? stageHook, Action<ModelSharingWriteStage>? writeHook = null)
     {
-        var root = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ConnectorAgentDesktop");
+        _assemblyPatcher = assemblyPatcher;
+        _stageHook = stageHook;
+        _writeHook = writeHook;
+        var root = Path.GetFullPath(stateRoot ?? Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ConnectorAgentDesktop"));
         Directory.CreateDirectory(root);
         LogFilePath = Path.Combine(root, "model-sharing.log");
     }
@@ -104,11 +115,20 @@ public sealed class ModelSharingProvisioningService
         var state = ReadState(dll + StateSuffix);
         if (state is null)
         {
+            status.NeedsManualReview = PathOccupied(dll + StateSuffix) ||
+                PathOccupied(dll + PristineBackupSuffix) ||
+                PathOccupied(Path.Combine(teklaBin, "SharingConfiguration.xml"));
             return status;
         }
 
         try
         {
+            if (!TryValidateExistingInstallation(teklaBin, dll, dll + PristineBackupSuffix,
+                    dll + StateSuffix, state, out _))
+            {
+                status.NeedsManualReview = true;
+                return status;
+            }
             status.Provisioned = string.Equals(ComputeSha(File.ReadAllBytes(dll)), state.PatchedSha, StringComparison.OrdinalIgnoreCase) && status.ConfigExists;
             status.NeedsReapply = !status.Provisioned; // a Tekla service pack likely replaced our patched DLL
             status.IdentityEmail = state.IdentityEmail;
@@ -119,7 +139,7 @@ public sealed class ModelSharingProvisioningService
         }
         catch
         {
-            // Treat unreadable state as not provisioned.
+            status.NeedsManualReview = true;
         }
 
         return status;
@@ -149,155 +169,336 @@ public sealed class ModelSharingProvisioningService
                 "Не найден файл " + live + ". Проверьте путь к папке bin Tekla и версию Tekla Structures.");
         }
 
+        byte[]? previousStateBytes;
+        try { previousStateBytes = File.Exists(statePath) ? File.ReadAllBytes(statePath) : null; }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return ModelSharingProvisionResult.Fail("Не удалось проверить состояние Model Sharing. Требуется ручная проверка.", ex.Message);
+        }
+        ModelSharingState? previousState;
+        try { previousState = previousStateBytes is null ? null : JsonSerializer.Deserialize<ModelSharingState>(previousStateBytes); }
+        catch (JsonException) { previousState = null; }
+        if (!TryValidateExistingInstallation(teklaBin, live, backup, statePath, previousState, out var stateProblem))
+            return ModelSharingProvisionResult.Fail(
+                "Файлы Model Sharing отличаются от сохранённого состояния. Настройка остановлена до ручной проверки.", stateProblem);
+
         var authToken = "local:" + request.IdentityEmail;
         var licenseToken = "local-license:" + request.IdentityEmail;
+        var configPath = Path.Combine(teklaBin, "SharingConfiguration.xml");
+        byte[]? previousLive = null;
+        byte[]? previousConfig = null;
+        byte[]? previousBackup = null;
+        byte[]? patched = null;
+        byte[]? newConfig = null;
+        var backupExisted = File.Exists(backup);
+        var attemptedLive = false;
+        var attemptedConfig = false;
 
         try
         {
             AppendLog($"Старт настройки Model Sharing: bin='{teklaBin}', user='{request.IdentityEmail}' ({request.IdentityName}), server={request.ServerHost}:{request.ServerPort}.");
+            previousLive = File.ReadAllBytes(live);
+            if (File.Exists(configPath)) previousConfig = File.ReadAllBytes(configPath);
+            if (File.Exists(backup)) previousBackup = File.ReadAllBytes(backup);
 
-            // 1) Resolve the pristine (un-patched) DLL bytes, re-capturing the backup if a Tekla update replaced our patch.
-            var (pristine, refreshedBackup) = ResolvePristine(live, backup, statePath);
-            if (refreshedBackup)
-            {
-                AppendLog("Обнаружена новая (обновлённая) версия SharingUIFeature.dll — эталон пересохранён.");
-            }
+            // 1) Resolve only the verified pristine (un-patched) DLL bytes.
+            var pristine = ResolvePristine(live, backup, previousState);
+            if (previousBackup is null && !pristine.SequenceEqual(previousLive))
+                throw new ModelSharingStateConflictException("DLL изменилась во время создания резервной копии.");
 
             // 2) Patch in memory.
-            byte[] patched = PatchAssembly(pristine, teklaBin, request.IdentityEmail, request.IdentityName, authToken, licenseToken);
+            patched = _assemblyPatcher?.Invoke(pristine) ??
+                PatchAssembly(pristine, teklaBin, request.IdentityEmail, request.IdentityName, authToken, licenseToken);
+
+            EnsureFilesMatch(live, previousLive, backup, previousBackup ?? previousLive,
+                configPath, previousConfig, statePath, previousStateBytes);
 
             // 3) Replace the live DLL atomically (temp -> replace, with retries for transient locks).
-            ReplaceFile(live, patched);
+            attemptedLive = true;
+            ReplaceFile(live, patched, previousLive, () => _writeHook?.Invoke(ModelSharingWriteStage.BeforeDllCommit));
+            _stageHook?.Invoke(ModelSharingProvisionStage.AfterDll);
             AppendLog("Пропатченная SharingUIFeature.dll установлена.");
 
             // 4) Write the redirect config.
-            WriteSharingConfiguration(teklaBin, request.ServerHost, request.ServerPort);
-            AppendLog($"Записан {Path.Combine(teklaBin, "SharingConfiguration.xml")} -> {request.ServerHost}:{request.ServerPort}.");
+            newConfig = new UTF8Encoding(false).GetBytes(BuildSharingConfiguration(request.ServerHost, request.ServerPort));
+            EnsureFilesMatch(live, patched, backup, previousBackup ?? previousLive,
+                configPath, previousConfig, statePath, previousStateBytes);
+            attemptedConfig = true;
+            WriteGuardedFile(configPath, newConfig, previousConfig,
+                () => _writeHook?.Invoke(ModelSharingWriteStage.BeforeConfigCommit));
+            _stageHook?.Invoke(ModelSharingProvisionStage.AfterConfig);
+            AppendLog($"Записан {configPath} -> {request.ServerHost}:{request.ServerPort}.");
 
             // 5) Persist state for status detection + service-pack-aware re-provisioning.
             var state = new ModelSharingState
             {
                 PristineSha = ComputeSha(pristine),
                 PatchedSha = ComputeSha(patched),
+                ConfigSha = ComputeSha(newConfig),
                 IdentityEmail = request.IdentityEmail,
                 IdentityName = request.IdentityName,
                 ServerHost = request.ServerHost,
                 ServerPort = request.ServerPort,
                 AppliedUtc = DateTimeOffset.UtcNow
             };
-            WriteState(statePath, state);
+            EnsureFilesMatch(live, patched, backup, previousBackup ?? previousLive,
+                configPath, newConfig, statePath, previousStateBytes);
+            WriteState(statePath, state, previousStateBytes,
+                () => _writeHook?.Invoke(ModelSharingWriteStage.BeforeStateCommit));
 
             AppendLog("Настройка Model Sharing завершена успешно.");
             return ModelSharingProvisionResult.Success(
                 "Tekla на этом компьютере готова к Model Sharing. Пользователь: " + request.IdentityEmail +
                 ". Откройте Tekla, затем File -> Sharing.");
         }
-        catch (ModelSharingPatchException ex)
-        {
-            AppendLog("Ошибка патча: " + ex.Message);
-            return ModelSharingProvisionResult.Fail(
-                "Не удалось пропатчить SharingUIFeature.dll. Возможно, версия Tekla отличается от поддерживаемой.", ex.Message);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            AppendLog("Ошибка доступа к файлам: " + ex.Message);
-            return ModelSharingProvisionResult.Fail(
-                "Не удалось обновить файлы Tekla. Закройте Tekla Structures (и программы, открывшие папку bin) и повторите.", ex.Message);
-        }
         catch (Exception ex)
         {
-            AppendLog("Непредвиденная ошибка: " + ex);
-            return ModelSharingProvisionResult.Fail("Не удалось настроить Model Sharing на этом компьютере.", ex.Message);
+            var recovered = TryRestorePreviousState(live, backup, configPath, previousLive, previousConfig,
+                patched, newConfig, attemptedLive, attemptedConfig, backupExisted, out var recoveryProblem);
+            AppendLog("Ошибка настройки Model Sharing: " + ex.Message + "; восстановление=" + recovered + "; " + recoveryProblem);
+            if (!recovered || ex is ModelSharingStateConflictException)
+                return ModelSharingProvisionResult.Fail(
+                    "Файлы Tekla требуют ручной проверки перед повторной настройкой.",
+                    ex.Message + "; " + recoveryProblem);
+            return ex switch
+            {
+                ModelSharingPatchException => ModelSharingProvisionResult.Fail(
+                    "Не удалось пропатчить SharingUIFeature.dll. Возможно, версия Tekla отличается от поддерживаемой.", ex.Message),
+                IOException or UnauthorizedAccessException => ModelSharingProvisionResult.Fail(
+                    "Не удалось обновить файлы Tekla. Исходное состояние восстановлено.", ex.Message),
+                _ => ModelSharingProvisionResult.Fail("Не удалось настроить Model Sharing. Исходное состояние восстановлено.", ex.Message)
+            };
         }
     }
 
-    private (byte[] Pristine, bool RefreshedBackup) ResolvePristine(string live, string backup, string statePath)
+    private byte[] ResolvePristine(string live, string backup, ModelSharingState? state)
     {
         if (!File.Exists(backup))
         {
+            if (state is not null)
+                throw new IOException("Отсутствует резервная копия ранее настроенного Model Sharing.");
             // First ever provisioning on this PC: the live DLL is the genuine Trimble pristine.
             File.Copy(live, backup);
-            return (File.ReadAllBytes(backup), false);
+            return File.ReadAllBytes(backup);
         }
-
-        var liveSha = ComputeSha(File.ReadAllBytes(live));
-        var state = ReadState(statePath);
-
-        if (state is not null && string.Equals(liveSha, state.PatchedSha, StringComparison.OrdinalIgnoreCase))
-        {
-            // Live DLL is exactly the patch we produced -> the backup is its matching pristine.
-            return (File.ReadAllBytes(backup), false);
-        }
-
-        if (state is not null &&
-            !string.Equals(liveSha, state.PristineSha, StringComparison.OrdinalIgnoreCase) &&
-            !string.IsNullOrEmpty(state.PristineSha))
-        {
-            // Live differs from both our patch and our recorded pristine -> a Tekla update replaced the file.
-            // Re-capture the new pristine.
-            File.Copy(live, backup, overwrite: true);
-            return (File.ReadAllBytes(backup), true);
-        }
-
-        // No state (legacy/manual backup) or live already equals the recorded pristine: trust the existing backup.
-        return (File.ReadAllBytes(backup), false);
+        if (state is null)
+            throw new IOException("Резервная копия существует без файла состояния Model Sharing.");
+        return File.ReadAllBytes(backup);
     }
 
-    private static void ReplaceFile(string targetPath, byte[] content)
+    private static bool TryRestorePreviousState(string live, string backup, string config,
+        byte[]? previousLive, byte[]? previousConfig, byte[]? patched, byte[]? newConfig,
+        bool attemptedLive, bool attemptedConfig, bool backupExisted, out string problem)
     {
-        for (var attempt = 1; attempt <= FileReplaceMaxAttempts; attempt++)
-        {
-            var tempPath = targetPath + ".structura-ms-" + Guid.NewGuid().ToString("N") + ".tmp";
-            try
-            {
-                File.WriteAllBytes(tempPath, content);
-                if (File.Exists(targetPath))
-                {
-                    var info = new FileInfo(targetPath);
-                    if ((info.Attributes & System.IO.FileAttributes.ReadOnly) != 0)
-                    {
-                        info.Attributes &= ~System.IO.FileAttributes.ReadOnly;
-                    }
-                    File.Copy(tempPath, targetPath, overwrite: true);
-                    File.Delete(tempPath);
-                }
-                else
-                {
-                    File.Move(tempPath, targetPath);
-                }
-                return;
-            }
-            catch (Exception ex) when ((ex is IOException or UnauthorizedAccessException) && attempt < FileReplaceMaxAttempts)
-            {
-                TryDelete(tempPath);
-                Thread.Sleep(TimeSpan.FromMilliseconds(300 * attempt));
-            }
-            catch
-            {
-                TryDelete(tempPath);
-                throw;
-            }
-        }
-    }
-
-    private static void TryDelete(string path)
-    {
+        var failures = new List<string>();
         try
         {
-            if (File.Exists(path))
+            if (attemptedConfig && newConfig is not null)
             {
-                File.Delete(path);
+                if (File.Exists(config))
+                {
+                    var current = File.ReadAllBytes(config);
+                    if (previousConfig is not null && current.SequenceEqual(previousConfig)) { }
+                    else if (current.SequenceEqual(newConfig))
+                    {
+                        if (previousConfig is null) DeleteGuardedFile(config, newConfig);
+                        else WriteGuardedFile(config, previousConfig, newConfig);
+                    }
+                    else failures.Add("Конфигурация изменилась после записи коннектора.");
+                }
+                else if (previousConfig is not null)
+                    failures.Add("Прежняя конфигурация отсутствует после ошибки.");
             }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ModelSharingStateConflictException)
+        {
+            failures.Add("Восстановление конфигурации: " + ex.GetType().Name);
+        }
+
+        try
+        {
+            if (attemptedLive && previousLive is not null && patched is not null)
+            {
+                if (!File.Exists(live)) failures.Add("Файл DLL отсутствует после ошибки.");
+                else
+                {
+                    var current = File.ReadAllBytes(live);
+                    if (current.SequenceEqual(previousLive)) { }
+                    else if (current.SequenceEqual(patched)) ReplaceFile(live, previousLive, patched);
+                    else failures.Add("DLL изменилась после записи коннектора.");
+                }
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ModelSharingStateConflictException)
+        {
+            failures.Add("Восстановление DLL: " + ex.GetType().Name);
+        }
+
+        try
+        {
+            if (!backupExisted && File.Exists(backup) && previousLive is not null)
+            {
+                if (File.Exists(live) && File.ReadAllBytes(live).SequenceEqual(previousLive) &&
+                    File.ReadAllBytes(backup).SequenceEqual(previousLive))
+                    DeleteGuardedFile(backup, previousLive);
+                else failures.Add("Новая резервная копия осталась после неполного восстановления.");
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ModelSharingStateConflictException)
+        {
+            failures.Add("Очистка собственной резервной копии: " + ex.GetType().Name);
+        }
+
+        problem = string.Join(" ", failures);
+        return failures.Count == 0;
+    }
+
+    private static bool TryValidateExistingInstallation(string teklaBin, string live, string backup,
+        string statePath, ModelSharingState? state, out string problem)
+    {
+        problem = "";
+        var config = Path.Combine(teklaBin, "SharingConfiguration.xml");
+        if (state is null)
+        {
+            if (PathOccupied(statePath) || PathOccupied(backup) || PathOccupied(config))
+            {
+                problem = "Есть ранее изменённые файлы или конфигурация без проверяемого состояния.";
+                return false;
+            }
+            return true;
+        }
+        try
+        {
+            if (!File.Exists(backup) || string.IsNullOrWhiteSpace(state.PristineSha) ||
+                string.IsNullOrWhiteSpace(state.PatchedSha) ||
+                !string.Equals(ComputeSha(File.ReadAllBytes(backup)), state.PristineSha, StringComparison.OrdinalIgnoreCase))
+            {
+                problem = "Резервная копия DLL отсутствует или отличается от сохранённой контрольной суммы.";
+                return false;
+            }
+            var liveSha = ComputeSha(File.ReadAllBytes(live));
+            if (!string.Equals(liveSha, state.PatchedSha, StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(liveSha, state.PristineSha, StringComparison.OrdinalIgnoreCase))
+            {
+                problem = "Текущая DLL изменена вне сохранённого патча.";
+                return false;
+            }
+            if (!File.Exists(config))
+            {
+                problem = "Конфигурация Model Sharing отсутствует при сохранённом состоянии.";
+                return false;
+            }
+            var expectedConfigSha = string.IsNullOrWhiteSpace(state.ConfigSha)
+                ? ComputeSha(new UTF8Encoding(false).GetBytes(BuildSharingConfiguration(state.ServerHost, state.ServerPort)))
+                : state.ConfigSha;
+            if (!string.Equals(ComputeSha(File.ReadAllBytes(config)), expectedConfigSha, StringComparison.OrdinalIgnoreCase))
+            {
+                problem = "Конфигурация Model Sharing изменена вне сохранённого состояния.";
+                return false;
+            }
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            problem = "Не удалось проверить файлы Model Sharing: " + ex.GetType().Name;
+            return false;
+        }
+    }
+
+    private static bool PathOccupied(string path) => File.Exists(path) || Directory.Exists(path);
+
+    private static void EnsureFileMatches(string path, byte[]? expected)
+    {
+        if (expected is null)
+        {
+            if (PathOccupied(path)) throw new ModelSharingStateConflictException("Путь появился после проверки: " + path);
+        }
+        else if (!File.Exists(path) || !File.ReadAllBytes(path).SequenceEqual(expected))
+            throw new ModelSharingStateConflictException("Файл изменился после проверки: " + path);
+    }
+
+    private static void EnsureFilesMatch(string live, byte[] expectedLive, string backup, byte[] expectedBackup,
+        string config, byte[]? expectedConfig, string statePath, byte[]? expectedState)
+    {
+        EnsureFileMatches(live, expectedLive);
+        EnsureFileMatches(backup, expectedBackup);
+        EnsureFileMatches(config, expectedConfig);
+        EnsureFileMatches(statePath, expectedState);
+    }
+
+    // An exclusive Windows file handle keeps the expected-byte check and write in one
+    // operation. A temp + File.Move or File.Copy after a separate check can overwrite
+    // a foreign change made in the gap. An interrupted in-place write is detected by
+    // the sidecar hash on the next run, and the pristine backup is never rewritten.
+    private static void ReplaceFile(string targetPath, byte[] content, byte[] expected,
+        Action? beforeCommit = null) => WriteGuardedFile(targetPath, content, expected, beforeCommit);
+
+    private static void WriteGuardedFile(string path, byte[] content, byte[]? expected,
+        Action? beforeCommit = null)
+    {
+        if (expected is null)
+        {
+            // CreateNew never overwrites a file that arrived after validation.
+            using var created = new FileStream(path, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None);
+            beforeCommit?.Invoke();
+            created.Write(content);
+            created.Flush(flushToDisk: true);
+            return;
+        }
+
+        using var file = new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+        var current = new byte[checked((int)file.Length)];
+        file.ReadExactly(current);
+        if (!current.SequenceEqual(expected))
+            throw new ModelSharingStateConflictException("Файл изменился после проверки: " + path);
+        beforeCommit?.Invoke();
+        try
+        {
+            file.Position = 0;
+            file.SetLength(0);
+            file.Write(content);
+            file.Flush(flushToDisk: true);
         }
         catch
         {
-            // Best-effort cleanup.
+            // Restore under the same exclusive handle if an in-process write fails.
+            file.Position = 0;
+            file.SetLength(0);
+            file.Write(expected);
+            file.Flush(flushToDisk: true);
+            throw;
         }
     }
 
-    private void WriteSharingConfiguration(string teklaBin, string serverHost, int serverPort)
+    private static void DeleteGuardedFile(string path, byte[] expected)
     {
-        var xml =
+        // FILE_SHARE_NONE + DELETE access: compare and mark the same handle for
+        // deletion. File.Delete after a separate comparison would reopen a race.
+        using var handle = CreateFileW(path, 0x80000000u | 0x00010000u, 0, IntPtr.Zero, 3, 0x80, IntPtr.Zero);
+        if (handle.IsInvalid)
+            throw new IOException("Не удалось открыть файл для безопасного удаления (Win32 " + Marshal.GetLastWin32Error() + "): " + path);
+        using var stream = new FileStream(handle, FileAccess.Read);
+        var current = new byte[checked((int)stream.Length)];
+        stream.ReadExactly(current);
+        if (!current.SequenceEqual(expected))
+            throw new ModelSharingStateConflictException("Файл изменился перед удалением: " + path);
+        var delete = 1;
+        if (!SetFileInformationByHandle(stream.SafeFileHandle, 4, ref delete, sizeof(int)))
+            throw new IOException("Не удалось безопасно удалить файл (Win32 " + Marshal.GetLastWin32Error() + "): " + path);
+    }
+
+    [DllImport("kernel32.dll", EntryPoint = "CreateFileW", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern SafeFileHandle CreateFileW(string path, uint access, uint shareMode,
+        IntPtr securityAttributes, uint creationDisposition, uint flagsAndAttributes, IntPtr templateFile);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetFileInformationByHandle(SafeFileHandle handle, int infoClass,
+        ref int information, int size);
+
+    private static string BuildSharingConfiguration(string serverHost, int serverPort)
+    {
+        return
             "<?xml version=\"1.0\" encoding=\"utf-8\"?>\r\n" +
             "<SharingConfiguration>\r\n" +
             "    <Parameter>\r\n" +
@@ -306,8 +507,6 @@ public sealed class ModelSharingProvisioningService
             "        <ServerPort>" + serverPort.ToString() + "</ServerPort>\r\n" +
             "    </Parameter>\r\n" +
             "</SharingConfiguration>\r\n";
-        var path = Path.Combine(teklaBin, "SharingConfiguration.xml");
-        File.WriteAllText(path, xml, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
     }
 
     public void AppendLog(string message)
@@ -344,16 +543,11 @@ public sealed class ModelSharingProvisioningService
         }
     }
 
-    private static void WriteState(string statePath, ModelSharingState state)
+    private static void WriteState(string statePath, ModelSharingState state, byte[]? expected,
+        Action? beforeCommit = null)
     {
-        try
-        {
-            File.WriteAllText(statePath, JsonSerializer.Serialize(state, new JsonSerializerOptions { WriteIndented = true }));
-        }
-        catch
-        {
-            // Non-fatal: status detection degrades gracefully without the sidecar.
-        }
+        var bytes = new UTF8Encoding(false).GetBytes(JsonSerializer.Serialize(state, new JsonSerializerOptions { WriteIndented = true }));
+        WriteGuardedFile(statePath, bytes, expected, beforeCommit);
     }
 
     // ---- dnlib IL patch (ported from the standalone self-host patcher) ----
@@ -590,6 +784,14 @@ public sealed class ModelSharingProvisioningService
     }
 }
 
+internal enum ModelSharingProvisionStage { AfterDll, AfterConfig }
+internal enum ModelSharingWriteStage { BeforeDllCommit, BeforeConfigCommit, BeforeStateCommit }
+
+internal sealed class ModelSharingStateConflictException : Exception
+{
+    public ModelSharingStateConflictException(string message) : base(message) { }
+}
+
 public sealed class ModelSharingProvisionRequest
 {
     public string TeklaBin { get; set; } = "";
@@ -618,6 +820,7 @@ public sealed class ModelSharingStatus
     public bool ConfigExists { get; set; }
     public bool Provisioned { get; set; }
     public bool NeedsReapply { get; set; }
+    public bool NeedsManualReview { get; set; }
     public string IdentityEmail { get; set; } = "";
     public string IdentityName { get; set; } = "";
     public string ServerHost { get; set; } = "";
@@ -629,6 +832,7 @@ internal sealed class ModelSharingState
 {
     public string PristineSha { get; set; } = "";
     public string PatchedSha { get; set; } = "";
+    public string ConfigSha { get; set; } = "";
     public string IdentityEmail { get; set; } = "";
     public string IdentityName { get; set; } = "";
     public string ServerHost { get; set; } = "";
