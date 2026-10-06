@@ -5,3 +5,16 @@ connector-desktop/Connector.Desktop/ThirdPartyLicenses/** -text
 connector-desktop/scripts/netbird_windows_preflight.ps1 -text
 connector-desktop/scripts/verify_netbird_installer.ps1 -text
 connector-desktop/infra/netbird/v0.79.0-windows-x64.lock.json -text
+
+# Approved desktop design resources retain LF bytes across Windows checkouts.
+connector-desktop/design/desktop.html text eol=lf
+connector-desktop/design/desktop-bridge.js text eol=lf
+connector-desktop/design/app.js text eol=lf
+connector-desktop/design/review-pages.js text eol=lf
+connector-desktop/design/style.css text eol=lf
+connector-desktop/design/kit-tokens.js text eol=lf
+connector-desktop/design/icons.js text eol=lf
+
+# Binary design assets are release-pinned byte-for-byte.
+connector-desktop/design/brand/structura-logo.png -text
+connector-desktop/design/brand/platform-field-refined-v3.png -text
