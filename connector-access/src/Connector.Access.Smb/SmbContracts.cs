@@ -71,6 +71,7 @@ public sealed class SmbProviderOptions
     public required string DataProtectionCertificatePasswordEnvironmentVariable { get; init; }
     public required string ClientCertificatePfxPath { get; init; }
     public required string ClientCertificatePasswordEnvironmentVariable { get; init; }
+    public string? ServerCertificateSha256 { get; init; }
     public TimeSpan RequestTimeout { get; init; } = TimeSpan.FromSeconds(30);
     public TimeSpan AccessReceiptLifetime { get; init; } = TimeSpan.FromMinutes(2);
     public IReadOnlyList<SmbResourceBinding> ResourceBindings { get; init; } = [];
@@ -84,6 +85,15 @@ public sealed class SmbProviderOptions
         var origin = new Uri(HelperBaseUri.GetLeftPart(UriPartial.Authority).TrimEnd('/') + "/", UriKind.Absolute);
         if (HelperBaseUri.AbsolutePath.Trim('/') is not "")
             throw new ArgumentException("SMB helper URI must not contain a path.");
+        string? serverCertificateSha256 = null;
+        if (ServerCertificateSha256 is not null)
+        {
+            if (!System.Net.IPAddress.TryParse(origin.Host.Trim('[', ']'), out var address) ||
+                !System.Net.IPAddress.IsLoopback(address) || ServerCertificateSha256.Length != 64 ||
+                !ServerCertificateSha256.All(Uri.IsHexDigit))
+                throw new ArgumentException("SMB helper certificate pin requires a literal loopback HTTPS origin and a SHA-256 hash.");
+            serverCertificateSha256 = ServerCertificateSha256.ToLowerInvariant();
+        }
         if (string.IsNullOrWhiteSpace(StateDirectory) || !Path.IsPathFullyQualified(StateDirectory))
             throw new ArgumentException("SMB provider state directory must be absolute.");
         if (string.IsNullOrWhiteSpace(DataProtectionKeyDirectory) || !Path.IsPathFullyQualified(DataProtectionKeyDirectory))
@@ -107,7 +117,7 @@ public sealed class SmbProviderOptions
             throw new ArgumentException("SMB resource bindings must be non-empty and unique.");
         return new ValidatedSmbProviderOptions(origin, Path.GetFullPath(StateDirectory), Path.GetFullPath(DataProtectionKeyDirectory), ClientCertificatePfxPath,
             ClientCertificatePasswordEnvironmentVariable, DataProtectionCertificatePfxPath,
-            DataProtectionCertificatePasswordEnvironmentVariable, RequestTimeout, AccessReceiptLifetime, bindings);
+            DataProtectionCertificatePasswordEnvironmentVariable, RequestTimeout, AccessReceiptLifetime, bindings, serverCertificateSha256);
     }
 
     private static string Required(string value, int maximum) =>
@@ -146,7 +156,8 @@ internal sealed record ValidatedSmbProviderOptions(
     string DataProtectionCertificatePasswordEnvironmentVariable,
     TimeSpan RequestTimeout,
     TimeSpan AccessReceiptLifetime,
-    IReadOnlyList<ValidatedSmbResourceBinding> ResourceBindings);
+    IReadOnlyList<ValidatedSmbResourceBinding> ResourceBindings,
+    string? ServerCertificateSha256);
 
 internal sealed record ValidatedSmbResourceBinding(
     string ResourceId, string ResourceKind, string HelperResourceId, string ClientShareUnc)

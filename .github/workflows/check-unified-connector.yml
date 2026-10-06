@@ -92,6 +92,7 @@ jobs:
             'connector-desktop/tests/Connector.Network.Tests/Connector.Network.Tests.csproj',
             'connector-access/tests/Connector.Access.Tests/Connector.Access.Tests.csproj',
             'connector-access/tests/Connector.Access.NetBird.Tests/Connector.Access.NetBird.Tests.csproj',
+            'connector-access/tests/Connector.Access.Smb.Tests/Connector.Access.Smb.Tests.csproj',
             'connector-desktop/installer/Connector.Upgrade.Tests/Connector.Upgrade.Tests.csproj',
             'connector-desktop/installer/Connector.Upgrade.WindowsHost.Tests/Connector.Upgrade.WindowsHost.Tests.csproj',
             'connector-desktop/installer/Connector.Upgrade.PlatformAccess.Tests/Connector.Upgrade.PlatformAccess.Tests.csproj',

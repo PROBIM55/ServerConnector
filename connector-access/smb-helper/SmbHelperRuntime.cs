@@ -12,6 +12,8 @@ public sealed class SmbHelperHostOptions
     public Uri ListenUri { get; init; } = new("https://127.0.0.1:7443");
     public string ServerCertificatePfxPath { get; init; } = "";
     public string ServerCertificatePasswordEnvironmentVariable { get; init; } = "";
+    public string ServerCertificatePasswordFilePath { get; init; } = "";
+    public string ServerCertificatePasswordSecretName { get; init; } = SmbHelperServerCertificatePassword.DefaultSecretName;
     public IReadOnlyList<string> AllowedBackendCertificateSha256 { get; init; } = [];
     public TimeSpan RunnerTimeout { get; init; } = TimeSpan.FromSeconds(45);
     public string RunnerScriptSha256 { get; init; } = "";
