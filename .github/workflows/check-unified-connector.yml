@@ -86,11 +86,31 @@ jobs:
             if ($LASTEXITCODE -ne 0) { throw "Windows access guard fixture failed: $script" }
           }
 
+      - name: Prepare pinned gltfpack for JobModules tests
+        shell: pwsh
+        run: |
+          $workspace = [System.IO.Path]::GetFullPath($env:GITHUB_WORKSPACE).TrimEnd([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar)
+          $target = [System.IO.Path]::GetFullPath((Join-Path $workspace ".ci-gltfpack-fbx-regression-$($env:GITHUB_RUN_ID)-$($env:GITHUB_RUN_ATTEMPT)"))
+          $prefix = $workspace + [System.IO.Path]::DirectorySeparatorChar
+          if (-not $target.StartsWith($prefix, [System.StringComparison]::OrdinalIgnoreCase)) { throw 'gltfpack target escaped GITHUB_WORKSPACE' }
+          if (Test-Path -LiteralPath $target) { throw 'gltfpack target is not fresh' }
+
+          $helper = Join-Path $workspace 'connector-desktop/scripts/ensure_bundled_gltfpack.ps1'
+          & (Join-Path $PSHOME 'pwsh.exe') -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $helper -TargetDir $target
+          if ($LASTEXITCODE -ne 0) { throw 'Pinned gltfpack preparation failed' }
+
+          $gltfpack = Join-Path $target 'gltfpack.exe'
+          if (-not (Test-Path -LiteralPath $gltfpack -PathType Leaf)) { throw 'Pinned gltfpack executable is missing' }
+          $actualHash = (Get-FileHash -LiteralPath $gltfpack -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actualHash -ne 'ff64f45e84aac9a1f58880e40934b3f29277413e2d0b3ed257322261ec021d2b') { throw 'Pinned gltfpack executable hash mismatch' }
+          [System.IO.File]::AppendAllText($env:GITHUB_ENV, "AGR_GLTFPACK=$gltfpack`n", [System.Text.UTF8Encoding]::new($false))
+
       - name: Test desktop and upgrade components sequentially
         shell: pwsh
         run: |
           $projects = @(
             'connector-desktop/Connector.Desktop.Tests/Connector.Desktop.Tests.csproj',
+            'connector-desktop/Connector.JobModules.Tests/Connector.JobModules.Tests.csproj',
             'connector-desktop/tests/Connector.Network.Tests/Connector.Network.Tests.csproj',
             'connector-access/tests/Connector.Access.Tests/Connector.Access.Tests.csproj',
             'connector-access/tests/Connector.Access.NetBird.Tests/Connector.Access.NetBird.Tests.csproj',
@@ -107,6 +127,29 @@ jobs:
             Write-Host "Running targeted suite: $project"
             dotnet test $project --configuration Release --verbosity minimal
             if ($LASTEXITCODE -ne 0) { throw "Targeted suite failed: $project" }
+          }
+
+      - name: Test real FBX to GLB conversion with pinned gltfpack
+        shell: pwsh
+        run: |
+          $workspace = [System.IO.Path]::GetFullPath($env:GITHUB_WORKSPACE).TrimEnd([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar)
+          if ([string]::IsNullOrWhiteSpace($env:AGR_GLTFPACK) -or -not (Test-Path -LiteralPath $env:AGR_GLTFPACK -PathType Leaf)) { throw 'Pinned AGR_GLTFPACK is unavailable to the regression step' }
+          $results = Join-Path $workspace ".ci-fbx-glb-test-results-$($env:GITHUB_RUN_ID)-$($env:GITHUB_RUN_ATTEMPT)"
+          if (Test-Path -LiteralPath $results) { throw 'FBX test results directory is not fresh' }
+          New-Item -ItemType Directory -Path $results | Out-Null
+          $testName = 'ExecuteAsync_UsesShortPrivateWorkRootAndPublishesInLongOutputDirectory'
+          dotnet test connector-desktop/Connector.JobModules.Tests/Connector.JobModules.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~$testName" --logger 'trx;LogFileName=real-fbx-glb.trx' --results-directory $results --verbosity minimal
+          if ($LASTEXITCODE -ne 0) { throw 'Real FBX to GLB regression test failed' }
+
+          $trxFiles = @(Get-ChildItem -LiteralPath $results -Filter '*.trx' -File)
+          if ($trxFiles.Count -ne 1) { throw 'Expected exactly one FBX regression TRX result' }
+          [xml]$trx = Get-Content -LiteralPath $trxFiles[0].FullName -Raw
+          $namespace = New-Object System.Xml.XmlNamespaceManager($trx.NameTable)
+          $namespace.AddNamespace('t', 'http://microsoft.com/schemas/VisualStudio/TeamTest/2010')
+          $testResults = @($trx.SelectNodes('//t:Results/t:UnitTestResult', $namespace))
+          $matching = @($testResults | Where-Object { $_.testName -like "*$testName*" })
+          if ($matching.Count -ne 1 -or $matching[0].outcome -ne 'Passed') {
+            throw 'Real FBX regression was skipped, missing, or did not pass'
           }
 
   stun-forward-fixture:
