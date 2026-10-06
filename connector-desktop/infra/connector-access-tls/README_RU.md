@@ -23,3 +23,19 @@ pwsh -NoProfile -File .\test-renew-platform-connector-certificate.ps1
 ```
 
 Скрипт проверяет DER DNS SAN декодирование, блокировку незащищённого parent ACL, права runtime на staging, общую deadline для медленного async ответа, а также реальные PFX state/atomic replace/rollback при injected active ACL validation, restart и health failures через fixture task/process adapters. Реальные Scheduled Task identity и HTTPS listener этим тестом не проверяются.
+
+## DNS-01 Cloudflare (подготовка, без выпуска сертификата)
+
+`cloudflare-fixed-zone-dns01.ps1` — отдельный Simple-ACME script validation handler. Он допускает только `connector-access.structura-most.ru` и `connector-gateway.structura-most.ru`, формирует для них только `_acme-challenge.<hostname>` и обращается к заранее заданному Zone ID зоны `structura-most.ru`; обнаружение/перебор зон не выполняется. Поддерживаются только операции `create` и `delete` с точной парой hostname/record name и TXT content. Записи создаются с уникальной меткой владения, их ID и content фиксируются в защищённом журнале. Удаление разрешено только для совпавших ID, полного имени, content и метки; чужие TXT не удаляются. Дубликаты и неоднозначное состояние завершаются ошибкой. Постоянный `.lock` sentinel сериализует обращения и не удаляется.
+
+Для будущей регистрации в Simple-ACME 2.4.1 форма аргументов штатного script validation plugin:
+
+```text
+--validation script --validationscript C:\Platform\runtime\connector-access\cloudflare-fixed-zone-dns01.ps1 --validationpreparescriptarguments "create {Identifier} {RecordName} {Token}" --validationcleanupscriptarguments "delete {Identifier} {RecordName} {Token}" --validationscriptparallelism 0
+```
+
+Simple-ACME сам подставляет `{Identifier}`, `{RecordName}` и `{Token}` в аргументы script. `{Token}` здесь — публичное содержимое ACME TXT challenge, не Cloudflare API token. API token читается handler только из `C:\Platform\runtime\connector-access\cloudflare-dns01.token`; секрет не задаётся в CLI/argv. Конфигурация `cloudflare-dns01.json` содержит фиксированный Zone ID и имя зоны, но не секрет. Перед любым запуском администратор должен создать runtime-каталог и конфигурацию с ACL SYSTEM/Administrators, выдать отдельному token только DNS Read + DNS Write на zone `structura-most.ru`, защитить token-файл тем же ACL и отдельно подтвердить его применение. Никаких issuance/account/TOS/task действий этот подготовительный этап не выполняет.
+
+Проверка без Cloudflare сети и реальных секретов: `pwsh -NoProfile -File .\test-cloudflare-fixed-zone-dns01.ps1`. Она упражняет fixture-транспорт create/delete, повтор после неоднозначного ответа и отказа, защиту чужих TXT, wrong zone/name, API error sanitation, ACL и lock contention. Это не доказывает живую Cloudflare авторизацию, DNS propagation, Simple-ACME регистрацию или выпуск сертификата.
+
+Официальный контракт placeholder/arguments/parallelism: [Simple-ACME script validation](https://simple-acme.com/reference/plugins/validation/script). Его документация описывает именно script extension; здесь применяется фиксированная zone-ID реализация, чтобы сохранить узкую зону действия DNS token.

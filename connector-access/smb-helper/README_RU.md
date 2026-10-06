@@ -29,3 +29,26 @@ Administrators и SID, который `Get-LocalUser -SID` подтвержда�
 ```powershell
 powershell.exe -NoProfile -File .\smb-helper\tests\ShareBoundaryGuard.Tests.ps1
 ```
+
+## Учетная запись только для SMB
+
+Перед выдачей или изменением пароля существующей управляемой записи helper
+проверяет эффективную политику запущенной Windows-службы OpenSSH через
+`sshd -T -C user=<имя>,host=localhost,addr=127.0.0.1`. Проверяются стандартный
+бинарный файл и стандартный `ProgramData\ssh\sshd_config`, отсутствие `Include`,
+наличие явного `DenyUsers` для точного имени и запуск службы позже изменения
+конфигурации. Неоднозначная конфигурация и недоступная проверка останавливают
+операцию до пароля и ACL.
+
+Для точного SID управляемой локальной записи через LSA назначаются и читаются
+обратно `SeDenyInteractiveLogonRight` и `SeDenyRemoteInteractiveLogonRight`.
+Остальные права записи сохраняются; сетевой вход `SeDenyNetworkLogonRight` не
+запрещается, поэтому SMB остается доступен. Новая запись создается отключенной
+и включается только после проверки SSH-политики, чтения прав LSA и настройки
+точечных ACL.
+
+Узкая регрессия service identity (без вызова live LSA):
+
+```powershell
+powershell.exe -NoProfile -File .\smb-helper\tests\SmbServiceIdentity.Tests.ps1
+```

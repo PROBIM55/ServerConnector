@@ -1,0 +1,14 @@
+[Unit]
+Description=Structura: allow the NetBird STUN UDP 3479 Docker forward
+Requires=docker.service structura-docker-user-firewall.service
+After=docker.service structura-docker-user-firewall.service
+PartOf=docker.service structura-docker-user-firewall.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+Environment=IPTABLES_BIN=/usr/sbin/iptables
+ExecStart=/usr/local/sbin/structura-netbird-stun-forward.sh
+
+[Install]
+WantedBy=multi-user.target docker.service

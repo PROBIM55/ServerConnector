@@ -1,0 +1,52 @@
+{
+  "zoneId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "wrongZoneId": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "credential": "fixture-token-value-never-used-against-cloudflare",
+  "challenge": {
+    "identifier": "connector-access.structura-most.ru",
+    "recordName": "_acme-challenge.connector-access.structura-most.ru",
+    "content": "dGVzdC1hY21lLWNoYWxsZW5nZS10b2tlbg"
+  },
+  "responses": {
+    "emptyList": {
+      "success": true,
+      "result": [],
+      "result_info": { "page": 1, "per_page": 100, "total_pages": 1 }
+    },
+    "foreignTxt": {
+      "id": "cccccccccccccccccccccccccccccccc",
+      "type": "TXT",
+      "name": "_acme-challenge.connector-access.structura-most.ru",
+      "content": "foreign-challenge-content",
+      "comment": "unrelated-owner"
+    },
+    "wrongNameTxt": {
+      "id": "dddddddddddddddddddddddddddddddd",
+      "type": "TXT",
+      "name": "_acme-challenge.other.structura-most.ru",
+      "content": "foreign-challenge-content",
+      "comment": "unrelated-owner"
+    },
+    "createdRecord": {
+      "id": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "type": "TXT",
+      "name": "_acme-challenge.connector-access.structura-most.ru",
+      "content": "dGVzdC1hY21lLWNoYWxsZW5nZS10b2tlbg",
+      "comment": "<request-comment-marker>"
+    },
+    "wrongZone": {
+      "success": false,
+      "errors": [{ "code": 10000, "message": "fixture token is not authorized for this zone" }],
+      "result": null
+    },
+    "apiFailure": {
+      "success": false,
+      "errors": [{ "code": 10000, "message": "fixture API failure" }],
+      "result": null
+    },
+    "deleteSuccess": {
+      "success": true,
+      "result": { "id": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee" }
+    }
+  }
+}
