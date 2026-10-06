@@ -67,12 +67,32 @@ internal sealed class NetBirdManagementClient
         }
     }
 
+    public async ValueTask AssertDnsDistributionGroupIsolationAsync(
+        string groupId,
+        CancellationToken cancellationToken)
+    {
+        var groups = await GetAsync<List<NetBirdGroup>>("api/groups", cancellationToken);
+        if (groups.Count(group => string.Equals(group.Id, groupId, StringComparison.Ordinal)) != 1)
+            throw new InvalidOperationException("The configured NetBird DNS distribution group must exist exactly once.");
+
+        var policies = await GetAsync<List<NetBirdPolicy>>("api/policies", cancellationToken);
+        foreach (var policy in policies.Where(policy => policy.Enabled))
+        {
+            foreach (var rule in policy.Rules.Where(rule => rule.Enabled &&
+                         string.Equals(rule.Action, "accept", StringComparison.OrdinalIgnoreCase)))
+            {
+                if (ContainsReference(rule.Sources, groupId) || ContainsReference(rule.Destinations, groupId))
+                    throw new InvalidOperationException("NetBird has an enabled accept policy that references the configured DNS distribution group; enrollment is denied.");
+            }
+        }
+    }
+
     public async ValueTask<NetBirdSetupKey> CreateSetupKeyAsync(
         string name,
-        string deviceGroupId,
+        IReadOnlyList<string> autoGroups,
         CancellationToken cancellationToken) =>
         await SendJsonAsync<NetBirdSetupKey>(HttpMethod.Post, "api/setup-keys",
-            new NetBirdSetupKeyCreate(name, "one-off", _options.SetupKeyLifetimeSeconds, [deviceGroupId], 1, false, false),
+            new NetBirdSetupKeyCreate(name, "one-off", _options.SetupKeyLifetimeSeconds, autoGroups, 1, false, false),
             cancellationToken);
 
     public ValueTask<NetBirdSetupKey?> GetSetupKeyAsync(string id, CancellationToken cancellationToken) =>
@@ -83,16 +103,16 @@ internal sealed class NetBirdManagementClient
         var keys = await GetAsync<List<NetBirdSetupKey>>("api/setup-keys", cancellationToken);
         foreach (var key in keys.Where(key => string.Equals(key.Name, name, StringComparison.Ordinal) && !key.Revoked))
         {
-            await RevokeSetupKeyAsync(key.Id, key.AutoGroups, cancellationToken);
+            await RevokeSetupKeyAsync(key.Id, cancellationToken);
         }
     }
 
-    public async ValueTask RevokeSetupKeyAsync(string id, IReadOnlyList<string> autoGroups, CancellationToken cancellationToken)
+    public async ValueTask RevokeSetupKeyAsync(string id, CancellationToken cancellationToken)
     {
         var existing = await GetOptionalAsync<NetBirdSetupKey>("api/setup-keys/" + Uri.EscapeDataString(id), cancellationToken);
         if (existing is null || existing.Revoked) return;
         var revoked = await SendJsonAsync<NetBirdSetupKey>(HttpMethod.Put, "api/setup-keys/" + Uri.EscapeDataString(id),
-            new NetBirdSetupKeyUpdate(true, autoGroups.Count == 0 ? existing.AutoGroups : autoGroups), cancellationToken);
+            new NetBirdSetupKeyUpdate(true, existing.AutoGroups), cancellationToken);
         if (!revoked.Revoked)
             throw new InvalidOperationException("NetBird did not confirm setup-key revocation.");
     }

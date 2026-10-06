@@ -26,6 +26,7 @@ public sealed class NetBirdProviderTests : IDisposable
         Assert.True(bootstrap.IsSuccess);
         Assert.Equal("fixture-setup-key", bootstrap.Value!.SetupKey);
         Assert.Equal(1, fixture.SetupKeyCreateCount);
+        Assert.Equal(new[] { "g1" }, fixture.SetupKeyAutoGroups);
         var stateJson = Assert.Single(Directory.GetFiles(_root, "*.json"));
         Assert.DoesNotContain("fixture-setup-key", await File.ReadAllTextAsync(stateJson));
     }
@@ -189,7 +190,66 @@ public sealed class NetBirdProviderTests : IDisposable
         Assert.False(fixture.PeerExists);
     }
 
-    private NetBirdDeviceAccessGrantProvider CreateProvider(HttpMessageHandler handler)
+    [Fact]
+    public async Task ConfiguredDnsGroup_IsAddedOnlyToSetupKeyAndNotDeviceTrafficPolicy()
+    {
+        var fixture = new NetBirdFixtureHandler { DnsGroupId = "gdns" };
+        var provider = CreateProvider(fixture, "gdns");
+        var command = Apply(1);
+
+        await Assert.ThrowsAsync<NetBirdPeerNotReadyException>(() => provider.ApplyAsync(command, default).AsTask());
+        await Assert.ThrowsAsync<NetBirdPeerNotReadyException>(() => provider.ApplyAsync(command, default).AsTask());
+        Assert.Equal(1, fixture.SetupKeyCreateCount);
+        Assert.Equal(new[] { "g1", "gdns" }, fixture.SetupKeyAutoGroups);
+
+        fixture.PeerExists = true;
+        fixture.PeerConnected = true;
+        await provider.ApplyAsync(command, default);
+
+        var policy = JsonNode.Parse(fixture.AppliedPolicyJson!)!;
+        var sources = policy["rules"]![0]!["sources"]!.AsArray().Select(node => node!.GetValue<string>()).ToArray();
+        Assert.Equal(new[] { "g1" }, sources);
+        Assert.Equal(new[] { "g1", "gdns" }, fixture.RevokedSetupKeyAutoGroups);
+    }
+
+    [Theory]
+    [InlineData("source")]
+    [InlineData("bidirectional-destination")]
+    [InlineData("one-way-destination")]
+    public async Task ConfiguredDnsGroup_EnabledAcceptTrafficPolicyDeniesBootstrap(string reference)
+    {
+        var fixture = new NetBirdFixtureHandler
+        {
+            DnsGroupId = "gdns",
+            UnsafeDnsGroupPolicyReference = reference,
+        };
+        var provider = CreateProvider(fixture, "gdns");
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => provider.ApplyAsync(Apply(1), default).AsTask());
+
+        Assert.Equal(0, fixture.SetupKeyCreateCount);
+        Assert.False(fixture.PeerExists);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ConfiguredDnsGroup_MustExistExactlyOnce(bool duplicate)
+    {
+        var fixture = new NetBirdFixtureHandler
+        {
+            DnsGroupId = "gdns",
+            DuplicateDnsGroup = duplicate,
+            DnsGroupAvailable = duplicate,
+        };
+        var provider = CreateProvider(fixture, "gdns");
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => provider.ApplyAsync(Apply(1), default).AsTask());
+
+        Assert.Equal(0, fixture.SetupKeyCreateCount);
+    }
+
+    private NetBirdDeviceAccessGrantProvider CreateProvider(HttpMessageHandler handler, string? dnsDistributionGroupId = null)
     {
         Directory.CreateDirectory(_root);
         var options = new NetBirdOptions
@@ -208,6 +268,7 @@ public sealed class NetBirdProviderTests : IDisposable
                     Ports = [443],
                 },
             ],
+            DnsDistributionGroupId = dnsDistributionGroupId,
         };
         return new NetBirdDeviceAccessGrantProvider(
             new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(5) },
@@ -264,8 +325,16 @@ public sealed class NetBirdProviderTests : IDisposable
         public string ResponsePeerId { get; set; } = "peer-1";
         public bool SetupKeyExists { get; private set; }
         public bool SetupKeyRevoked { get; private set; }
+        public IReadOnlyList<string> RevokedSetupKeyAutoGroups { get; private set; } = [];
         public bool PolicyExists { get; private set; }
         public bool UnsafeAllPolicy { get; set; }
+        public string? DnsGroupId { get; set; }
+        public bool DnsGroupAvailable { get; set; } = true;
+        public bool DuplicateDnsGroup { get; set; }
+        public string? UnsafeDnsGroupPolicyReference { get; set; }
+        private string[] _setupAutoGroups = ["g1"];
+        public IReadOnlyList<string> SetupKeyAutoGroups => _setupAutoGroups;
+        public string? AppliedPolicyJson => _policyJson;
         public int SetupKeyCreateCount { get; private set; }
         public int PolicyWriteCount { get; private set; }
 
@@ -304,7 +373,16 @@ public sealed class NetBirdProviderTests : IDisposable
             {
                 if (request.RequestUri.Query.Contains("name=All", StringComparison.Ordinal))
                     return Json(new[] { new { id = "all", name = "All", peers = Array.Empty<object>(), resources = Array.Empty<object>() } });
-                return Json(GroupExists ? new[] { Group() } : Array.Empty<object>());
+                if (request.RequestUri.Query.Length > 0)
+                    return Json(GroupExists ? new[] { Group() } : Array.Empty<object>());
+                var groups = new List<object>();
+                if (GroupExists) groups.Add(Group());
+                if (DnsGroupId is not null && DnsGroupAvailable)
+                {
+                    groups.Add(DnsGroup());
+                    if (DuplicateDnsGroup) groups.Add(DnsGroup());
+                }
+                return Json(groups);
             }
             if (method == HttpMethod.Post && path == "/api/groups")
             {
@@ -315,6 +393,8 @@ public sealed class NetBirdProviderTests : IDisposable
             }
             if (path == "/api/groups/g1" && method == HttpMethod.Get)
                 return GroupExists ? Json(Group()) : Missing();
+            if (DnsGroupId is not null && path == "/api/groups/" + DnsGroupId && method == HttpMethod.Get)
+                return DnsGroupAvailable ? Json(DnsGroup()) : Missing();
             if (path == "/api/groups/g1" && method == HttpMethod.Delete)
             {
                 GroupExists = false;
@@ -326,6 +406,7 @@ public sealed class NetBirdProviderTests : IDisposable
             {
                 var body = JsonNode.Parse(await request.Content!.ReadAsStringAsync(cancellationToken))!.AsObject();
                 _keyName = body["name"]!.GetValue<string>();
+                _setupAutoGroups = body["auto_groups"]!.AsArray().Select(node => node!.GetValue<string>()).ToArray();
                 SetupKeyExists = true;
                 SetupKeyRevoked = false;
                 SetupKeyCreateCount++;
@@ -335,6 +416,8 @@ public sealed class NetBirdProviderTests : IDisposable
                 return SetupKeyExists ? Json(SetupKey(masked: true)) : Missing();
             if (path == "/api/setup-keys/k1" && method == HttpMethod.Put)
             {
+                var body = JsonNode.Parse(await request.Content!.ReadAsStringAsync(cancellationToken))!.AsObject();
+                RevokedSetupKeyAutoGroups = body["auto_groups"]!.AsArray().Select(node => node!.GetValue<string>()).ToArray();
                 SetupKeyRevoked = true;
                 return Json(SetupKey(masked: true));
             }
@@ -353,6 +436,19 @@ public sealed class NetBirdProviderTests : IDisposable
                     policies.Add(JsonNode.Parse("""
                         {"id":"default","name":"Default","enabled":true,"rules":[{"name":"Default","enabled":true,"action":"accept","bidirectional":true,"protocol":"all","sources":[{"id":"all"}],"destinations":[{"id":"all"}]}]}
                         """)!);
+                }
+                if (UnsafeDnsGroupPolicyReference is { } unsafeReference)
+                {
+                    var sources = unsafeReference == "source" ? new[] { DnsGroupId ?? "gdns" } : new[] { "g1" };
+                    var destinations = unsafeReference is "bidirectional-destination" or "one-way-destination" ? new[] { DnsGroupId ?? "gdns" } : new[] { "g1" };
+                    var bidirectional = unsafeReference == "bidirectional-destination";
+                    policies.Add(JsonNode.Parse(JsonSerializer.Serialize(new
+                    {
+                        id = "dns-policy",
+                        name = "DNS traffic policy",
+                        enabled = true,
+                        rules = new[] { new { name = "dns-rule", enabled = true, action = "accept", bidirectional, protocol = "tcp", sources, destinations } },
+                    }, JsonOptions))!);
                 }
                 if (PolicyExists && _policyJson is not null) policies.Add(JsonNode.Parse(_policyJson)!);
                 return Json(policies);
@@ -385,6 +481,14 @@ public sealed class NetBirdProviderTests : IDisposable
             resources = Array.Empty<object>(),
         };
 
+        private object DnsGroup() => new
+        {
+            id = DnsGroupId,
+            name = "connector-dns-clients",
+            peers = Array.Empty<object>(),
+            resources = Array.Empty<object>(),
+        };
+
         private object SetupKey(bool masked) => new
         {
             id = "k1",
@@ -393,7 +497,7 @@ public sealed class NetBirdProviderTests : IDisposable
             valid = !SetupKeyRevoked,
             revoked = SetupKeyRevoked,
             used_times = PeerExists ? 1 : 0,
-            auto_groups = new[] { "g1" },
+            auto_groups = _setupAutoGroups,
             key = masked ? "********" : "fixture-setup-key",
         };
 

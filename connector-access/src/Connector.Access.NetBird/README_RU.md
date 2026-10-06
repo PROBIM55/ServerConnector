@@ -31,3 +31,7 @@
   permissive `All`; management URI и назначенные IP берутся из этого чтения.
 - Реальный management URL, service-user token, Data Protection key ring и точные
   product/module → destination-group bindings задает host; fixtures этого не заменяют.
+- Необязательный `DnsDistributionGroupId` добавляет новые устройства в общую
+  группу распространения DNS, сохраняя отдельную device group для разрешений.
+  Группа должна существовать и не участвовать ни в одном включенном правиле
+  `accept` как источник или назначение. Без настройки сохраняется прежняя схема.

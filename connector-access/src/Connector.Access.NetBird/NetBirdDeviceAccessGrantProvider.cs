@@ -161,6 +161,12 @@ public sealed class NetBirdDeviceAccessGrantProvider : IDeviceAccessGrantProvide
         try
         {
             await _management.AssertBootstrapIsolationAsync(cancellationToken);
+            if (_options.DnsDistributionGroupId is { } dnsGroupId)
+            {
+                if (string.Equals(group.Id, dnsGroupId, StringComparison.Ordinal))
+                    throw new InvalidOperationException("The DNS distribution group must be separate from the per-device group.");
+                await _management.AssertDnsDistributionGroupIsolationAsync(dnsGroupId, cancellationToken);
+            }
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
@@ -268,6 +274,7 @@ public sealed class NetBirdDeviceAccessGrantProvider : IDeviceAccessGrantProvide
         CancellationToken cancellationToken)
     {
         var now = _timeProvider.GetUtcNow();
+        var autoGroups = GetSetupKeyAutoGroups(groupId);
         if (state.SetupKeyId is not null)
         {
             if (state.ProtectedSetupKey is null || state.SetupKeyExpiresAtUtc is null || state.SetupKeyExpiresAtUtc <= now)
@@ -275,19 +282,31 @@ public sealed class NetBirdDeviceAccessGrantProvider : IDeviceAccessGrantProvide
             var current = await _management.GetSetupKeyAsync(state.SetupKeyId, cancellationToken);
             if (current is null || current.Revoked)
                 throw new NetBirdPeerNotReadyException("The original NetBird bootstrap was removed or revoked; automatic replacement is denied.");
+            if (!SameGroupSet(current.AutoGroups, autoGroups))
+                throw new NetBirdPeerNotReadyException("The original NetBird bootstrap groups differ from the configured enrollment groups; automatic replacement is denied.");
             return;
         }
 
         var keyName = ResourceName("connector-key", state.DeviceId);
         await _management.RevokeSetupKeysNamedAsync(keyName, cancellationToken);
-        var created = await _management.CreateSetupKeyAsync(keyName, groupId, cancellationToken);
-        if (string.IsNullOrWhiteSpace(created.Key) || created.Revoked || !created.Valid || created.AutoGroups.Count != 1 || created.AutoGroups[0] != groupId)
+        var created = await _management.CreateSetupKeyAsync(keyName, autoGroups, cancellationToken);
+        if (string.IsNullOrWhiteSpace(created.Key) || created.Revoked || !created.Valid || !SameGroupSet(created.AutoGroups, autoGroups))
             throw new InvalidOperationException("NetBird did not confirm the one-off isolated setup key.");
         state.SetupKeyId = created.Id;
         state.ProtectedSetupKey = _states.ProtectSetupKey(created.Key);
         state.SetupKeyExpiresAtUtc = created.Expires;
         await locked.SaveAsync(cancellationToken);
     }
+
+    private IReadOnlyList<string> GetSetupKeyAutoGroups(string deviceGroupId) =>
+        _options.DnsDistributionGroupId is { } dnsGroupId
+            ? [deviceGroupId, dnsGroupId]
+            : [deviceGroupId];
+
+    private static bool SameGroupSet(IReadOnlyList<string> actual, IReadOnlyList<string> expected) =>
+        actual.Count == expected.Count &&
+        actual.Distinct(StringComparer.Ordinal).Count() == expected.Count &&
+        expected.All(groupId => actual.Contains(groupId, StringComparer.Ordinal));
 
     private async ValueTask<NetBirdPeer> RequireReadyPeerAsync(string peerId, CancellationToken cancellationToken)
     {
@@ -412,7 +431,7 @@ public sealed class NetBirdDeviceAccessGrantProvider : IDeviceAccessGrantProvide
         if (policy is not null) await _management.DeletePolicyAsync(policy.Id, cancellationToken);
 
         if (state.SetupKeyId is not null)
-            await _management.RevokeSetupKeyAsync(state.SetupKeyId, state.BootstrapGroupId is null ? [] : [state.BootstrapGroupId], cancellationToken);
+            await _management.RevokeSetupKeyAsync(state.SetupKeyId, cancellationToken);
         await _management.RevokeSetupKeysNamedAsync(ResourceName("connector-key", state.DeviceId), cancellationToken);
 
         var group = state.BootstrapGroupId is null
@@ -452,7 +471,7 @@ public sealed class NetBirdDeviceAccessGrantProvider : IDeviceAccessGrantProvide
         CancellationToken cancellationToken)
     {
         if (state.SetupKeyId is not null)
-            await _management.RevokeSetupKeyAsync(state.SetupKeyId, state.BootstrapGroupId is null ? [] : [state.BootstrapGroupId], cancellationToken);
+            await _management.RevokeSetupKeyAsync(state.SetupKeyId, cancellationToken);
         state.ProtectedSetupKey = null;
         state.SetupKeyExpiresAtUtc = null;
         await locked.SaveAsync(cancellationToken);
