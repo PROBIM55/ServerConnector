@@ -84,13 +84,12 @@
     <Component Id="BootstrapperImage" Directory="BOOTSTRAPPER_DIR" Guid="*">
       <File Id="BootstrapperExe" Source="$(var.BootstrapperDir)\Connector.Upgrade.Bootstrapper.exe" KeyPath="yes">
         <PermissionEx Sddl="O:SYG:SYD:P(A;;FA;;;SY)(A;;FA;;;BA)(A;;GRGX;;;BU)" />
+        <!-- Advertised shortcut belongs to the same machine file component.
+             ProgramMenuFolder resolves to All Users for this per-machine package. -->
+        <Shortcut Id="OriginalUserBootstrapperShortcut" Name="Structura Connector Installer"
+                  Directory="ProgramMenuFolder" Advertise="yes"
+                  WorkingDirectory="BOOTSTRAPPER_DIR" />
       </File>
-    </Component>
-    <Component Id="BootstrapperShortcut" Directory="ProgramMenuFolder" Guid="*">
-      <Shortcut Id="OriginalUserBootstrapperShortcut" Name="Structura Connector Installer"
-                Target="[BOOTSTRAPPER_DIR]Connector.Upgrade.Bootstrapper.exe"
-                WorkingDirectory="BOOTSTRAPPER_DIR" />
-      <RegistryValue Root="HKLM" Key="Software\Structura\UnifiedConnectorSetup" Name="BootstrapperShortcut" Type="integer" Value="1" KeyPath="yes" />
     </Component>
 
     <Component Id="HelperImage" Directory="MACHINE_HELPER_DIR" Guid="*">
@@ -168,7 +167,6 @@
       <ComponentRef Id="ProtectedProgramDataRootAcl" />
       <ComponentRef Id="ProtectedMachineHelperDirectoryAcl" />
       <ComponentRef Id="BootstrapperImage" />
-      <ComponentRef Id="BootstrapperShortcut" />
       <ComponentRef Id="HelperImage" />
       <ComponentRef Id="HelperSetupExe" />
       <ComponentRef Id="NetBirdPinnedMsi" />
