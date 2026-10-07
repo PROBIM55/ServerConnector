@@ -4,7 +4,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <PackageId>Connector.Access.NetBird.AspNetCore</PackageId>
-    <Version>0.2.6</Version>
+    <Version>0.2.7</Version>
     <Authors>Structura</Authors>
   </PropertyGroup>
   <ItemGroup>
