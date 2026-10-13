@@ -1,0 +1,38 @@
+name: Sign Unified Connector Document
+run-name: Connector signature ${{ inputs.request_id }}
+on:
+  workflow_dispatch:
+    inputs:
+      request_id: {required: true, type: string}
+      purpose: {required: true, type: choice, options: [updates, helper]}
+      document_base64: {required: true, type: string}
+      document_sha256: {required: true, type: string}
+      source_sha: {required: true, type: string}
+permissions:
+  contents: read
+jobs:
+  sign:
+    runs-on: windows-latest
+    environment: production
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Sign document without building or exporting keys
+        shell: pwsh
+        env:
+          SIGN_REQUEST_ID: ${{ inputs.request_id }}
+          SIGN_PURPOSE: ${{ inputs.purpose }}
+          SIGN_DOCUMENT_BASE64: ${{ inputs.document_base64 }}
+          SIGN_DOCUMENT_SHA256: ${{ inputs.document_sha256 }}
+          SIGN_SOURCE_SHA: ${{ inputs.source_sha }}
+          SIGN_KEY_PEM: ${{ inputs.purpose == 'updates' && secrets.UNIFIED_UPDATE_SIGNING_KEY_PEM || secrets.UNIFIED_HELPER_MANIFEST_SIGNING_KEY_PEM }}
+        run: |
+          & 'connector-desktop/scripts/sign_release_document_ci.ps1' -OutputDirectory "$env:RUNNER_TEMP/signature"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: connector-signature-${{ inputs.request_id }}
+          path: ${{ runner.temp }}/signature/document.sig
+          if-no-files-found: error
+          retention-days: 1
