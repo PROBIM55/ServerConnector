@@ -11,7 +11,7 @@
     <AssemblyName>Connector.Desktop</AssemblyName>
     <RootNamespace>Connector.Desktop</RootNamespace>
     <Version>1.0.31</Version>
-    <ApplicationIcon>Assets\structura_connector.ico</ApplicationIcon>
+    <ApplicationIcon>Assets\platform_connector.ico</ApplicationIcon>
     <StartupObject>Connector.Desktop.App</StartupObject>
   </PropertyGroup>
 
@@ -91,6 +91,7 @@
     <Content Include="Assets\structura_connector.ico" />
     <Resource Include="Assets\structura_logo.png" />
     <Resource Include="Assets\platform-field-refined-v3.png" />
+    <Resource Include="Assets\platform_connector.ico" />
   </ItemGroup>
 
   <ItemGroup>

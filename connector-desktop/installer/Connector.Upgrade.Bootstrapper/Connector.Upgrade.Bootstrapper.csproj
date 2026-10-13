@@ -7,9 +7,11 @@
     <Nullable>enable</Nullable>
     <AssemblyName>Connector.Upgrade.Bootstrapper</AssemblyName>
     <RootNamespace>Connector.Upgrade.Bootstrapper</RootNamespace>
+    <ApplicationIcon>..\..\Connector.Desktop\Assets\platform_connector.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>
+    <EmbeddedResource Include="..\..\design\brand\platform-field-refined-v3.png" LogicalName="Connector.Upgrade.Bootstrapper.PlatformLogo.png" />
     <InternalsVisibleTo Include="Connector.Upgrade.Bootstrapper.Tests" />
     <ProjectReference Include="..\Connector.Upgrade.Core\Connector.Upgrade.Core.csproj" />
     <ProjectReference Include="..\Connector.Upgrade.MachineCommandChannel\Connector.Upgrade.MachineCommandChannel.csproj" />

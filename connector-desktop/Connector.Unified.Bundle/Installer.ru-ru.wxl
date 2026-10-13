@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="utf-8"?>
+<WixLocalization Culture="ru-ru" Language="1049" xmlns="http://wixtoolset.org/schemas/v4/wxl">
+  <String Id="Caption" Value="Structura Connector — установка" />
+  <String Id="Title" Value="Structura Connector" />
+  <String Id="InstallDescription" Value="Установка приложения и подключение к Платформе." />
+  <String Id="CheckingForUpdatesLabel" Value="Подготовка установщика…" />
+  <String Id="UpdateButton" Value="Обновить до [WixStdBAUpdateAvailable]" />
+  <String Id="InstallHeader" Value="Установить коннектор" />
+  <String Id="InstallMessage" Value="Подготовим приложение, затем проверим сервер и подключим этот компьютер. Windows запросит права администратора для установки системных компонентов." />
+  <String Id="InstallMessageOptions" Value="Подготовим приложение, затем проверим сервер и подключим этот компьютер." />
+  <String Id="InstallVersion" Value="Версия [WixBundleVersion]" />
+  <String Id="ConfirmCancelMessage" Value="Прервать установку нового коннектора?" />
+  <String Id="ExecuteUpgradeRelatedBundleMessage" Value="Предыдущий установщик нового клиента" />
+  <String Id="HelpHeader" Value="Параметры установки" />
+  <String Id="HelpText" Value="/install — установить; /repair — восстановить; /uninstall — удалить системные компоненты нового клиента.&#xA;/passive — минимальный интерфейс; /norestart — без автоматической перезагрузки; /log — файл журнала." />
+  <String Id="HelpCloseButton" Value="Закрыть" />
+  <String Id="InstallLicenseLinkText" Value="Условия использования" />
+  <String Id="InstallAcceptCheckbox" Value="Принимаю условия использования" />
+  <String Id="InstallOptionsButton" Value="Параметры" />
+  <String Id="InstallInstallButton" Value="Начать установку" />
+  <String Id="InstallCancelButton" Value="Отмена" />
+  <String Id="OptionsHeader" Value="Параметры установки" />
+  <String Id="OptionsLocationLabel" Value="Папка установки:" />
+  <String Id="OptionsBrowseButton" Value="Выбрать" />
+  <String Id="OptionsOkButton" Value="Готово" />
+  <String Id="OptionsCancelButton" Value="Отмена" />
+  <String Id="ProgressHeader" Value="Установка выполняется" />
+  <String Id="ProgressLabel" Value="Текущий этап:" />
+  <String Id="OverallProgressPackageText" Value="Подготовка файлов…" />
+  <String Id="ProgressCancelButton" Value="Отмена" />
+  <String Id="ModifyHeader" Value="Компоненты установщика установлены" />
+  <String Id="ModifyMessage" Value="Для подключения откройте «Structura Connector — подключение» в меню «Пуск». Здесь можно восстановить или удалить его системные компоненты." />
+  <String Id="ModifyRepairButton" Value="Восстановить" />
+  <String Id="ModifyUninstallButton" Value="Удалить" />
+  <String Id="ModifyCancelButton" Value="Закрыть" />
+  <String Id="SuccessHeader" Value="Операция завершена" />
+  <String Id="SuccessCacheHeader" Value="Файлы подготовлены" />
+  <String Id="SuccessInstallHeader" Value="Установка завершена" />
+  <String Id="SuccessLayoutHeader" Value="Копия установщика готова" />
+  <String Id="SuccessModifyHeader" Value="Изменения завершены" />
+  <String Id="SuccessRepairHeader" Value="Восстановление завершено" />
+  <String Id="SuccessUninstallHeader" Value="Удаление завершено" />
+  <String Id="SuccessUnsafeUninstallHeader" Value="Удаление завершено" />
+  <String Id="SuccessLaunchButton" Value="Открыть" />
+  <String Id="SuccessRestartText" Value="Для завершения требуется перезагрузка Windows. Сохраните работу перед перезагрузкой." />
+  <String Id="SuccessUninstallRestartText" Value="Для завершения удаления требуется перезагрузка Windows." />
+  <String Id="SuccessRestartButton" Value="Перезагрузить Windows" />
+  <String Id="SuccessCloseButton" Value="Готово" />
+  <String Id="FailureHeader" Value="Операция не завершена" />
+  <String Id="FailureCacheHeader" Value="Не удалось подготовить файлы" />
+  <String Id="FailureInstallHeader" Value="Установка не завершена" />
+  <String Id="FailureLayoutHeader" Value="Не удалось создать копию" />
+  <String Id="FailureModifyHeader" Value="Изменения не завершены" />
+  <String Id="FailureRepairHeader" Value="Восстановление не завершено" />
+  <String Id="FailureUninstallHeader" Value="Удаление не завершено" />
+  <String Id="FailureUnsafeUninstallHeader" Value="Удаление не завершено" />
+  <String Id="FailureHyperlinkLogText" Value="Установщик остановился. Сведения об ошибке доступны в &lt;a href=&quot;#&quot;&gt;журнале установки&lt;/a&gt;." />
+  <String Id="FailureRestartText" Value="Для завершения отмены изменений требуется перезагрузка Windows." />
+  <String Id="FailureRestartButton" Value="Перезагрузить Windows" />
+  <String Id="FailureCloseButton" Value="Закрыть" />
+  <String Id="FilesInUseTitle" Value="Файлы используются" />
+  <String Id="FilesInUseLabel" Value="Эти приложения используют файлы, которые нужно обновить:" />
+  <String Id="FilesInUseNetfxCloseRadioButton" Value="Закрыть приложения" />
+  <String Id="FilesInUseCloseRadioButton" Value="Закрыть и затем открыть приложения" />
+  <String Id="FilesInUseDontCloseRadioButton" Value="Оставить приложения открытыми; потребуется перезагрузка" />
+  <String Id="FilesInUseRetryButton" Value="Повторить" />
+  <String Id="FilesInUseIgnoreButton" Value="Пропустить" />
+  <String Id="FilesInUseExitButton" Value="Выйти" />
+</WixLocalization>

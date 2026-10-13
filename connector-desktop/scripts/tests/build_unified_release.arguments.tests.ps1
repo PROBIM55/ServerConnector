@@ -33,7 +33,7 @@ if ((Compare-Object $expectedKeys $keys).Count) { throw 'PACKAGE_PARAMETER_KEYS_
 # Use the actual child script's ParamBlock so PowerShell performs the same script-parameter binding.
 $fixturePath = Join-Path ([IO.Path]::GetTempPath()) ('build-package-update-args-' + [Guid]::NewGuid().ToString('N') + '.ps1')
 $fixtureTail = @'
-[ordered]@{FeedUrl=$FeedUrl;PackVersion=$PackVersion;Channel=$Channel;IfcWorkerPath=$IfcWorkerPath;UpdateSigningKeyPemPath=$UpdateSigningKeyPemPath;PackageOutputDir=$PackageOutputDir}|ConvertTo-Json -Compress
+[ordered]@{FeedUrl=$FeedUrl;PackVersion=$PackVersion;Channel=$Channel;IfcWorkerPath=$IfcWorkerPath;UpdateSigningKeyPemPath=$UpdateSigningKeyPemPath;HostedSigningRef=$HostedSigningRef;PackageOutputDir=$PackageOutputDir}|ConvertTo-Json -Compress
 '@
 [IO.File]::WriteAllText($fixturePath, $childAst.ParamBlock.Extent.Text + "`r`n" + $fixtureTail, [Text.UTF8Encoding]::new($false))
 try {
@@ -48,15 +48,26 @@ try {
     $legacy = @('-PackVersion',$sample.PackVersion,'-Channel',$sample.Channel,'-FeedUrl',$sample.FeedUrl,
         '-IfcWorkerPath',$sample.IfcWorkerPath,'-UpdateSigningKeyPemPath',$sample.UpdateSigningKeyPemPath,
         '-PackageOutputDir',$sample.PackageOutputDir)
-    $legacyFailure = $null
-    try { & $fixturePath @legacy | Out-Null } catch { $legacyFailure = $_.Exception.Message }
-    if (!$legacyFailure -or $legacyFailure -notmatch "parameter 'FeedUrl'" -or $legacyFailure -notmatch '-PackVersion') {
+    $legacyRejected = $false
+    try {
+        $legacyResult = (& $fixturePath @legacy) | ConvertFrom-Json -ErrorAction Stop
+        $legacyRejected = @($expectedKeys | Where-Object {
+            [string]$legacyResult.$_ -cne [string]$sample[$_]
+        }).Count -gt 0
+    } catch { $legacyRejected = $true }
+    if (!$legacyRejected) {
         throw 'LEGACY_ARRAY_BINDING_FAILURE_NOT_REPRODUCED'
     }
 
     $actual = (& $fixturePath @sample) | ConvertFrom-Json -ErrorAction Stop
     foreach ($name in $expectedKeys) {
         if ([string]$actual.$name -cne [string]$sample[$name]) { throw ('HASHTABLE_BINDING_MISMATCH_' + $name) }
+    }
+    $sample.UpdateSigningKeyPemPath = $null
+    $sample.HostedSigningRef = 'bad1b462ea6621a90989966c98e1c09412076a84'
+    $hosted = (& $fixturePath @sample) | ConvertFrom-Json -ErrorAction Stop
+    foreach ($name in @($expectedKeys) + 'HostedSigningRef') {
+        if ([string]$hosted.$name -cne [string]$sample[$name]) { throw ('HOSTED_BINDING_MISMATCH_' + $name) }
     }
     'BUILD_UNIFIED_RELEASE_ARGUMENTS_TESTS_PASSED'
 } finally {

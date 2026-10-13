@@ -6,8 +6,9 @@ param(
     [Parameter(Mandatory = $true)][string]$Channel,
     [Parameter(Mandatory = $true)][string]$FeedUrl,
     [Parameter(Mandatory = $true)][string]$IfcWorkerPath,
-    [Parameter(Mandatory = $true)][string]$UpdateSigningKeyPemPath,
-    [Parameter(Mandatory = $true)][string]$HelperManifestSigningKeyPemPath,
+    [string]$UpdateSigningKeyPemPath,
+    [string]$HelperManifestSigningKeyPemPath,
+    [ValidatePattern('^[a-f0-9]{40}$')][string]$HostedSigningRef,
     [Parameter(Mandatory = $true)][string]$HelperReleasePublicKeyFile,
     [Parameter(Mandatory = $true)][string]$ConnectorAccessConfigurationPath,
     [Parameter(Mandatory = $true)][string]$ProtectedOutputRoot,
@@ -143,6 +144,19 @@ function Assert-ExistingRegularFile([string]$Path, [string]$Description) {
     return [IO.Path]::GetFullPath($item.FullName)
 }
 
+function Assert-PublicP256Key([string]$Path) {
+    $full = Assert-ExistingRegularFile $Path 'Pinned signing public key'
+    Assert-NoReparsePath $full 'Pinned signing public key'
+    $public = [Security.Cryptography.ECDsa]::Create()
+    try {
+        $public.ImportFromPem([IO.File]::ReadAllText($full))
+        if ($public.KeySize -ne 256 -or $public.ExportParameters($false).Curve.Oid.Value -cne '1.2.840.10045.3.1.7') {
+            throw 'Expected a P-256 public key'
+        }
+    } finally { $public.Dispose() }
+    return $full
+}
+
 function Assert-PinnedAsset([string]$Path, [string]$Name, [int64]$Bytes, [string]$Sha256) {
     $fullPath = Assert-ExistingRegularFile $Path $Name
     $item = Get-Item -LiteralPath $fullPath -Force
@@ -238,6 +252,9 @@ function Assert-ProtectedOutputRoot([string]$Path) {
 }
 
 function Invoke-Dotnet([string[]]$Arguments) {
+    if ($Arguments[0] -in @('publish', 'build')) {
+        $Arguments += @('-m:1', '-nodeReuse:false', '-p:BuildInParallel=false', '-p:UseSharedCompilation=false')
+    }
     & dotnet @Arguments
     if ($LASTEXITCODE -ne 0) { throw "dotnet command failed with exit code $LASTEXITCODE." }
 }
@@ -258,17 +275,26 @@ function Assert-MsiProductVersion([string]$Value) {
 
 # Validate keys first so an invalid/missing key fails before any output directory, package,
 # publish, tool install, or other build side effect can be created.
-$updateKey = Assert-PrivateP256Key $UpdateSigningKeyPemPath 'Update-feed signing key'
-$manifestKey = Assert-PrivateP256Key $HelperManifestSigningKeyPemPath 'Helper-manifest signing key'
-if ([string]::Equals($updateKey, $manifestKey, [StringComparison]::OrdinalIgnoreCase)) {
-    throw 'Update-feed and helper-manifest signing keys must be separate key files.'
+$updateKey = $null; $manifestKey = $null
+if ($HostedSigningRef) {
+    if ($UpdateSigningKeyPemPath -or $HelperManifestSigningKeyPemPath) { throw 'Choose exactly one signing provider' }
+    $updatePublicKey = Assert-PublicP256Key (Join-Path $script:RepositoryRoot 'Connector.Desktop\Assets\update-public-key.pem')
+    $helperPublicKey = Assert-PublicP256Key $HelperReleasePublicKeyFile
+    if ((Get-Sha256 $updatePublicKey) -ceq (Get-Sha256 $helperPublicKey)) { throw 'Signing public keys must be distinct' }
+    [void](Assert-ExistingRegularFile (Join-Path $PSScriptRoot 'get_hosted_release_signature.ps1') 'Hosted signing client')
+} else {
+    $updateKey = Assert-PrivateP256Key $UpdateSigningKeyPemPath 'Update-feed signing key'
+    $manifestKey = Assert-PrivateP256Key $HelperManifestSigningKeyPemPath 'Helper-manifest signing key'
+    if ([string]::Equals($updateKey, $manifestKey, [StringComparison]::OrdinalIgnoreCase)) {
+        throw 'Update-feed and helper-manifest signing keys must be separate key files.'
+    }
+    if ((Get-PrivateKeyPublicFingerprint $updateKey) -ceq (Get-PrivateKeyPublicFingerprint $manifestKey)) {
+        throw 'Update-feed and helper-manifest signing keys must contain different P-256 keys.'
+    }
+    $updatePublicKey = Assert-MatchingPublicKey $updateKey `
+        (Join-Path $script:RepositoryRoot 'Connector.Desktop\Assets\update-public-key.pem') 'Embedded update public key'
+    $helperPublicKey = Assert-MatchingPublicKey $manifestKey $HelperReleasePublicKeyFile 'HelperReleasePublicKeyFile'
 }
-if ((Get-PrivateKeyPublicFingerprint $updateKey) -ceq (Get-PrivateKeyPublicFingerprint $manifestKey)) {
-    throw 'Update-feed and helper-manifest signing keys must contain different P-256 keys.'
-}
-$updatePublicKey = Assert-MatchingPublicKey $updateKey `
-    (Join-Path $script:RepositoryRoot 'Connector.Desktop\Assets\update-public-key.pem') 'Embedded update public key'
-$helperPublicKey = Assert-MatchingPublicKey $manifestKey $HelperReleasePublicKeyFile 'HelperReleasePublicKeyFile'
 
 Assert-MsiProductVersion $PackVersion
 Assert-MsiProductVersion $InstallerVersion
@@ -338,6 +364,7 @@ $packageParameters = @{
     UpdateSigningKeyPemPath = $updateKey
     PackageOutputDir = $packageDirectory
 }
+if ($HostedSigningRef) { $packageParameters.HostedSigningRef = $HostedSigningRef }
 & $script:BuildPackageUpdate @packageParameters
 if (!$?) { throw 'build_package_update.ps1 failed.' }
 
@@ -378,15 +405,30 @@ $stagedSetup = Join-Path $manifestStageDirectory 'Setup.exe'
 Copy-Item -LiteralPath $helperExe -Destination $stagedHelper -ErrorAction Stop
 Copy-Item -LiteralPath $setupSource -Destination $stagedSetup -ErrorAction Stop
 
-$manifestArguments = @('run', '--project', $script:ManifestBuilderProject, '--configuration', 'Release',
-    '--artifacts-path', $manifestArtifactsDirectory, '--', '--helper', $stagedHelper, '--setup', $stagedSetup,
-    '--stage', $manifestStageDirectory, '--key', $manifestKey, '--version', $PackVersion,
-    '--package-id', $SetupPackageId, '--setup-version', $InstallerVersion, '--schema-version', '4', '--caller', $bootstrapperExe)
-Push-Location -LiteralPath $script:RepositoryRoot
-try { Invoke-Dotnet $manifestArguments }
-finally { Pop-Location }
 $manifestPath = Join-Path $manifestStageDirectory 'helper-release.json'
 $signaturePath = Join-Path $manifestStageDirectory 'helper-release.sig'
+if ($HostedSigningRef) {
+    $document = [ordered]@{schemaVersion=4;version=$PackVersion;helperRelativePath='Connector.Upgrade.MachineHelper.exe';
+        size=[long](Get-Item -LiteralPath $stagedHelper).Length;sha256=(Get-Sha256 $stagedHelper);
+        velopackSetup=[ordered]@{relativePath='Setup.exe';size=[long](Get-Item -LiteralPath $stagedSetup).Length;
+            sha256=(Get-Sha256 $stagedSetup);packageId=$SetupPackageId;version=$InstallerVersion};
+        callerImage=[ordered]@{relativePath='StructuraConnectorInstaller\Bootstrapper\Connector.Upgrade.Bootstrapper.exe';
+            size=$signedCallerSize;sha256=$signedCallerHash}}
+    $unsignedPath = Join-Path $manifestStageDirectory 'helper-release.unsigned.json'
+    [IO.File]::WriteAllText($unsignedPath,($document|ConvertTo-Json -Depth 5 -Compress),[Text.UTF8Encoding]::new($false))
+    & (Join-Path $PSScriptRoot 'get_hosted_release_signature.ps1') -ManifestPath $unsignedPath -Purpose helper `
+        -SigningRef $HostedSigningRef -PublicKeyPath $helperPublicKey -SignaturePath $signaturePath
+    if (-not $?) { throw 'Hosted helper signature failed' }
+    [IO.File]::Move($unsignedPath,$manifestPath)
+} else {
+    $manifestArguments = @('run', '--project', $script:ManifestBuilderProject, '--configuration', 'Release',
+        '--artifacts-path', $manifestArtifactsDirectory, '--', '--helper', $stagedHelper, '--setup', $stagedSetup,
+        '--stage', $manifestStageDirectory, '--key', $manifestKey, '--version', $PackVersion,
+        '--package-id', $SetupPackageId, '--setup-version', $InstallerVersion, '--schema-version', '4', '--caller', $bootstrapperExe)
+    Push-Location -LiteralPath $script:RepositoryRoot
+    try { Invoke-Dotnet $manifestArguments }
+    finally { Pop-Location }
+}
 [void](Assert-ExistingRegularFile $manifestPath 'Signed helper release manifest')
 [void](Assert-ExistingRegularFile $signaturePath 'Detached helper release signature')
 

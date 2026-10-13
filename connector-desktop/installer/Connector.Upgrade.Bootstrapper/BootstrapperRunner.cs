@@ -45,7 +45,7 @@ public sealed class BootstrapperRunner(
             foreach (var blocker in preparation.Blockers)
                 _status.Show(BlockerMessage(blocker.Code));
             if (preparation.Blockers.Count == 0)
-                _status.Show("Безопасная композиция недоступна. Ничего не изменено.");
+                _status.Show("Не удалось подготовить подключение. Установка нового клиента не началась.");
             preparation.Composition?.Dispose();
             return null;
         }
@@ -102,11 +102,11 @@ public sealed class BootstrapperRunner(
     private static string BlockerMessage(string code) => code switch
     {
         "shared-common-access-runtime-factory-unavailable" =>
-            "Безопасная конфигурация подключения пока не предоставлена общей службой Connector. Токен не запрашивался.",
+            "Параметры подключения не готовы. Повторите установку после подготовки сервера.",
         "ExactVpnPeerBindingUnavailable" => "Не удалось проверить привязку защищённого подключения. Токен не запрашивался.",
         "ExactDeviceSelfRevocationUnavailable" => "Сервер не подтвердил возможность безопасного отзыва старого устройства. Токен не запрашивался.",
-        "CommonAccessCredentialContractIncomplete" => "Общий контракт доступа недоступен. Токен не запрашивался.",
-        "PlatformAccessSchemaUnavailable" => "Сервис Platform недоступен или его схема не подтверждена. Токен не запрашивался.",
+        "CommonAccessCredentialContractIncomplete" => "Сервер пока не готов к подключению нового клиента. Повторите проверку позже.",
+        "PlatformAccessSchemaUnavailable" => "Сервер подключения недоступен. Проверьте интернет и повторите проверку. Если ошибка повторяется, требуется проверка сервера. Токен ещё не использован.",
         "WindowsHostRequired" => "Запустите программу в Windows под исходной учётной записью Connector.",
         "MachineBoundaryNotReady" => "Не подтверждена защищённая системная среда. Токен не запрашивался.",
         "SignedReleasePinUnavailable" => "Не удалось подтвердить доверенный пакет обновления. Токен не запрашивался.",
@@ -117,10 +117,10 @@ public sealed class BootstrapperRunner(
 
     private static string ResultMessage(UpgradeExecutionResult result) => result switch
     {
-        { Outcome: UpgradeOutcome.Succeeded or UpgradeOutcome.AlreadyCommitted, RebootRequired: true } => "Перенос доступа завершён. Требуется перезагрузка Windows.",
-        { Outcome: UpgradeOutcome.Succeeded } => "Перенос доступа успешно завершён.",
-        { Outcome: UpgradeOutcome.AlreadyCommitted } => "Перенос доступа уже завершён ранее.",
-        { Outcome: UpgradeOutcome.FailedAndRolledBack } => "Перенос остановлен; изменения откатаны.",
+        { Outcome: UpgradeOutcome.Succeeded or UpgradeOutcome.AlreadyCommitted, RebootRequired: true } => "Новый коннектор установлен. Для завершения потребуется перезагрузка Windows.",
+        { Outcome: UpgradeOutcome.Succeeded } => "Установка и подключение завершены. Новый коннектор готов к работе.",
+        { Outcome: UpgradeOutcome.AlreadyCommitted } => "Новый коннектор уже установлен и подключён.",
+        { Outcome: UpgradeOutcome.FailedAndRolledBack } => "Установка остановлена. Изменения этой операции отменены.",
         { Outcome: UpgradeOutcome.NeedsManualRecovery } => "Требуется восстановление специалистом поддержки.",
         { Outcome: UpgradeOutcome.Interrupted } => "Найдена незавершённая операция. Выберите восстановление.",
         _ => "Операция завершена с неизвестным результатом."

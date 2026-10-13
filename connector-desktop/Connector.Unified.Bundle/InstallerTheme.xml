@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Structura Graphite. Font colors use Windows COLORREF (BBGGRR). -->
+<Theme xmlns="http://wixtoolset.org/schemas/v4/thmutil">
+  <Font Id="0" Height="-14" Weight="500" Foreground="f6f2ed" Background="1d1712">Segoe UI</Font>
+  <Font Id="1" Height="-30" Weight="650" Foreground="f6f2ed">Segoe UI</Font>
+  <Font Id="2" Height="-21" Weight="600" Foreground="ddb877">Segoe UI</Font>
+  <Font Id="3" Height="-14" Weight="500" Foreground="c4b9ae" Background="1d1712">Segoe UI</Font>
+  <Window Width="640" Height="380" HexStyle="100a0000" FontId="0" Caption="#(loc.Caption)">
+    <ImageControl X="28" Y="24" Width="52" Height="52" ImageFile="logo.png" Visible="yes" />
+    <Label X="96" Y="26" Width="-28" Height="48" FontId="1" Visible="yes" DisablePrefix="yes">#(loc.Title)</Label>
+    <Label X="30" Y="92" Width="-30" Height="42" FontId="3" Visible="yes" DisablePrefix="yes">#(loc.InstallDescription)</Label>
+    <Page Name="Loading">
+      <Label X="30" Y="160" Width="-30" Height="30" FontId="2" DisablePrefix="yes">#(loc.CheckingForUpdatesLabel)</Label>
+    </Page>
+    <Page Name="Help">
+      <Label X="30" Y="145" Width="-30" Height="30" FontId="2" DisablePrefix="yes">#(loc.HelpHeader)</Label>
+      <Label X="30" Y="188" Width="-30" Height="110" FontId="3" DisablePrefix="yes">#(loc.HelpText)</Label>
+      <Button Name="HelpCloseButton" X="-28" Y="-24" Width="132" Height="38" TabStop="yes" FontId="0"><Text>#(loc.HelpCloseButton)</Text><CloseWindowAction /></Button>
+    </Page>
+    <Page Name="Install">
+      <Label X="30" Y="150" Width="-30" Height="30" FontId="2" DisablePrefix="yes">#(loc.InstallHeader)</Label>
+      <Label X="30" Y="193" Width="-30" Height="82" FontId="3" DisablePrefix="yes">#(loc.InstallMessage)</Label>
+      <Button Name="InstallButton" X="28" Y="-24" Width="278" Height="38" TabStop="yes" FontId="0">#(loc.InstallInstallButton)</Button>
+      <Button Name="InstallCancelButton" X="-28" Y="-24" Width="132" Height="38" TabStop="yes" FontId="0"><Text>#(loc.InstallCancelButton)</Text><CloseWindowAction /></Button>
+    </Page>
+    <Page Name="Progress">
+      <Label X="30" Y="150" Width="-30" Height="30" FontId="2" DisablePrefix="yes">#(loc.ProgressHeader)</Label>
+      <Label Name="OverallProgressPackageText" X="30" Y="198" Width="-30" Height="30" FontId="3" DisablePrefix="yes">#(loc.OverallProgressPackageText)</Label>
+      <Progressbar Name="OverallCalculatedProgressbar" X="30" Y="246" Width="-30" Height="8" />
+      <Button Name="ProgressCancelButton" X="-28" Y="-24" Width="132" Height="38" TabStop="yes" FontId="0">#(loc.ProgressCancelButton)</Button>
+    </Page>
+    <Page Name="Modify">
+      <Label X="30" Y="150" Width="-30" Height="30" FontId="2" DisablePrefix="yes">#(loc.ModifyHeader)</Label>
+      <Label X="30" Y="193" Width="-30" Height="62" FontId="3" DisablePrefix="yes">#(loc.ModifyMessage)</Label>
+      <Button Name="RepairButton" X="28" Y="-24" Width="184" Height="38" TabStop="yes" FontId="0" HideWhenDisabled="yes">#(loc.ModifyRepairButton)</Button>
+      <Button Name="UninstallButton" X="228" Y="-24" Width="184" Height="38" TabStop="yes" FontId="0">#(loc.ModifyUninstallButton)</Button>
+      <Button Name="ModifyCancelButton" X="-28" Y="-24" Width="132" Height="38" TabStop="yes" FontId="0"><Text>#(loc.ModifyCancelButton)</Text><CloseWindowAction /></Button>
+    </Page>
+    <Page Name="Success">
+      <Label X="30" Y="150" Width="-30" Height="30" FontId="2" DisablePrefix="yes">#(loc.SuccessHeader)</Label>
+      <Label X="30" Y="198" Width="-30" Height="62" FontId="3" DisablePrefix="yes" VisibleCondition="WixStdBARestartRequired">#(loc.SuccessRestartText)</Label>
+      <Button Name="SuccessRestartButton" X="28" Y="-24" Width="278" Height="38" TabStop="yes" FontId="0" HideWhenDisabled="yes">#(loc.SuccessRestartButton)</Button>
+      <Button Name="SuccessCloseButton" X="-28" Y="-24" Width="132" Height="38" TabStop="yes" FontId="0"><Text>#(loc.SuccessCloseButton)</Text><CloseWindowAction /></Button>
+    </Page>
+    <Page Name="Failure">
+      <Label X="30" Y="145" Width="-30" Height="30" FontId="2" DisablePrefix="yes">#(loc.FailureHeader)</Label>
+      <Hypertext Name="FailureLogFileLink" X="30" Y="188" Width="-30" Height="54" FontId="3" TabStop="yes" HideWhenDisabled="yes">#(loc.FailureHyperlinkLogText)</Hypertext>
+      <Hypertext Name="FailureMessageText" X="30" Y="246" Width="-30" Height="48" FontId="3" TabStop="yes" HideWhenDisabled="yes" />
+      <Button Name="FailureRestartButton" X="28" Y="-24" Width="278" Height="38" TabStop="yes" FontId="0" HideWhenDisabled="yes">#(loc.FailureRestartButton)</Button>
+      <Button Name="FailureCloseButton" X="-28" Y="-24" Width="132" Height="38" TabStop="yes" FontId="0"><Text>#(loc.FailureCloseButton)</Text><CloseWindowAction /></Button>
+    </Page>
+  </Window>
+</Theme>

@@ -17,6 +17,7 @@ param(
     [switch]$SmokeProbe,
     [string]$PreviousReleasesDir,
     [string]$UpdateSigningKeyPemPath,
+    [ValidatePattern('^[a-f0-9]{40}$')][string]$HostedSigningRef,
     [string]$PackageOutputDir
 )
 
@@ -43,7 +44,8 @@ if (-not $feedUri -and -not $LocalOnly) {
     throw 'Specify a published HTTPS FeedUrl, or LocalOnly for an unpublished local acceptance package.'
 }
 if ($LocalOnly -and $feedUri) { throw 'LocalOnly cannot be combined with FeedUrl.' }
-if ($feedUri -and -not $UpdateSigningKeyPemPath) {
+if ($HostedSigningRef -and $UpdateSigningKeyPemPath) { throw 'Choose exactly one update signing provider.' }
+if ($feedUri -and -not $UpdateSigningKeyPemPath -and -not $HostedSigningRef) {
     throw 'A published update feed requires UpdateSigningKeyPemPath for the signed package manifest.'
 }
 if (Test-Path -LiteralPath $outputDir) {
@@ -67,11 +69,11 @@ if (-not (Test-Path $vpk)) {
 }
 
 dotnet publish $project -c Release -r win-x64 --self-contained true -p:RestoreLockedMode=true "-p:Version=$PackVersion" `
-    --artifacts-path $buildArtifactsDir -o $publishDir
+    --artifacts-path $buildArtifactsDir -o $publishDir -m:1 -nodeReuse:false -p:BuildInParallel=false -p:UseSharedCompilation=false
 if ($LASTEXITCODE -ne 0) { throw 'dotnet publish failed.' }
 if ($SmokeProbe) {
     if (-not $TestAppId) { throw 'SmokeProbe requires TestAppId.' }
-    dotnet publish (Join-Path $PSScriptRoot 'installed-update-probe\UpdateSmokeProbe.csproj') -c Release -r win-x64 --self-contained true -p:RestoreLockedMode=true "-p:Version=$PackVersion" -o $publishDir
+    dotnet publish (Join-Path $PSScriptRoot 'installed-update-probe\UpdateSmokeProbe.csproj') -c Release -r win-x64 --self-contained true -p:RestoreLockedMode=true "-p:Version=$PackVersion" -o $publishDir -m:1 -nodeReuse:false -p:BuildInParallel=false -p:UseSharedCompilation=false
     if ($LASTEXITCODE -ne 0) { throw 'Smoke probe publish failed.' }
     $mainExe = 'UpdateSmokeProbe.exe'
 }
@@ -110,12 +112,14 @@ $shortcutLocations = if ($TestAppId) { 'None' } else { 'Desktop,StartMenuRoot' }
 & $vpk pack --packId $appId --packTitle $packTitle --packVersion $PackVersion `
     --shortcuts $shortcutLocations `
     --packDir $publishDir --mainExe $mainExe --runtime 'win-x64' `
-    --icon (Join-Path $root 'Connector.Desktop\Assets\structura_connector.ico') --channel $Channel --outputDir $outputDir
+    --icon (Join-Path $root 'Connector.Desktop\Assets\platform_connector.ico') --channel $Channel --outputDir $outputDir
 if ($LASTEXITCODE -ne 0) { throw 'vpk pack failed.' }
 
-if ($UpdateSigningKeyPemPath) {
-    & (Join-Path $PSScriptRoot 'sign_update_feed.ps1') `
-        -PackageDirectory $outputDir -Channel $Channel -PrivateKeyPemPath $UpdateSigningKeyPemPath
+if ($UpdateSigningKeyPemPath -or $HostedSigningRef) {
+    $signingParameters = @{PackageDirectory=$outputDir;Channel=$Channel}
+    if ($HostedSigningRef) { $signingParameters.HostedSigningRef=$HostedSigningRef }
+    else { $signingParameters.PrivateKeyPemPath=$UpdateSigningKeyPemPath }
+    & (Join-Path $PSScriptRoot 'sign_update_feed.ps1') @signingParameters
     if ($LASTEXITCODE -ne 0) { throw 'Signing the update feed failed.' }
 }
 

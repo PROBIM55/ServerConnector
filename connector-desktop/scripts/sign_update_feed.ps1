@@ -2,7 +2,8 @@
 param(
     [Parameter(Mandatory = $true)][string]$PackageDirectory,
     [Parameter(Mandatory = $true)][ValidatePattern('^[A-Za-z0-9][A-Za-z0-9_-]*$')][string]$Channel,
-    [Parameter(Mandatory = $true)][string]$PrivateKeyPemPath
+    [string]$PrivateKeyPemPath,
+    [ValidatePattern('^[a-f0-9]{40}$')][string]$HostedSigningRef
 )
 
 $ErrorActionPreference = 'Stop'
@@ -10,12 +11,18 @@ $applicationId = 'Structura.Connector.Desktop'
 $repoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $embeddedPublicKeyPath = Join-Path $repoRoot 'Connector.Desktop\Assets\update-public-key.pem'
 $packageRoot = [IO.Path]::GetFullPath($PackageDirectory)
-$keyPath = [IO.Path]::GetFullPath($PrivateKeyPemPath)
+$keyPath = $null
+if ($HostedSigningRef) {
+    if ($PrivateKeyPemPath) { throw 'Choose exactly one update signing provider.' }
+} else {
+    if (-not $PrivateKeyPemPath) { throw 'Private signing key or hosted signer is required.' }
+    $keyPath = [IO.Path]::GetFullPath($PrivateKeyPemPath)
+}
 $repoPrefix = $repoRoot.TrimEnd([IO.Path]::DirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
-if ($keyPath.StartsWith($repoPrefix, [StringComparison]::OrdinalIgnoreCase)) {
+if ($keyPath -and $keyPath.StartsWith($repoPrefix, [StringComparison]::OrdinalIgnoreCase)) {
     throw 'Private signing key must be stored outside the repository.'
 }
-if (-not (Test-Path -LiteralPath $keyPath -PathType Leaf)) { throw 'Private signing key file was not found.' }
+if ($keyPath -and -not (Test-Path -LiteralPath $keyPath -PathType Leaf)) { throw 'Private signing key file was not found.' }
 if (-not (Test-Path -LiteralPath $packageRoot -PathType Container)) { throw 'Velopack package directory was not found.' }
 
 $manifestName = "connector-release.$Channel.json"
@@ -77,10 +84,18 @@ $temporaryManifest = Join-Path $packageRoot ('.' + [Guid]::NewGuid().ToString('N
 $temporarySignature = Join-Path $packageRoot ('.' + [Guid]::NewGuid().ToString('N') + '.signature.tmp')
 $publishedSignature = $false
 try {
-    $key.ImportFromPem([IO.File]::ReadAllText($keyPath))
-    if ($key.KeySize -ne 256) { throw 'Update manifest signing requires a P-256 private key.' }
-    $signature = $key.SignData($manifestBytes, [Security.Cryptography.HashAlgorithmName]::SHA256,
-        [Security.Cryptography.DSASignatureFormat]::IeeeP1363FixedFieldConcatenation)
+    if ($HostedSigningRef) {
+        [IO.File]::WriteAllBytes($temporaryManifest,$manifestBytes)
+        & (Join-Path $PSScriptRoot 'get_hosted_release_signature.ps1') -ManifestPath $temporaryManifest -Purpose updates `
+            -SigningRef $HostedSigningRef -PublicKeyPath $embeddedPublicKeyPath -SignaturePath $temporarySignature
+        if (-not $?) { throw 'Hosted update signature failed.' }
+        $signature = [IO.File]::ReadAllBytes($temporarySignature)
+    } else {
+        $key.ImportFromPem([IO.File]::ReadAllText($keyPath))
+        if ($key.KeySize -ne 256) { throw 'Update manifest signing requires a P-256 private key.' }
+        $signature = $key.SignData($manifestBytes, [Security.Cryptography.HashAlgorithmName]::SHA256,
+            [Security.Cryptography.DSASignatureFormat]::IeeeP1363FixedFieldConcatenation)
+    }
     if ($signature.Length -ne 64) { throw 'P-256 signature has an unexpected length.' }
     if (-not (Test-Path -LiteralPath $embeddedPublicKeyPath -PathType Leaf)) { throw 'Embedded update public key is missing.' }
     $verifier = [Security.Cryptography.ECDsa]::Create()
