@@ -72,6 +72,10 @@ jobs:
         shell: pwsh
         run: ./connector-desktop/scripts/tests/publish_unified_feed.tests.ps1
 
+      - name: Test local Connector memory admission without allocating pressure
+        shell: pwsh
+        run: ./connector-desktop/scripts/tests/connector_local_build_policy.tests.ps1
+
       - name: Test Windows access and certificate guards in PowerShell 5.1
         shell: pwsh
         run: |

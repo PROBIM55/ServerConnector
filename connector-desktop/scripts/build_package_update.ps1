@@ -68,6 +68,7 @@ if (-not (Test-Path $vpk)) {
     if ($LASTEXITCODE -ne 0) { throw 'Unable to install pinned vpk 1.2.161.' }
 }
 
+Write-Host 'BUILD_STEP: desktop publish (one MSBuild node)'
 dotnet publish $project -c Release -r win-x64 --self-contained true -p:RestoreLockedMode=true "-p:Version=$PackVersion" `
     --artifacts-path $buildArtifactsDir -o $publishDir -m:1 -nodeReuse:false -p:BuildInParallel=false -p:UseSharedCompilation=false
 if ($LASTEXITCODE -ne 0) { throw 'dotnet publish failed.' }
@@ -109,6 +110,7 @@ if ($PreviousReleasesDir) {
 # Distinct shortcut names preserve the legacy MSI's Desktop/Start-menu launchers during the pilot.
 $packTitle = if ($TestAppId) { 'Structura Connector Update Smoke' } else { 'Structura Connector (новый)' }
 $shortcutLocations = if ($TestAppId) { 'None' } else { 'Desktop,StartMenuRoot' }
+Write-Host 'BUILD_STEP: Velopack package'
 & $vpk pack --packId $appId --packTitle $packTitle --packVersion $PackVersion `
     --shortcuts $shortcutLocations `
     --packDir $publishDir --mainExe $mainExe --runtime 'win-x64' `

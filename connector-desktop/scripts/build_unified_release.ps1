@@ -349,6 +349,7 @@ $manifestArtifactsDirectory = Join-Path $runDirectory 'manifest-artifacts'
 $wixArtifactsDirectory = Join-Path $runDirectory 'wix-artifacts'
 $bundleArtifactsDirectory = Join-Path $runDirectory 'bundle-artifacts'
 New-Item -ItemType Directory -Path $runDirectory -ErrorAction Stop | Out-Null
+Write-Host "BUILD_OUTPUT: $runDirectory"
 foreach ($protectedDirectory in @($packageDirectory, $helperPublishDirectory, $bootstrapperPublishDirectory,
                                   $launchBridgePublishDirectory, $manifestStageDirectory, $setupOutputDirectory,
                                   $bundleOutputDirectory)) {
@@ -365,6 +366,7 @@ $packageParameters = @{
     PackageOutputDir = $packageDirectory
 }
 if ($HostedSigningRef) { $packageParameters.HostedSigningRef = $HostedSigningRef }
+Write-Host 'BUILD_STEP: desktop, engines and signed update package'
 & $script:BuildPackageUpdate @packageParameters
 if (!$?) { throw 'build_package_update.ps1 failed.' }
 
@@ -384,12 +386,15 @@ $releaseProperties = @(
 )
 $helperArguments = @('publish', $script:MachineHelperProject, '--configuration', 'Release', '--runtime', 'win-x64',
     '--self-contained', 'true', '--artifacts-path', $helperArtifactsDirectory, '-o', $helperPublishDirectory) + $releaseProperties
+Write-Host 'BUILD_STEP: machine helper'
 Invoke-Dotnet $helperArguments
 $bootstrapperArguments = @('publish', $script:BootstrapperProject, '--configuration', 'Release', '--runtime', 'win-x64',
     '--self-contained', 'true', '--artifacts-path', $bootstrapperArtifactsDirectory, '-o', $bootstrapperPublishDirectory) + $releaseProperties
+Write-Host 'BUILD_STEP: user installer'
 Invoke-Dotnet $bootstrapperArguments
 $launchBridgeArguments = @('publish', $script:LaunchBridgeProject, '--configuration', 'Release', '--runtime', 'win-x64',
     '--self-contained', 'true', '--artifacts-path', $launchBridgeArtifactsDirectory, '-o', $launchBridgePublishDirectory) + $releaseProperties
+Write-Host 'BUILD_STEP: launch bridge'
 Invoke-Dotnet $launchBridgeArguments
 
 foreach ($directory in @($helperPublishDirectory, $bootstrapperPublishDirectory, $launchBridgePublishDirectory)) {
@@ -407,6 +412,7 @@ Copy-Item -LiteralPath $setupSource -Destination $stagedSetup -ErrorAction Stop
 
 $manifestPath = Join-Path $manifestStageDirectory 'helper-release.json'
 $signaturePath = Join-Path $manifestStageDirectory 'helper-release.sig'
+Write-Host 'BUILD_STEP: helper release signature'
 if ($HostedSigningRef) {
     $document = [ordered]@{schemaVersion=4;version=$PackVersion;helperRelativePath='Connector.Upgrade.MachineHelper.exe';
         size=[long](Get-Item -LiteralPath $stagedHelper).Length;sha256=(Get-Sha256 $stagedHelper);
@@ -458,6 +464,7 @@ $wixProperties = @(
 )
 $wixArguments = @('build', $script:UnifiedSetupProject, '--configuration', 'Release',
     '--artifacts-path', $wixArtifactsDirectory, '-o', $setupOutputDirectory) + $wixProperties
+Write-Host 'BUILD_STEP: protected machine MSI'
 Invoke-Dotnet $wixArguments
 $msiOutputs = @(Get-ChildItem -LiteralPath $setupOutputDirectory -Filter '*.msi' -File -Recurse -ErrorAction Stop)
 if ($msiOutputs.Count -ne 1 -or $msiOutputs[0].Name -cne 'Connector.Unified.Setup.msi') {
@@ -480,6 +487,7 @@ $bundleArguments = @('build', $script:UnifiedBundleProject, '--configuration', '
     '--artifacts-path', $bundleArtifactsDirectory, '-o', $bundleOutputDirectory,
     "-p:ProductVersion=$InstallerVersion", "-p:UnifiedSetupMsiPath=$($msiOutputs[0].FullName)",
     "-p:LaunchBridgePath=$launchBridgeExe")
+Write-Host 'BUILD_STEP: final installer EXE'
 Invoke-Dotnet $bundleArguments
 $bundleOutputs = @(Get-ChildItem -LiteralPath $bundleOutputDirectory -Filter '*.exe' -File -Recurse -ErrorAction Stop)
 if ($bundleOutputs.Count -ne 1 -or $bundleOutputs[0].Name -cne 'Structura.Connector.Installer.exe') {
