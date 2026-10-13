@@ -71,7 +71,7 @@
   </Target>
 
   <ItemGroup>
-    <Content Include="..\..\scripts\connector_vpn_recovery.ps1;..\..\scripts\install_connector_vpn_recovery.ps1">
+    <Content Include="..\scripts\vpn-recovery\connector_vpn_recovery.ps1;..\scripts\vpn-recovery\install_connector_vpn_recovery.ps1">
       <Link>tools\vpn-recovery\%(Filename)%(Extension)</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>

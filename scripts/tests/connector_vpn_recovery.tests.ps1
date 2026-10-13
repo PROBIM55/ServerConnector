@@ -1,5 +1,5 @@
 $ErrorActionPreference = 'Stop'
-. (Join-Path $PSScriptRoot '..\connector_vpn_recovery.ps1') -FunctionsOnly
+. (Join-Path $PSScriptRoot '..\..\connector-desktop\scripts\vpn-recovery\connector_vpn_recovery.ps1') -FunctionsOnly
 $base = @{ Installed=$true; StartMode='Auto'; Status='Running'; NetworkReady=$true; ServerReachable=$false; SmbConnected=$false; Maintenance=$false; Failures=3; ProcessAgeSeconds=600; SinceRestartSeconds=1800 }
 $cases = @(
     @{ Expected='Restart'; Changes=@{} },
