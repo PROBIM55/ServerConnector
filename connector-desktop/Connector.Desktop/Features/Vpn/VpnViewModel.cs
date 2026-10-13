@@ -27,7 +27,9 @@ public sealed record VpnContext(
 // SMB-mount helper and the live config/creds stay in the shell; the VM only requests "open this UNC" via a callback.
 public sealed class VpnViewModel : ObservableObject
 {
-    private readonly VpnProvisioningService _vpnService;
+    private readonly IVpnProvisioningService _vpnService;
+    private bool? _serverReachable;
+    private int _contextRevision;
 
     // The client tunnel name is always the local constant (the server-side name may differ).
     private const string VpnTunnel = "structura-vpn";
@@ -40,7 +42,7 @@ public sealed class VpnViewModel : ObservableObject
     public Action<string, MessageBoxButton, MessageBoxImage>? DialogHandler { get; set; }  // -> ThemedDialogs.Show
     public Action<string>? OpenShareHandler { get; set; }                 // -> shell mounts the UNC over VPN (SMB creds)
 
-    public VpnViewModel(VpnProvisioningService? service = null)
+    public VpnViewModel(IVpnProvisioningService? service = null)
     {
         _vpnService = service ?? new VpnProvisioningService();
 
@@ -86,7 +88,26 @@ public sealed class VpnViewModel : ObservableObject
     // pair it with RefreshStatus() to redraw.
     public void SetContext(VpnContext context)
     {
+        _contextRevision++;
+        _serverReachable = null;
         _ctx = context ?? VpnContext.Empty;
+        RefreshStatus();
+        _ = RefreshConnectionAsync();
+    }
+
+    public async Task RefreshConnectionAsync()
+    {
+        var revision = _contextRevision;
+        var serverIp = _ctx.ServerIp;
+        bool reachable;
+        try
+        {
+            reachable = _ctx.Enabled && _vpnService.IsTunnelRunning(VpnTunnel) &&
+                await _vpnService.CanReachServerAsync(serverIp);
+        }
+        catch { reachable = false; }
+        if (revision != _contextRevision) return;
+        _serverReachable = reachable;
         RefreshStatus();
     }
 
@@ -141,8 +162,13 @@ public sealed class VpnViewModel : ObservableObject
             var running = _vpnService.IsTunnelRunning(tunnel);
             if (running)
             {
-                StatusLine = "VPN включён. Общая папка доступна из любой сети: " + (string.IsNullOrWhiteSpace(unc) ? "(адрес не задан)" : unc);
-                StatusBrush = System.Windows.Media.Brushes.MediumSpringGreen;
+                StatusLine = _serverReachable switch
+                {
+                    true => "VPN включён. SMB-порт сервера доступен: " + unc,
+                    false => "VPN-служба запущена, но SMB-сервер недоступен. Проверьте соединение или нажмите «Переподключить VPN».",
+                    null => "VPN-служба запущена. Проверяем связь с сервером..."
+                };
+                StatusBrush = _serverReachable == true ? System.Windows.Media.Brushes.MediumSpringGreen : System.Windows.Media.Brushes.Orange;
                 EnableButtonText = "Переподключить VPN";
                 CanEnable = true;
                 CanDisable = true;
@@ -163,12 +189,13 @@ public sealed class VpnViewModel : ObservableObject
 
     private async Task EnableAsync()
     {
-        await EnsureEnabledAsync(showResultDialog: true, openShareOnSuccess: true);
+        await EnsureEnabledAsync(showResultDialog: true, openShareOnSuccess: true, restartExisting: true);
     }
 
     public async Task<VpnResult> EnsureEnabledAsync(
         bool showResultDialog,
-        bool openShareOnSuccess)
+        bool openShareOnSuccess,
+        bool restartExisting = false)
     {
         LastOperationOutcome = OperationOutcome.Running;
         try
@@ -198,7 +225,13 @@ public sealed class VpnViewModel : ObservableObject
             var tunnel = VpnTunnel;
             IsBusy = true;
             StatusLine = "Проверяем и включаем VPN. При первой установке подтвердите запрос UAC.";
-            var result = await Task.Run(() => _vpnService.Enable(_ctx.VpnConfig, tunnel));
+            var result = await Task.Run(() => _vpnService.Enable(_ctx.VpnConfig, tunnel, restartExisting));
+            if (result.IsSuccess)
+            {
+                await RefreshConnectionAsync();
+                if (_serverReachable != true)
+                    result = VpnResult.Fail("VPN-служба запущена, но связь с SMB-сервером не подтверждена. Общая папка пока недоступна.");
+            }
             LastOperationOutcome = result.IsSuccess
                 ? OperationOutcome.Succeeded
                 : result.IsCancelled ? OperationOutcome.Cancelled : OperationOutcome.Failed;
@@ -229,7 +262,7 @@ public sealed class VpnViewModel : ObservableObject
             }
             return VpnResult.Fail(ex.Message);
         }
-        finally { IsBusy = false; RefreshStatus(); }
+        finally { IsBusy = false; await RefreshConnectionAsync(); }
     }
 
     private async Task DisableAsync()
@@ -253,7 +286,7 @@ public sealed class VpnViewModel : ObservableObject
             Log?.Invoke("VPN disable error: " + ex.Message);
             DialogHandler?.Invoke(ex.Message, MessageBoxButton.OK, MessageBoxImage.Error);
         }
-        finally { IsBusy = false; RefreshStatus(); }
+        finally { IsBusy = false; await RefreshConnectionAsync(); }
     }
 
     private void OpenFolder()

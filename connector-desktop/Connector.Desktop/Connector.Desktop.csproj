@@ -71,6 +71,11 @@
   </Target>
 
   <ItemGroup>
+    <Content Include="..\..\scripts\connector_vpn_recovery.ps1;..\..\scripts\install_connector_vpn_recovery.ps1">
+      <Link>tools\vpn-recovery\%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
     <!-- Third-party licenses of the AGR converter (Assimp, Silk.NET, SharpGLTF, gltfpack): next to the exe and in the MSI. -->
     <Content Include="THIRD_PARTY_NOTICES.txt">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>

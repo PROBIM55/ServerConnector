@@ -13,10 +13,11 @@ namespace Connector.Desktop.Services;
 //
 // Everything is opt-in / gated by the server (cfg vpn.enabled + a config delivered via bootstrap).
 // If no VPN config is delivered, none of this runs and the connector behaves exactly as before.
-public sealed class VpnProvisioningService
+public sealed class VpnProvisioningService : IVpnProvisioningService
 {
     private readonly string _awgExe;
     private readonly string _confDir;
+    private bool _recoveryInstallAttempted;
 
     public string LogFilePath { get; }
 
@@ -78,7 +79,10 @@ public sealed class VpnProvisioningService
     }
 
     // Install (or reinstall) the tunnel from the given config and start it. One-time UAC.
-    public VpnResult Enable(string configContent, string tunnel)
+    public Task<bool> CanReachServerAsync(string serverIp) =>
+        new TcpConnectivityProbe().CanConnectAsync(serverIp, 445, TimeSpan.FromSeconds(3));
+
+    public VpnResult Enable(string configContent, string tunnel, bool restartExisting = false)
     {
         if (!BundledClientPresent)
         {
@@ -99,6 +103,24 @@ public sealed class VpnProvisioningService
         // there is nothing to reinstall and therefore no reason to show UAC again.
         if (installed && configIsCurrent && IsTunnelRunning(tunnel))
         {
+            if (restartExisting)
+            {
+                // Explicit reconnect must really restart the owned service. Keep
+                // the existing keys/configuration; never uninstall a working tunnel.
+                var restartScript = "$ErrorActionPreference='Stop'; " + RecoveryInstallCommand() +
+                    "Restart-Service -Name " + PowerShellLiteral(ServiceName(tunnel)) + " -ErrorAction Stop";
+                var restartCode = RunElevatedPowerShell(restartScript, out var restartError);
+                if (restartCode == ElevationCancelled)
+                    return VpnResult.Cancelled("Переподключение VPN отменено.");
+                if (restartCode != 0 || !WaitForStableTunnel(tunnel))
+                {
+                    AppendLog("tunnel restart failed: " + restartError);
+                    return VpnResult.Fail("Не удалось перезапустить VPN-службу. Конфигурация сохранена.");
+                }
+                AppendLog("existing tunnel service restarted");
+                return VpnResult.Success("VPN-служба перезапущена. Проверяем связь с сервером.");
+            }
+            EnsureRecoveryMonitor();
             AppendLog("tunnel already running with current config");
             return VpnResult.Success("VPN уже включён и использует актуальную конфигурацию.");
         }
@@ -107,7 +129,7 @@ public sealed class VpnProvisioningService
         {
             var startScript =
                 "$ErrorActionPreference='Stop'; " +
-                "Start-Service -Name " + PowerShellLiteral(ServiceName(tunnel));
+                "Start-Service -Name " + PowerShellLiteral(ServiceName(tunnel)) + "; " + RecoveryInstallCommand();
             var startCode = RunElevatedPowerShell(startScript, out var startError);
             if (startCode == ElevationCancelled)
             {
@@ -148,6 +170,7 @@ public sealed class VpnProvisioningService
                     VpnConfigComparer.FileMatches(confPath, normalizedConfig))
                 {
                     AppendLog("tunnel reconfigured and running");
+                    EnsureRecoveryMonitor();
                     return VpnResult.Success("VPN включён с актуальной конфигурацией.");
                 }
 
@@ -178,7 +201,10 @@ public sealed class VpnProvisioningService
         }
 
         AppendLog($"installtunnelservice {tunnel} from {confPath}");
-        var code = RunElevated("/installtunnelservice \"" + confPath + "\"", out var elevErr);
+        var installScript = "$ErrorActionPreference='Stop'; & " + PowerShellLiteral(_awgExe) +
+            " /installtunnelservice " + PowerShellLiteral(confPath) +
+            "; if ($LASTEXITCODE -ne 0) { throw 'VPN installation failed' }; " + RecoveryInstallCommand();
+        var code = RunElevatedPowerShell(installScript, out var elevErr);
         if (code == ElevationCancelled)
         {
             return VpnResult.Cancelled("Установка VPN отменена (не подтверждён запрос прав администратора). Нажмите ещё раз и подтвердите.");
@@ -213,7 +239,10 @@ public sealed class VpnProvisioningService
         {
             return VpnResult.Cancelled("Отключение VPN отменено (не подтверждён запрос прав администратора).");
         }
-        WaitUntil(() => !IsTunnelInstalled(tunnel), TimeSpan.FromSeconds(8));
+        if (code != 0 || !WaitUntil(() => !IsTunnelInstalled(tunnel), TimeSpan.FromSeconds(8)))
+        {
+            return VpnResult.Fail("Не удалось отключить VPN-службу. Конфигурация сохранена.");
+        }
         TryDeleteConf(confPath);
         AppendLog("tunnel uninstalled");
         return VpnResult.Success("VPN-доступ отключён.");
@@ -232,6 +261,34 @@ public sealed class VpnProvisioningService
         {
             AppendLog("conf cleanup skipped: " + ex.Message);
         }
+    }
+
+    private string RecoveryInstallCommand()
+    {
+        var installer = Path.Combine(AppContext.BaseDirectory, "tools", "vpn-recovery", "install_connector_vpn_recovery.ps1");
+        if (!File.Exists(installer))
+        {
+            AppendLog("VPN recovery installer is missing; automatic recovery is not installed");
+            return "";
+        }
+        // A failure to install the monitor must not tear down an existing VPN.
+        return "try { & " + PowerShellLiteral(installer) +
+            " -Mode Client | Out-Null } catch { Write-Warning 'VPN recovery monitor installation failed' }; ";
+    }
+
+    private void EnsureRecoveryMonitor()
+    {
+        if (_recoveryInstallAttempted) return;
+        var marker = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+            "StructuraConnectorVpnRecovery", "installed.json");
+        if (File.Exists(marker)) return;
+        _recoveryInstallAttempted = true;
+        var command = RecoveryInstallCommand();
+        if (command.Length == 0) return;
+        var code = RunElevatedPowerShell("$ErrorActionPreference='Stop'; " + command, out _);
+        AppendLog(code == 0 && File.Exists(marker)
+            ? "automatic VPN recovery monitor installed"
+            : "automatic VPN recovery monitor not installed; existing VPN unchanged");
     }
 
     private void WriteProtectedConfig(string path, string configContent)

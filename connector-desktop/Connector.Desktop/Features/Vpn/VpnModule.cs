@@ -55,9 +55,7 @@ public sealed class VpnModule : IFeatureModule
         bool openShareOnSuccess = false) =>
         _viewModel.EnsureEnabledAsync(showResultDialog, openShareOnSuccess);
 
-    public Task OnActivatedAsync()
-    {
-        _viewModel.RefreshStatus();
-        return Task.CompletedTask;
-    }
+    public Task RefreshConnectionAsync() => _viewModel.RefreshConnectionAsync();
+
+    public Task OnActivatedAsync() => RefreshConnectionAsync();
 }

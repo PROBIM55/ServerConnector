@@ -19,6 +19,7 @@
     </PackageReference>
     <PackageReference Include="Velopack" Version="1.2.161" />
     <PackageReference Include="dnlib" Version="4.4.0" />
+    <PackageReference Include="System.ServiceProcess.ServiceController" Version="8.0.0" />
   </ItemGroup>
 
   <ItemGroup>
@@ -34,6 +35,10 @@
              Link="Services\TcpConnectivityProbe.cs" />
     <Compile Include="..\Connector.Desktop\Services\VpnConfigComparer.cs"
              Link="Services\VpnConfigComparer.cs" />
+    <Compile Include="..\Connector.Desktop\Services\IVpnProvisioningService.cs" Link="Services\IVpnProvisioningService.cs" />
+    <Compile Include="..\Connector.Desktop\Services\VpnProvisioningService.cs" Link="Services\VpnProvisioningService.cs" />
+    <Compile Include="..\Connector.Desktop\Features\Vpn\VpnViewModel.cs" Link="Features\Vpn\VpnViewModel.cs" />
+    <Compile Include="..\Connector.Desktop\Mvvm\OperationOutcome.cs" Link="Mvvm\OperationOutcome.cs" />
     <Compile Include="..\Connector.Desktop\Services\SettingsService.cs"
              Link="Services\SettingsService.cs" />
     <Compile Include="..\Connector.Desktop\Services\ManagedSmbMappingStore.cs" Link="Services\ManagedSmbMappingStore.cs" />

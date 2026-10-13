@@ -1593,6 +1593,8 @@ public partial class MainWindow : Window, IShellHost, IConnectorHost
             _serverConnectionFailed = false;
             AppendLog("Heartbeat отправлен успешно.");
             UpdateHeaderStatusUi();
+            if (_shell.Vpn.Module("Общая папка (VPN)") is Features.Vpn.VpnModule vpn)
+                await vpn.RefreshConnectionAsync();
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -1613,6 +1615,8 @@ public partial class MainWindow : Window, IShellHost, IConnectorHost
             _serverConnectionFailed = true;
             AppendLog("Ошибка heartbeat: " + ex.Message);
             UpdateHeaderStatusUi();
+            if (_shell.Vpn.Module("Общая папка (VPN)") is Features.Vpn.VpnModule vpn)
+                await vpn.RefreshConnectionAsync();
         }
     }
 
