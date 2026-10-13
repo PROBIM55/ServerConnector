@@ -33,6 +33,9 @@ public sealed partial class UserStateSnapshotService
     {
     }
 
+    public static UserStateSnapshotService ForParallelInstallation() => new(
+        new WindowsUserIdentityProvider(), new CurrentUserParallelStatePathPolicy());
+
     internal UserStateSnapshotService(
         IUserIdentityProvider identityProvider,
         IUserStatePathPolicy pathPolicy,
@@ -687,10 +690,11 @@ public sealed partial class UserStateSnapshotService
     private IReadOnlyList<NormalizedRoot> GetCanonicalRoots()
     {
         var roots = NormalizeRoots(_pathPolicy.GetCanonicalRoots(), "canonicalRoots");
-        if (roots.Count != 3 ||
+        var parallel = roots.Count == 1 && FixedEquals(roots[0].Id, ParallelUserStateRoots.Unified);
+        if (!parallel && (roots.Count != 3 ||
             roots.Count(item => FixedEquals(item.Id, LegacyUserStateRootIds.Structura)) != 1 ||
             roots.Count(item => FixedEquals(item.Id, LegacyUserStateRootIds.Platform)) != 1 ||
-            roots.Count(item => FixedEquals(item.Id, LegacyUserStateRootIds.UnifiedPlatform)) != 1)
+            roots.Count(item => FixedEquals(item.Id, LegacyUserStateRootIds.UnifiedPlatform)) != 1))
         {
             throw new UserStateSnapshotException("The runtime path policy must provide exactly the Structura, legacy Platform, and unified Platform canonical roots.");
         }

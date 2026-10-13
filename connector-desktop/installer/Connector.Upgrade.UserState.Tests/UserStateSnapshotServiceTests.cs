@@ -10,6 +10,35 @@ public sealed class UserStateSnapshotServiceTests
     private const string CurrentSid = "S-1-5-21-111-222-333-1001";
 
     [Fact]
+    public async Task Parallel_snapshot_rollback_does_not_overwrite_new_changes_in_running_legacy_clients()
+    {
+        using var fixture = new Fixture();
+        var legacy = fixture.CreateLegacyState();
+        var roots = ParallelUserStateRoots.FromLocalApplicationData(fixture.Root);
+        var ownPath = roots.Single().Path;
+        var oldApplication = Path.Combine(fixture.Root, "Structura Connector");
+        Directory.CreateDirectory(oldApplication);
+        var oldExecutable = Path.Combine(oldApplication, "Connector.Desktop.exe");
+        await File.WriteAllTextAsync(oldExecutable, "old version before snapshot");
+        Directory.CreateDirectory(ownPath);
+        var ownSettings = Path.Combine(ownPath, "settings.json");
+        await File.WriteAllTextAsync(ownSettings, "before");
+        var service = fixture.CreateService(roots);
+        var snapshot = await service.CreateSnapshotAsync(new UserStateSnapshotRequest(CurrentSid), fixture.Stage);
+        var legacyWork = Path.Combine(legacy[0].Path, "live-work.dat");
+        await File.WriteAllTextAsync(legacyWork, "work saved after snapshot");
+        await File.WriteAllTextAsync(oldExecutable, "old app independently updated");
+        await File.WriteAllTextAsync(ownSettings, "failed new install");
+
+        await service.ApplySnapshotAsync(new UserStateApplyRequest(CurrentSid, snapshot,
+            await service.InspectTargetsAsync(CurrentSid), UserStateApplyPurpose.ExactRollback), fixture.Stage);
+
+        Assert.Equal("before", await File.ReadAllTextAsync(ownSettings));
+        Assert.Equal("work saved after snapshot", await File.ReadAllTextAsync(legacyWork));
+        Assert.Equal("old app independently updated", await File.ReadAllTextAsync(oldExecutable));
+    }
+
+    [Fact]
     public async Task Snapshot_hydrate_and_rollback_preserve_every_file_byte()
     {
         using var fixture = new Fixture();

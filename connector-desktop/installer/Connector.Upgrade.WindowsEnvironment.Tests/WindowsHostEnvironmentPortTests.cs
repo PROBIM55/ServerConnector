@@ -9,6 +9,25 @@ public sealed class WindowsHostEnvironmentPortTests
 {
     private const string Sid = "S-1-5-21-100-200-300-1001";
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Parallel_install_allows_live_or_unknown_legacy_processes_but_keeps_schema_gate(bool schema)
+    {
+        var processes = new FakeProcesses
+        {
+            Structura = new LegacyProcessProbeResult(true, [53]),
+            Platform = new LegacyProcessProbeResult(false, []),
+        };
+        var port = new WindowsHostEnvironmentPort(Sid, new FakeSchema(schema), processes,
+            () => Sid, preserveLegacyApplications: true);
+        var readiness = await port.InspectReadinessAsync(CancellationToken.None);
+        Assert.Equal(schema, readiness.NewServerSchemaAvailable);
+        Assert.True(readiness.LegacyWorkCanDrainSafely);
+        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await port.DrainLegacyApplicationAsync(LegacyApplicationKind.StructuraConnector, CancellationToken.None));
+    }
+
     [Fact]
     public async Task RefusesMsiDrainWhileEitherOldProcessIsRunning()
     {

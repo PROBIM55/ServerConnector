@@ -7,6 +7,23 @@ public sealed class UpgradeOrchestratorTests : IDisposable
 {
     private readonly string _root = Path.Combine(Path.GetTempPath(), "connector-upgrade-tests", Guid.NewGuid().ToString("N"));
 
+    [Theory]
+    [InlineData(null)]
+    [InlineData("VerifyAccess")]
+    [InlineData("VerifyFinal")]
+    public async Task Parallel_install_preserves_both_legacy_apps_on_success_and_failure(string? failOperation)
+    {
+        var ports = new FakePorts { PreserveLegacyApplications = true, FailOperation = failOperation };
+        var (result, journal) = await ExecuteAsync(ports);
+
+        Assert.Equal(failOperation is null ? UpgradeOutcome.Succeeded : UpgradeOutcome.FailedAndRolledBack, result.Outcome);
+        Assert.Equal(2, ports.InstalledLegacyKinds.Count);
+        Assert.DoesNotContain(ports.Calls, call => call.StartsWith("Remove:") || call.StartsWith("Restore:") || call.StartsWith("AcquirePayload:"));
+        Assert.True(journal.Recovery!.PreserveLegacyApplications);
+        Assert.Empty(journal.Recovery.LegacyRemovalReceipts);
+        Assert.Empty(journal.Recovery.ProtectedRollbackPayloads);
+    }
+
     [Fact]
     public async Task Bound_operation_id_is_persisted_as_the_recoverable_journal_run_id()
     {
@@ -583,6 +600,32 @@ public sealed class UpgradeOrchestratorTests : IDisposable
         Assert.DoesNotContain(ports.Calls, call => call.StartsWith("Remove:", StringComparison.Ordinal));
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Pilot_recovery_preserves_independently_changed_legacy_state_and_refuses_old_policy(bool preserve)
+    {
+        var preflight = FakePorts.CreatePreflight(NetBirdOwnership.Absent);
+        var plan = FakePorts.CreateNetBirdPlan(preflight.NetBird, NetBirdChangeKind.InstalledThisRun);
+        var interrupted = CreateInterruptedNetBirdJournal(preflight, plan);
+        interrupted = interrupted with
+        {
+            Recovery = interrupted.Recovery! with { PreserveLegacyApplications = preserve, ProtectedRollbackPayloads = [] },
+        };
+        var ports = new FakePorts
+        {
+            PreserveLegacyApplications = true,
+            NetBirdRecoveryResult = new(NetBirdInterruptedRecoveryAction.RemovedInstalledThisRun, "netbird-machine-evidence"),
+        };
+        ports.InstalledLegacyKinds.Clear(); // Independently removed: never re-install old software during pilot recovery.
+        var (result, _) = await RecoverAsync(ports, interrupted);
+        Assert.Equal(preserve ? UpgradeOutcome.FailedAndRolledBack : UpgradeOutcome.NeedsManualRecovery, result.Outcome);
+        Assert.Empty(ports.InstalledLegacyKinds);
+        Assert.DoesNotContain(ports.Calls, call => call.StartsWith("RestoreMissing:", StringComparison.Ordinal) ||
+            call.StartsWith("Remove:", StringComparison.Ordinal) || call.StartsWith("ReacquirePayload:", StringComparison.Ordinal));
+        if (!preserve) Assert.DoesNotContain(ports.Calls, call => call.StartsWith("ReconcileNetBird:", StringComparison.Ordinal));
+    }
+
     [Fact]
     public async Task Explicit_recovery_after_second_removal_restores_both_clients()
     {
@@ -856,8 +899,9 @@ public sealed class UpgradeOrchestratorTests : IDisposable
             recovery);
     }
 
-    private class FakePorts : IUpgradePorts
+    private class FakePorts : IUpgradePorts, IUpgradeLegacyRetentionPolicy
     {
+        public bool PreserveLegacyApplications { get; init; }
         public static readonly NetBirdOwnedState OriginalOwnedNetBird = new(
             "netbird-existing",
             "0.79.0",
@@ -1142,7 +1186,8 @@ public sealed class UpgradeOrchestratorTests : IDisposable
         public ValueTask<FinalUpgradeVerification> VerifyFinalStateAsync(CancellationToken cancellationToken)
         {
             Record("VerifyFinal");
-            return ValueTask.FromResult(new FinalUpgradeVerification(true, true, true));
+            return ValueTask.FromResult(new FinalUpgradeVerification(true, true,
+                true, PreserveLegacyApplications ? InstalledLegacyKinds.Count == 2 : null));
         }
 
         private void Record(string operation)

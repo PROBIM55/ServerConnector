@@ -18,8 +18,7 @@ public sealed class ManagedSmbMappingStore
     private readonly Func<string, string?> _resolveTarget;
 
     public ManagedSmbMappingStore()
-        : this(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "Structura Connector", "Network", "owned-smb.json"),
+        : this(Path.Combine(UnifiedUserStatePaths.Root, "Network", "owned-smb.json"),
             WindowsIdentity.GetCurrent().User?.Value ?? throw new InvalidOperationException("Не определён пользователь Windows."),
             ResolveWindowsTarget) { }
 

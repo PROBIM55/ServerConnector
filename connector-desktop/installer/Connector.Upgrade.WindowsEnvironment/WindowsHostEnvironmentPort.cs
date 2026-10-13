@@ -21,8 +21,8 @@ public interface ILegacyProcessProbe
 public sealed record LegacyProcessProbeResult(bool Complete, IReadOnlyList<int> ProcessIds);
 
 /// <summary>
-/// Read-only gate. Legacy clients have no migration IPC, so the installer asks the user to exit
-/// both applications and refuses MSI removal while either named process is still present.
+/// Read-only readiness gate. Parallel installation permits running legacy clients;
+/// retirement requires both old applications to be absent from the process inventory.
 /// </summary>
 public sealed class WindowsHostEnvironmentPort : IWindowsHostEnvironmentPort
 {
@@ -30,12 +30,14 @@ public sealed class WindowsHostEnvironmentPort : IWindowsHostEnvironmentPort
     private readonly Func<string> _currentSid;
     private readonly IPlatformAccessSchemaProbe _schema;
     private readonly ILegacyProcessProbe _processes;
+    private readonly bool _preserveLegacy;
 
     public WindowsHostEnvironmentPort(
         string initiatingSid,
         IPlatformAccessSchemaProbe schema,
         ILegacyProcessProbe processes,
-        Func<string>? currentSid = null)
+        Func<string>? currentSid = null,
+        bool preserveLegacyApplications = false)
     {
         if (string.IsNullOrWhiteSpace(initiatingSid))
             throw new ArgumentException("The initiating SID is required.", nameof(initiatingSid));
@@ -43,6 +45,7 @@ public sealed class WindowsHostEnvironmentPort : IWindowsHostEnvironmentPort
         _schema = schema ?? throw new ArgumentNullException(nameof(schema));
         _processes = processes ?? throw new ArgumentNullException(nameof(processes));
         _currentSid = currentSid ?? CurrentWindowsSid;
+        _preserveLegacy = preserveLegacyApplications;
     }
 
     public string GetCurrentUserSid() => _currentSid();
@@ -51,6 +54,8 @@ public sealed class WindowsHostEnvironmentPort : IWindowsHostEnvironmentPort
     {
         AssertSameUser();
         var schemaAvailable = await _schema.IsAvailableAsync(cancellationToken).ConfigureAwait(false);
+        if (_preserveLegacy)
+            return new WindowsHostReadiness(schemaAvailable, true, $"schema:{schemaAvailable};legacy:retained");
         var structura = _processes.Inspect(LegacyApplicationKind.StructuraConnector);
         var platform = _processes.Inspect(LegacyApplicationKind.PlatformConnector);
         var noLiveWork = IsAbsent(structura) && IsAbsent(platform);
@@ -66,6 +71,8 @@ public sealed class WindowsHostEnvironmentPort : IWindowsHostEnvironmentPort
     {
         cancellationToken.ThrowIfCancellationRequested();
         AssertSameUser();
+        if (_preserveLegacy)
+            throw new InvalidOperationException("Legacy drain is disabled during parallel rollout.");
         if (kind is not (LegacyApplicationKind.StructuraConnector or LegacyApplicationKind.PlatformConnector))
             throw new ArgumentOutOfRangeException(nameof(kind));
         var observed = _processes.Inspect(kind);

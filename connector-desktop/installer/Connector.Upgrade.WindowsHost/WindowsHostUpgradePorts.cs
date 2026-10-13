@@ -15,12 +15,17 @@ public sealed record WindowsHostProductionOptions(
     WindowsRollbackPayloadSources LegacyRollbackSources,
     string NetBirdSourceMsiPath,
     VelopackSetupPin VelopackSetupPin,
-    TimeSpan MutationTimeout);
+    TimeSpan MutationTimeout)
+{
+    public bool PreserveLegacyApplications { get; init; }
+}
 
 /// <summary>One-PC Windows composition of the accepted upgrade modules.</summary>
 public sealed class WindowsHostUpgradePorts : IUpgradePorts, IUpgradeSessionBoundPorts,
-    IOriginalUserOperationRollbackPayloadOpener
+    IOriginalUserOperationRollbackPayloadOpener, IUpgradeLegacyRetentionPolicy
 {
+    public bool PreserveLegacyApplications { get; }
+    private IReadOnlyList<LegacyApplicationPresenceBaseline>? _legacyBaseline;
     private static readonly LegacyApplicationKind[] LegacyOrder =
     [
         LegacyApplicationKind.StructuraConnector,
@@ -55,7 +60,8 @@ public sealed class WindowsHostUpgradePorts : IUpgradePorts, IUpgradeSessionBoun
         IWindowsHostUnifiedApplicationPort unified,
         IPlatformEnrollmentPort enrollment,
         ILiveNewAccessVerificationPort access,
-        LegacyUpgradeLock? upgradeLock = null)
+        LegacyUpgradeLock? upgradeLock = null,
+        bool preserveLegacyApplications = false)
     {
         _session = session ?? throw new ArgumentNullException(nameof(session));
         _session.Validate();
@@ -68,6 +74,7 @@ public sealed class WindowsHostUpgradePorts : IUpgradePorts, IUpgradeSessionBoun
         _enrollment = enrollment ?? throw new ArgumentNullException(nameof(enrollment));
         _access = access ?? throw new ArgumentNullException(nameof(access));
         _upgradeLock = upgradeLock ?? LegacyUpgradeLock.LoadEmbedded();
+        PreserveLegacyApplications = preserveLegacyApplications;
         AssertSameUser();
     }
 
@@ -159,7 +166,8 @@ public sealed class WindowsHostUpgradePorts : IUpgradePorts, IUpgradeSessionBoun
             netBird,
             unified,
             enrollment,
-            access);
+            access,
+            preserveLegacyApplications: options.PreserveLegacyApplications);
     }
 
     public async ValueTask<UpgradePreflight> InspectAsync(CancellationToken cancellationToken)
@@ -173,8 +181,17 @@ public sealed class WindowsHostUpgradePorts : IUpgradePorts, IUpgradeSessionBoun
         var presenceBaseline = new List<LegacyApplicationPresenceBaseline>(LegacyOrder.Length);
         foreach (var kind in LegacyOrder)
         {
-            var exact = _msi.InspectExact(kind);
             var pin = _upgradeLock.Get(kind);
+            ExactWindowsMsiInspection exact;
+            try { exact = _msi.InspectExact(kind); }
+            catch (WindowsMsiInvariantException) when (PreserveLegacyApplications)
+            {
+                // An unrecognised old release remains outside this installation's ownership.
+                presenceBaseline.Add(new LegacyApplicationPresenceBaseline(
+                    pin.Identity, ExactLegacyPresence.Unknown,
+                    $"windows-msi:{_session.OperationId}:{kind}:preserved-unmanaged", null));
+                continue;
+            }
             if (exact.Identity != pin.Identity)
                 throw new UpgradeInvariantException($"The {kind} MSI inspection is not bound to the locked product identity.");
 
@@ -196,6 +213,13 @@ public sealed class WindowsHostUpgradePorts : IUpgradePorts, IUpgradeSessionBoun
                         InstalledVersion: null));
                     break;
                 default:
+                    if (PreserveLegacyApplications)
+                    {
+                        presenceBaseline.Add(new LegacyApplicationPresenceBaseline(
+                            pin.Identity, ExactLegacyPresence.Unknown,
+                            $"windows-msi:{_session.OperationId}:{kind}:preserved-unmanaged", null));
+                        break;
+                    }
                     throw new UpgradeInvariantException($"The {kind} MSI state is not an exact installed or verified absent result.");
             }
         }
@@ -209,6 +233,7 @@ public sealed class WindowsHostUpgradePorts : IUpgradePorts, IUpgradeSessionBoun
             .Select(item => item.Identity.Kind)
             .Select(kind => ToRollbackPayload(_upgradeLock.Get(kind)))
             .ToArray();
+        _legacyBaseline = presenceBaseline;
         return new UpgradePreflight(
             _session.InitiatingUserSid,
             installed,
@@ -373,6 +398,8 @@ public sealed class WindowsHostUpgradePorts : IUpgradePorts, IUpgradeSessionBoun
         CancellationToken cancellationToken)
     {
         AssertSameUser();
+        if (PreserveLegacyApplications)
+            throw new UpgradeInvariantException("Legacy retirement is disabled during parallel rollout.");
         if (!_liveRollbackLeases.TryGetValue(identity.Kind, out var lease) || lease.Inspection.Identity != identity)
             throw new UpgradeInvariantException("The exact live rollback lease is missing before legacy removal.");
         var drain = await _environment
@@ -394,6 +421,8 @@ public sealed class WindowsHostUpgradePorts : IUpgradePorts, IUpgradeSessionBoun
         CancellationToken cancellationToken)
     {
         AssertSameUser();
+        if (PreserveLegacyApplications)
+            throw new UpgradeInvariantException("Legacy restore is disabled during parallel rollout.");
         if (payloadLease is not IWindowsVerifiedRollbackPayloadLease windowsLease ||
             windowsLease.Inspection.Identity != removal.Identity)
             throw new UpgradeInvariantException("Legacy restore does not have the exact Windows rollback lease.");
@@ -417,9 +446,17 @@ public sealed class WindowsHostUpgradePorts : IUpgradePorts, IUpgradeSessionBoun
         var access = _enrollmentReceipt is null
             ? new NewAccessVerification(false, false, false)
             : await _access.VerifyAsync(_enrollmentReceipt, cancellationToken).ConfigureAwait(false);
-        var legacyAbsent = LegacyOrder.All(kind =>
+        var legacyAbsent = !PreserveLegacyApplications && LegacyOrder.All(kind =>
             _msi.InspectExact(kind).Presence == ExactWindowsMsiPresence.Absent);
-        return new FinalUpgradeVerification(unifiedReady, access.IsSuccessful, legacyAbsent);
+        bool? preserved = PreserveLegacyApplications
+            ? _legacyBaseline is not null && _legacyBaseline.All(item =>
+                item.Presence == ExactLegacyPresence.Unknown ||
+                _msi.InspectExact(item.Identity.Kind).Presence ==
+                (item.Presence == ExactLegacyPresence.ExactInstalled
+                    ? ExactWindowsMsiPresence.ExactInstalled
+                    : ExactWindowsMsiPresence.Absent))
+            : null;
+        return new FinalUpgradeVerification(unifiedReady, access.IsSuccessful, legacyAbsent, preserved);
     }
 
     public async ValueTask<InterruptedUpgradeInspection> InspectInterruptedUpgradeAsync(
@@ -427,7 +464,7 @@ public sealed class WindowsHostUpgradePorts : IUpgradePorts, IUpgradeSessionBoun
         CancellationToken cancellationToken)
     {
         AssertRecoveryUser(recovery);
-        var legacy = LegacyOrder.Select(kind =>
+        var legacy = (recovery.PreserveLegacyApplications ? Array.Empty<LegacyApplicationKind>() : LegacyOrder).Select(kind =>
         {
             var exact = _msi.InspectExact(kind);
             return new LegacyRecoveryObservation(
@@ -461,6 +498,8 @@ public sealed class WindowsHostUpgradePorts : IUpgradePorts, IUpgradeSessionBoun
         CancellationToken cancellationToken)
     {
         AssertSameUser();
+        if (PreserveLegacyApplications)
+            throw new UpgradeInvariantException("Legacy restore is disabled during parallel rollout.");
         if (absentApplication.Presence != ExactLegacyPresence.Absent ||
             payloadLease is not IWindowsVerifiedRollbackPayloadLease windowsLease ||
             windowsLease.Inspection.Identity != absentApplication.Identity)

@@ -41,6 +41,8 @@
     <Compile Include="..\Connector.Desktop\Mvvm\OperationOutcome.cs" Link="Mvvm\OperationOutcome.cs" />
     <Compile Include="..\Connector.Desktop\Services\SettingsService.cs"
              Link="Services\SettingsService.cs" />
+    <Compile Include="..\Connector.Desktop\Services\UnifiedUserStatePaths.cs" Link="Services\UnifiedUserStatePaths.cs" />
+    <Compile Include="..\Connector.Desktop\Services\AutoStartService.cs" Link="Services\AutoStartService.cs" />
     <Compile Include="..\Connector.Desktop\Services\ManagedSmbMappingStore.cs" Link="Services\ManagedSmbMappingStore.cs" />
     <Compile Include="..\Connector.Desktop\Services\LocalRuntimeIdentity.cs" Link="Services\LocalRuntimeIdentity.cs" />
     <Compile Include="..\Connector.Desktop\Services\DesktopBackgroundAgent.cs" Link="Services\DesktopBackgroundAgent.cs" />

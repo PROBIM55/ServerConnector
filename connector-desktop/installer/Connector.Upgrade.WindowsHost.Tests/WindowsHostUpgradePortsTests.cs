@@ -5,6 +5,30 @@ namespace Connector.Upgrade.WindowsHost.Tests;
 
 public sealed class WindowsHostUpgradePortsTests
 {
+    [Theory]
+    [InlineData(null)]
+    [InlineData("9.9.9")]
+    public async Task Parallel_install_preserves_exact_and_other_legacy_versions_without_msi_or_drain(string? version)
+    {
+        await using var fixture = new HostFixture(preserveLegacyApplications: true);
+        fixture.Inventory.VersionOverride = version;
+        fixture.Environment.RejectAtDrainCall = 1;
+        using var journal = new FileUpgradeJournalStore(fixture.JournalPath);
+        var result = await new UpgradeOrchestrator(fixture.Host, journal)
+            .ExecuteAsync(new OneTimePlatformToken("one-time"));
+
+        Assert.Equal(UpgradeOutcome.Succeeded, result.Outcome);
+        Assert.True(fixture.Inventory.IsPresent(LegacyApplicationKind.StructuraConnector));
+        Assert.True(fixture.Inventory.IsPresent(LegacyApplicationKind.PlatformConnector));
+        Assert.DoesNotContain(fixture.Calls, call => call.StartsWith("drain:", StringComparison.Ordinal) ||
+            call.StartsWith("payload:acquire:", StringComparison.Ordinal) ||
+            call.StartsWith("msi:remove:", StringComparison.Ordinal) ||
+            call.StartsWith("msi:restore:", StringComparison.Ordinal));
+        await Assert.ThrowsAsync<UpgradeInvariantException>(async () =>
+            await fixture.Host.RemoveExactLegacyApplicationAsync(
+                fixture.Lock.Get(LegacyApplicationKind.StructuraConnector).Identity, CancellationToken.None));
+    }
+
     [Fact]
     public async Task RollbackLease_AfterDisposalCanBeReopenedForSameSessionRecovery()
     {

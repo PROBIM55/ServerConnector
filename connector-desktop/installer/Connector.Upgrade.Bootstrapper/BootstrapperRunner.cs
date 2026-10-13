@@ -71,7 +71,7 @@ public sealed class BootstrapperRunner(
                     return null;
                 }
 
-                _status.Show("Проверка системы и выполнение переноса доступа…");
+                _status.Show("Проверка системы и установка нового коннектора…");
                 try
                 {
                     result = await composition.ExecuteAsync(new OneTimePlatformToken(value), cancellationToken)

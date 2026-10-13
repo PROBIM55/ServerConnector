@@ -19,7 +19,7 @@ public sealed class TeklaStandardService
     public TeklaStandardService(HttpClient http, string? stateRoot = null)
     {
         _http = http;
-        var root = stateRoot ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ConnectorAgentDesktop");
+        var root = stateRoot ?? UnifiedUserStatePaths.Structura;
         root = Path.GetFullPath(root);
         Directory.CreateDirectory(root);
         LogFilePath = Path.Combine(root, "tekla-standard.log");

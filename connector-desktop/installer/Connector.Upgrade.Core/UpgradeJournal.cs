@@ -108,7 +108,8 @@ public sealed record UpgradeRecoveryMetadata(
     NetBirdOperationReceipt? NetBirdReceipt,
     UnifiedApplicationReceipt? UnifiedApplicationReceipt,
     PlatformEnrollmentReceipt? PlatformEnrollmentReceipt,
-    List<LegacyRemovalReceipt> LegacyRemovalReceipts);
+    List<LegacyRemovalReceipt> LegacyRemovalReceipts,
+    bool PreserveLegacyApplications = false);
 
 public sealed record ProtectedRollbackPayloadReceipt(
     string HandleId,

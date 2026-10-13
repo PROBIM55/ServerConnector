@@ -17,6 +17,7 @@ using Connector.Upgrade.VelopackPayload;
 using Connector.Upgrade.WindowsEnvironment;
 using Connector.Upgrade.WindowsHost;
 using Connector.Upgrade.WindowsUserStage;
+using Connector.Upgrade.UserState;
 using Platform.Connector.Core;
 using System.Security.Principal;
 using VelopackApplicationSetupPin = Connector.Upgrade.Velopack.VelopackSetupPin;
@@ -166,7 +167,8 @@ public static class WindowsUpgradeCompositionFactory
                 new WindowsSmbAccessProbe(
                     bindings.RequestTransport, bindings.SmbDestinations.Contains, bindings.Overlay));
             var environment = new WindowsHostEnvironmentPort(
-                currentSid, schema, new SystemLegacyProcessProbe());
+                currentSid, schema, new SystemLegacyProcessProbe(),
+                preserveLegacyApplications: options.Host.PreserveLegacyApplications);
             machineClient = await new OriginalUserCallerTransport()
                 .OpenAsync(operationId, commandTimeout, cancellationToken).ConfigureAwait(false);
             var readOnlyNetBird = new ReadOnlyWindowsHostNetBirdPort(
@@ -179,7 +181,9 @@ public static class WindowsUpgradeCompositionFactory
                 access,
                 readOnlyNetBird,
                 setupStager,
-                new WindowsUserStatePort(captureFromPrecreatedStage: true));
+                new WindowsUserStatePort(
+                    service: options.Host.PreserveLegacyApplications ? UserStateSnapshotService.ForParallelInstallation() : null,
+                    captureFromPrecreatedStage: true));
             var ports = new MachineCommandUpgradePorts(
                 operationId, currentSid, userPorts, machineClient, commandTimeout);
             userSession = WindowsOriginalUserUpgradeSessionFactory.Create(options.Host.Session, ports);

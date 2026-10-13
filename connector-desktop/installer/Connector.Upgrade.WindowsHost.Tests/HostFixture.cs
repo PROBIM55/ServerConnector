@@ -15,8 +15,9 @@ internal sealed class HostFixture : IDisposable, IAsyncDisposable
     private readonly string _root = Path.Combine(Path.GetTempPath(), "windows-host-tests-" + Guid.NewGuid().ToString("N"));
     private WindowsHostUpgradePorts? _host;
 
-    public HostFixture(bool createHost = true)
+    public HostFixture(bool createHost = true, bool preserveLegacyApplications = false)
     {
+        PreserveLegacyApplications = preserveLegacyApplications;
         Directory.CreateDirectory(_root);
         Lock = LegacyUpgradeLock.LoadEmbedded();
         Inventory = new FakeInventory(Lock, Sid, Calls);
@@ -25,6 +26,7 @@ internal sealed class HostFixture : IDisposable, IAsyncDisposable
     }
 
     public List<string> Calls { get; } = [];
+    public bool PreserveLegacyApplications { get; }
     public LegacyUpgradeLock Lock { get; }
     public FakeInventory Inventory { get; }
     public FakeEnvironment Environment { get; }
@@ -65,7 +67,8 @@ internal sealed class HostFixture : IDisposable, IAsyncDisposable
             Unified,
             new FakeEnrollmentPort(Calls),
             Access,
-            Lock);
+            Lock,
+            preserveLegacyApplications: PreserveLegacyApplications);
         return _host;
     }
 
@@ -116,6 +119,7 @@ internal sealed class FakeInventory(
         .ToDictionary(pin => pin.Kind, _ => true);
 
     public bool IsPresent(LegacyApplicationKind kind) => _present[kind];
+    public string? VersionOverride { get; set; }
     public void SetPresent(LegacyApplicationKind kind, bool present) => _present[kind] = present;
 
     public WindowsMsiInventorySnapshot Inspect(LegacyUpgradePin pin)
@@ -129,7 +133,7 @@ internal sealed class FakeInventory(
                 ? [new WindowsMsiRegistration(
                     pin.Identity.ProductCode,
                     pin.Identity.UpgradeCode,
-                    pin.Version,
+                    VersionOverride ?? pin.Version,
                     WindowsMsiRegistrationContext.UserUnmanaged,
                     sid)]
                 : []);

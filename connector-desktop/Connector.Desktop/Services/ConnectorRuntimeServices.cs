@@ -33,8 +33,7 @@ public sealed class ConnectorRuntimeServices : IAsyncDisposable
         var installedWorker = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "Structura IFC Optimizer", "engine", "structura-ifc-optimizer.exe");
         ifcWorker ??= File.Exists(bundledWorker) ? bundledWorker : installedWorker;
-        var localRuntimeRoot = runtimeRoot ?? Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Structura Connector", "Agent");
+        var localRuntimeRoot = runtimeRoot ?? Path.Combine(UnifiedUserStatePaths.Root, "Agent");
         CommonAccess = CommonAccessRuntime.Create(localRuntimeRoot);
         CommonFolders = new CommonSmbAccessService(CommonAccess,
             () => CommonAccess.Current?.AccessProfile,

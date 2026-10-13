@@ -11,8 +11,10 @@ namespace Connector.Upgrade.OriginalUserMachineAdapter;
 /// Only fixed, payload-free machine commands cross the authenticated helper channel.
 /// </summary>
 public sealed class MachineCommandUpgradePorts : IUpgradePorts, IUpgradeSessionBoundPorts,
-    IUpgradeMachineVerifiedNetBirdPorts
+    IUpgradeMachineVerifiedNetBirdPorts, IUpgradeLegacyRetentionPolicy
 {
+    public bool PreserveLegacyApplications =>
+        _userPorts is IUpgradeLegacyRetentionPolicy { PreserveLegacyApplications: true };
     private readonly Guid _operationId;
     private readonly string _initiatingSid;
     private readonly IUpgradePorts _userPorts;

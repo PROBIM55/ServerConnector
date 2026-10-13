@@ -255,10 +255,18 @@ public sealed record NewAccessVerification(bool PlatformApi, bool VpnRoute, bool
 public sealed record FinalUpgradeVerification(
     bool UnifiedApplicationReady,
     bool NewAccessStillValid,
-    bool ExactLegacyApplicationsAbsent)
+    bool ExactLegacyApplicationsAbsent,
+    bool? LegacyApplicationsPreserved = null)
 {
     public bool IsSuccessful =>
-        UnifiedApplicationReady && NewAccessStillValid && ExactLegacyApplicationsAbsent;
+        UnifiedApplicationReady && NewAccessStillValid &&
+        (LegacyApplicationsPreserved ?? ExactLegacyApplicationsAbsent);
+}
+
+/// <summary>Production rollout policy, owned by the composed ports, never a user-supplied command.</summary>
+public interface IUpgradeLegacyRetentionPolicy
+{
+    bool PreserveLegacyApplications { get; }
 }
 
 /// <summary>

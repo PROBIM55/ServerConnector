@@ -81,7 +81,7 @@ public sealed partial class UpgradeOrchestrator
         try
         {
             foreach (var absent in inspection.LegacyApplications.Where(item =>
-                         item.Presence == ExactLegacyPresence.Absent && WasInstalledAtPreflight(recovery.Preflight, item.Identity.Kind)))
+                         !recovery.PreserveLegacyApplications && item.Presence == ExactLegacyPresence.Absent && WasInstalledAtPreflight(recovery.Preflight, item.Identity.Kind)))
             {
                 var durable = recovery.ProtectedRollbackPayloads.Single(item => item.Kind == absent.Identity.Kind);
                 var acquireMutation = absent.Identity.Kind == LegacyApplicationKind.StructuraConnector
@@ -113,7 +113,7 @@ public sealed partial class UpgradeOrchestrator
 
             var restoreErrors = new List<Exception>();
             foreach (var absent in inspection.LegacyApplications.Where(item =>
-                         item.Presence == ExactLegacyPresence.Absent && WasInstalledAtPreflight(recovery.Preflight, item.Identity.Kind)))
+                         !recovery.PreserveLegacyApplications && item.Presence == ExactLegacyPresence.Absent && WasInstalledAtPreflight(recovery.Preflight, item.Identity.Kind)))
             {
                 var payloadLease = payloadLeases.Single(item => item.Inspection.Identity == absent.Identity);
                 var mutation = absent.Identity.Kind == LegacyApplicationKind.StructuraConnector
@@ -291,11 +291,17 @@ public sealed partial class UpgradeOrchestrator
 
     private void ValidateDurablePreflightMetadata(UpgradeRecoveryMetadata recovery)
     {
+        if (_preserveLegacy != recovery.PreserveLegacyApplications)
+            throw new UpgradeInvariantException("Interrupted installation belongs to a different legacy retention policy.");
         ValidatePreflight(recovery.Preflight, persistedRecoverySummary: true);
+        if (recovery.PreserveLegacyApplications &&
+            (recovery.LegacyRemovalReceipts.Count != 0 || recovery.ProtectedRollbackPayloads.Count != 0))
+            throw new UpgradeInvariantException("Parallel installation contains legacy mutation evidence.");
         var installedKinds = recovery.Preflight.LegacyPresenceBaseline!
             .Where(item => item.Presence == ExactLegacyPresence.ExactInstalled)
             .Select(item => item.Identity.Kind)
             .ToArray();
+        if (recovery.PreserveLegacyApplications) installedKinds = [];
         if (recovery.ProtectedRollbackPayloads.Count != installedKinds.Length)
             throw new UpgradeInvariantException("Durable rollback payload receipts are incomplete.");
         foreach (var kind in installedKinds)
@@ -329,6 +335,8 @@ public sealed partial class UpgradeOrchestrator
             return "recovery_user_state_unrestorable";
         if (requireStateMatch && !inspection.UserStateMatchesSnapshot)
             return "recovery_user_state_unverified";
+        // Other applications can change independently during the pilot; rollback owns only new state.
+        if (recovery.PreserveLegacyApplications) return null;
         if (inspection.LegacyApplications.Count != RequiredLegacyOrder.Length)
             return "recovery_legacy_identity_unproven";
         foreach (var kind in RequiredLegacyOrder)

@@ -26,8 +26,7 @@ public sealed class VpnProvisioningService : IVpnProvisioningService
         var baseDir = AppContext.BaseDirectory;
         _awgExe = Path.Combine(baseDir, "tools", "awg", "amneziawg.exe");
 
-        var root = Path.GetFullPath(stateRoot ?? Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ConnectorAgentDesktop"));
+        var root = Path.GetFullPath(stateRoot ?? UnifiedUserStatePaths.Structura);
         _confDir = Path.Combine(root, "vpn");
         Directory.CreateDirectory(_confDir);
         LogFilePath = Path.Combine(root, "vpn.log");

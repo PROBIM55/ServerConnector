@@ -45,8 +45,7 @@ public sealed class IfcExportPatchService
         Action<IfcPatchIoPoint, string>? faultInjector,
         Func<bool>? teklaRunningProbe = null)
     {
-        var root = Path.GetFullPath(stateRoot ?? Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ConnectorAgentDesktop"));
+        var root = Path.GetFullPath(stateRoot ?? UnifiedUserStatePaths.Structura);
         Directory.CreateDirectory(root);
         LogFilePath = Path.Combine(root, "ifc-patcher.log");
         _faultInjector = faultInjector;

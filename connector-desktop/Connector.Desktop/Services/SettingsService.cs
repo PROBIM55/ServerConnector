@@ -9,19 +9,22 @@ namespace Connector.Desktop.Services;
 public sealed class SettingsService
 {
     private readonly string _settingsPath;
+    private readonly string? _legacySettingsPath;
 
     public SettingsService()
     {
-        var root = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ConnectorAgentDesktop");
+        var root = UnifiedUserStatePaths.Structura;
         Directory.CreateDirectory(root);
         _settingsPath = Path.Combine(root, "settings.json");
+        _legacySettingsPath = UnifiedUserStatePaths.LegacySettings;
     }
 
-    // Test seam only: production continues to use LocalAppData/ConnectorAgentDesktop/settings.json.
-    public SettingsService(string settingsPath)
+    // Explicit paths keep fixtures isolated and allow a read-only legacy import test.
+    public SettingsService(string settingsPath, string? legacySettingsPath = null)
     {
         if (string.IsNullOrWhiteSpace(settingsPath)) throw new ArgumentException("Нужен путь настроек.", nameof(settingsPath));
         _settingsPath = settingsPath;
+        _legacySettingsPath = legacySettingsPath;
         Directory.CreateDirectory(Path.GetDirectoryName(settingsPath) ?? throw new ArgumentException("Нужна папка настроек.", nameof(settingsPath)));
     }
 
@@ -29,6 +32,8 @@ public sealed class SettingsService
     {
         if (!File.Exists(_settingsPath))
         {
+            var imported = TryImportLegacyPreferences();
+            if (imported is not null) return Normalize(imported);
             return new AppSettings
             {
                 DeviceId = "pc-" + Environment.MachineName.ToLowerInvariant()
@@ -37,6 +42,11 @@ public sealed class SettingsService
 
         var raw = File.ReadAllText(_settingsPath, Encoding.UTF8);
         var settings = JsonSerializer.Deserialize<AppSettings>(raw) ?? new AppSettings();
+        return Normalize(settings);
+    }
+
+    private static AppSettings Normalize(AppSettings settings)
+    {
         if (string.IsNullOrWhiteSpace(settings.DeviceId))
         {
             settings.DeviceId = "pc-" + Environment.MachineName.ToLowerInvariant();
@@ -124,6 +134,37 @@ public sealed class SettingsService
         }
 
         return settings;
+    }
+
+    private AppSettings? TryImportLegacyPreferences()
+    {
+        if (_legacySettingsPath is null || !File.Exists(_legacySettingsPath)) return null;
+        try
+        {
+            using var input = new FileStream(_legacySettingsPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            if (input.Length is <= 0 or > 1024 * 1024) return null;
+            var settings = JsonSerializer.Deserialize<AppSettings>(input);
+            if (settings is null) return null;
+            // Preserve paths/preferences, but never create a second legacy token session or tunnel owner.
+            settings.TokenCipherBase64 = "";
+            settings.SmbLogin = "";
+            settings.SmbPasswordCipherBase64 = "";
+            settings.VpnEnabled = false;
+            settings.VpnConfigCipherBase64 = "";
+            settings.VpnTunnelName = "";
+            settings.VpnAddress = "";
+            settings.VpnSmbUnc = "";
+            settings.VpnServerIp = "";
+            settings.VpnConfigReceivedUtc = null;
+            settings.IsSystemAdmin = false;
+            settings.IsFirmAdmin = false;
+            settings.IssuedTo = "";
+            return settings;
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or JsonException)
+        {
+            return null; // A concurrently-written legacy file stays untouched.
+        }
     }
 
     public void Save(AppSettings settings)

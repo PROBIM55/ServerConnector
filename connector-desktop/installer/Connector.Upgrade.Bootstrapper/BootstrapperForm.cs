@@ -12,7 +12,7 @@ internal sealed class BootstrapperForm : Form, IBootstrapperStatusSink
     public BootstrapperForm(IWindowsUpgradeBootstrapperRuntimeFactory runtimeFactory)
     {
         _runtimeFactory = runtimeFactory;
-        Text = "Structura Connector — перенос доступа";
+        Text = "Structura Connector — установка нового клиента";
         Width = 520;
         Height = 230;
         FormBorderStyle = FormBorderStyle.FixedDialog;
@@ -23,10 +23,10 @@ internal sealed class BootstrapperForm : Form, IBootstrapperStatusSink
         _status = new Label
         {
             Left = 22, Top = 22, Width = 455, Height = 72,
-            Text = "Выберите действие. Операция выполняется под текущей учётной записью Windows.",
+            Text = "Новый коннектор устанавливается рядом со старыми. Старые приложения и подключения сохраняются.",
             AutoSize = false
         };
-        _execute = new Button { Left = 22, Top = 112, Width = 220, Height = 38, Text = "Перенести доступ…" };
+        _execute = new Button { Left = 22, Top = 112, Width = 220, Height = 38, Text = "Установить новый коннектор…" };
         _recover = new Button { Left = 257, Top = 112, Width = 220, Height = 38, Text = "Восстановить прерванную операцию" };
         _execute.Click += async (_, _) => await RunAsync(BootstrapperAction.ExecuteUpgrade);
         _recover.Click += async (_, _) => await RunAsync(BootstrapperAction.RecoverInterrupted);

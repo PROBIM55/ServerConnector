@@ -7,8 +7,8 @@ namespace Connector.Upgrade.WindowsHost;
 
 /// <summary>
 /// Bridges Core's compact snapshot identity to the complete typed user-state recovery evidence kept
-/// inside the ACL-protected stage. The snapshot covers both legacy roots and the unified Platform
-/// target, so compensation also removes a newly imported Platform credential. The operation id is
+/// inside the ACL-protected stage. The injected policy scopes compensation to the new profile
+/// during parallel rollout; legacy profiles remain outside the snapshot. The operation id is
 /// encoded into Core's snapshot id so recovery can reopen the exact stage after process restart.
 /// </summary>
 public sealed class WindowsUserStatePort : IWindowsHostUserStatePort

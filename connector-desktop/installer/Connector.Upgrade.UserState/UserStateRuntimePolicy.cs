@@ -10,6 +10,11 @@ internal sealed class CurrentUserLegacyStatePathPolicy : IUserStatePathPolicy
     public IReadOnlyList<UserStateRoot> GetCanonicalRoots() => LegacyUserStateRoots.ForCurrentUser();
 }
 
+internal sealed class CurrentUserParallelStatePathPolicy : IUserStatePathPolicy
+{
+    public IReadOnlyList<UserStateRoot> GetCanonicalRoots() => ParallelUserStateRoots.ForCurrentUser();
+}
+
 internal enum UserStateApplyFaultPoint
 {
     AfterJournalTemporaryFlushedBeforePublication,

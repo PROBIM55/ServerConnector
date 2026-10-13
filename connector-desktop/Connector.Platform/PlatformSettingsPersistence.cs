@@ -19,7 +19,7 @@ public sealed class PlatformSettingsPersistence
     {
         var root = rootDirectory ?? Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "Structura Connector",
+            "Structura Unified Connector",
             "Platform");
         _settingsService = new DesktopSettingsService(root);
         _credentialPath = Path.Combine(root, "secrets", "device-token.dat");

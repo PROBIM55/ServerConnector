@@ -37,7 +37,7 @@ public sealed class ProductionWindowsUpgradeRuntimeFactory : IWindowsUpgradeBoot
             if (string.IsNullOrWhiteSpace(sid)) return Blocked("WindowsHostRequired");
 
             var localRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "Structura Connector", "Agent");
+                "Structura Unified Connector", "Agent");
             var deployment = CommonAccessDeploymentFactory.OpenProduction(localRoot);
             if (!deployment.IsConfigured || deployment.ControlPlaneBaseUri is null ||
                 deployment.NetBirdManagementUri is null)
@@ -77,7 +77,7 @@ public sealed class ProductionWindowsUpgradeRuntimeFactory : IWindowsUpgradeBoot
             var netBird = Path.Combine(helperRoot, OfficialNetBirdPackagePin.LoadEmbedded().InstallerName);
             var host = new WindowsHostProductionOptions(
                 new WindowsHostSession(operationId.ToString("N"), sid), rollback, netBird,
-                setupPin, TimeSpan.FromMinutes(10));
+                setupPin, TimeSpan.FromMinutes(10)) { PreserveLegacyApplications = true };
             var profileUri = new Uri(deployment.ControlPlaneBaseUri.AbsoluteUri.TrimEnd('/') + "/profile");
             var allowedSigner = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             if (!string.IsNullOrWhiteSpace(releaseSetup.SignerThumbprint))

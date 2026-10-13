@@ -182,7 +182,7 @@ public partial class GraphiteWebView : System.Windows.Controls.UserControl, IAsy
             Browser.DefaultBackgroundColor = System.Drawing.Color.FromArgb(255, 18, 23, 29);
             string userDataDirectory = _userDataDirectory ?? Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "Structura Connector", "UI", "WebView2");
+                "Structura Unified Connector", "UI", "WebView2");
             var environment = await CoreWebView2Environment.CreateAsync(userDataFolder: userDataDirectory);
             await Browser.EnsureCoreWebView2Async(environment);
             ThrowIfDisposed();

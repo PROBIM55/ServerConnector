@@ -8,6 +8,7 @@ public sealed partial class UpgradeOrchestrator(
 {
     private readonly IUpgradePorts _ports = ports;
     private readonly IUpgradeJournalStore _journalStore = journalStore;
+    private readonly bool _preserveLegacy = ports is IUpgradeLegacyRetentionPolicy { PreserveLegacyApplications: true };
     private static readonly LegacyApplicationKind[] RequiredLegacyOrder =
     [
         LegacyApplicationKind.StructuraConnector,
@@ -69,7 +70,7 @@ public sealed partial class UpgradeOrchestrator(
                 requireOwnedNetBirdState: _ports is not IUpgradeMachineVerifiedNetBirdPorts);
             await RecordPreflightAsync(preflight, cancellationToken).ConfigureAwait(false);
 
-            foreach (var kind in RequiredLegacyOrder.Where(kind => WasInstalledAtPreflight(preflight, kind)))
+            foreach (var kind in RequiredLegacyOrder.Where(kind => !_preserveLegacy && WasInstalledAtPreflight(preflight, kind)))
             {
                 var payload = preflight.RollbackPayloads.Single(item => item.Identity.Kind == kind);
                 var mutation = kind == LegacyApplicationKind.StructuraConnector
@@ -141,7 +142,7 @@ public sealed partial class UpgradeOrchestrator(
                 throw new UpgradeInvariantException("New Platform API, VPN and SMB access were not all verified.");
             await RecordObservationAsync("new_access_verified", cancellationToken).ConfigureAwait(false);
 
-            foreach (var kind in RequiredLegacyOrder.Where(kind => WasInstalledAtPreflight(preflight, kind)))
+            foreach (var kind in RequiredLegacyOrder.Where(kind => !_preserveLegacy && WasInstalledAtPreflight(preflight, kind)))
             {
                 var phase = kind == LegacyApplicationKind.StructuraConnector
                     ? UpgradePhase.RemoveStructuraConnector
@@ -167,7 +168,7 @@ public sealed partial class UpgradeOrchestrator(
 
             await EnterForwardPhaseAsync(UpgradePhase.VerifyFinalState, cancellationToken).ConfigureAwait(false);
             var final = await _ports.VerifyFinalStateAsync(cancellationToken).ConfigureAwait(false);
-            if (!final.IsSuccessful)
+            if (!final.IsSuccessful || _preserveLegacy && final.LegacyApplicationsPreserved != true)
                 throw new UpgradeInvariantException("Final unified application state was not verified.");
             await RecordObservationAsync("final_state_verified", cancellationToken).ConfigureAwait(false);
 
@@ -225,7 +226,8 @@ public sealed partial class UpgradeOrchestrator(
             var pin = _upgradeLock.Get(kind);
             var observation = baseline.Single(item => item.Identity.Kind == kind);
             if (observation.Identity != pin.Identity || string.IsNullOrWhiteSpace(observation.ObservationId) ||
-                observation.Presence is not (ExactLegacyPresence.ExactInstalled or ExactLegacyPresence.Absent))
+                (observation.Presence is not (ExactLegacyPresence.ExactInstalled or ExactLegacyPresence.Absent) &&
+                 !(_preserveLegacy && observation.Presence == ExactLegacyPresence.Unknown)))
                 throw new UpgradeInvariantException($"The exact {kind} MSI presence was not proven against the repository lock.");
 
             var installed = apps.Where(item => item.Identity.Kind == kind).ToArray();
@@ -511,7 +513,7 @@ public sealed partial class UpgradeOrchestrator(
             RollbackPayloads = [],
             NetBird = new NetBirdAssessment(preflight.NetBird.Ownership, null),
         };
-        var recovery = new UpgradeRecoveryMetadata(userSafePreflight, [], null, null, null, null, []);
+        var recovery = new UpgradeRecoveryMetadata(userSafePreflight, [], null, null, null, null, [], _preserveLegacy);
         var events = CopyEventsWith(
             UpgradeJournalEventKind.ObservationPassed,
             _journal!.Phase,

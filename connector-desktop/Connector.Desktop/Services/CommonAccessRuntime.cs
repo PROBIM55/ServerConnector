@@ -101,8 +101,12 @@ public sealed class CommonAccessRuntime : ICommonConnectorRequestTransport
     public string[] AvailablePages(string mode) => new[] { "services", "tekla", "attributes", "folders", "converters", "agr", "bridge", "autocad" }
         .Where(page => HasPermission(mode, page == "bridge" ? "tekla" : page, ConnectorPermission.Read)).ToArray();
 
-    public static CommonAccessRuntime Create(string runtimeRoot) =>
-        CreateFromDeployment(CommonAccessDeploymentFactory.OpenProduction(runtimeRoot));
+    public static CommonAccessRuntime Create(string runtimeRoot)
+    {
+        var runtime = CreateFromDeployment(CommonAccessDeploymentFactory.OpenProduction(runtimeRoot));
+        runtime.Select(); // Production 1.1 never starts a second legacy session, even without machine config.
+        return runtime;
+    }
 
     internal static CommonAccessRuntime CreateForFixture(string runtimeRoot, string applicationDirectory) =>
         CreateFromDeployment(CommonAccessDeploymentFactory.OpenFixture(runtimeRoot, applicationDirectory));

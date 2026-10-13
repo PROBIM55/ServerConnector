@@ -104,7 +104,8 @@ if ($PreviousReleasesDir) {
         Copy-Item -Destination $outputDir -Force
 }
 
-$packTitle = if ($TestAppId) { 'Structura Connector Update Smoke' } else { 'Structura Connector' }
+# Distinct shortcut names preserve the legacy MSI's Desktop/Start-menu launchers during the pilot.
+$packTitle = if ($TestAppId) { 'Structura Connector Update Smoke' } else { 'Structura Connector (новый)' }
 $shortcutLocations = if ($TestAppId) { 'None' } else { 'Desktop,StartMenuRoot' }
 & $vpk pack --packId $appId --packTitle $packTitle --packVersion $PackVersion `
     --shortcuts $shortcutLocations `

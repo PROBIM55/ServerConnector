@@ -35,8 +35,7 @@ public sealed class ModelSharingProvisioningService
         _assemblyPatcher = assemblyPatcher;
         _stageHook = stageHook;
         _writeHook = writeHook;
-        var root = Path.GetFullPath(stateRoot ?? Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ConnectorAgentDesktop"));
+        var root = Path.GetFullPath(stateRoot ?? UnifiedUserStatePaths.Structura);
         Directory.CreateDirectory(root);
         LogFilePath = Path.Combine(root, "model-sharing.log");
     }
