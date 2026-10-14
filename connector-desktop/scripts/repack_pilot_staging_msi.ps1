@@ -49,15 +49,8 @@ $access = Get-Content -LiteralPath $originalAccess -Raw | ConvertFrom-Json
 if ($access.serviceBaseUri -cne 'https://connector-access.structura-most.ru/') {
     throw 'The known pilot service URI differs.'
 }
-$access.serviceBaseUri = 'https://connector-access.structura-most.ru/api/platform/connector/access/v1/'
 $fixedAccess = Join-Path $Output 'connector-access.json'
-[IO.File]::WriteAllText($fixedAccess, ($access | ConvertTo-Json -Depth 30), [Text.UTF8Encoding]::new($false))
-$roundtripAccess = Get-Content -LiteralPath $fixedAccess -Raw | ConvertFrom-Json
-$roundtripAccess.serviceBaseUri = 'https://connector-access.structura-most.ru/'
-if (($roundtripAccess | ConvertTo-Json -Depth 30 -Compress) -cne
-    ((Get-Content -LiteralPath $originalAccess -Raw | ConvertFrom-Json) | ConvertTo-Json -Depth 30 -Compress)) {
-    throw 'Deployment repair changed more than the service URI.'
-}
+Copy-Item -LiteralPath $originalAccess -Destination $fixedAccess
 $helper = Join-Path $Output 'helper-runtime'
 New-Item -ItemType Directory -Path $helper -Force | Out-Null
 $explicitHelperPayloads = @('Setup.exe','netbird_installer_0.79.0_windows_amd64.msi',
@@ -105,13 +98,6 @@ if (@($oldFiles.Keys | Where-Object { [IO.Path]::GetFileName($_) -ceq 'connector
     throw 'Expected exactly one deployment configuration in the MSI.'
 }
 foreach ($name in $oldFiles.Keys) {
-    if ([IO.Path]::GetFileName($name) -ceq 'connector-access.json') {
-        if (-not $newFiles.ContainsKey($name) -or $oldFiles[$name] -cne $originalAccessHash -or
-            $newFiles[$name] -cne (Get-FileHash -LiteralPath $fixedAccess).Hash) {
-            throw 'Deployment configuration repair differs.'
-        }
-        continue
-    }
     if (-not $newFiles.ContainsKey($name) -or $oldFiles[$name] -ne $newFiles[$name]) {
         throw "MSI repack changed a runtime payload: $name"
     }
@@ -165,9 +151,9 @@ try {
         productCode = $newIdentity.ProductCode
         upgradeCode = $newIdentity.UpgradeCode
         runtimePayloadsUnchanged = $true
-        runtimePayloadCount = $oldFiles.Count - 1
+        runtimePayloadCount = $oldFiles.Count
         deploymentConfiguration = @{
-            onlyServiceUriChanged = $true
+            unchanged = $true
             previousSha256 = $originalAccessHash.ToLowerInvariant()
             sha256 = (Get-FileHash -LiteralPath $fixedAccess).Hash.ToLowerInvariant()
             serviceBaseUri = $access.serviceBaseUri

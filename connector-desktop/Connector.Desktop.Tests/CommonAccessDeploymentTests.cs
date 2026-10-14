@@ -14,7 +14,7 @@ public sealed class CommonAccessDeploymentTests : IDisposable
         File.WriteAllText(Path.Combine(_root, "connector-access.json"), """
             {
               "enabled": true,
-              "serviceBaseUri": "https://connector-access.test/api/platform/connector/access/v1/",
+              "serviceBaseUri": "https://connector-access.test/",
               "issuerCertificateSha256": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
               "netBirdManagementUri": "https://netbird.test/",
               "services": [{

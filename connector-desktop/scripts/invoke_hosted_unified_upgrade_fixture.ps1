@@ -30,11 +30,12 @@ $productCode=$view.Fetch().StringData(1)
     -CandidateInstaller (Join-Path $RunDirectory 'unified-installer/Structura.Connector.Installer.exe') `
     -CandidateProductCode $productCode -ExpectedBootstrapperDirectory (Join-Path $RunDirectory 'bootstrapper') `
     -ExpectedHelperDirectory (Join-Path $RunDirectory 'machine-helper') `
-    -ExpectedConfiguration $ExpectedConfiguration -Output $output
+    -ExpectedConfiguration $ExpectedConfiguration -Output $output `
+    -ProductionPreflightProbeProject (Join-Path $PSScriptRoot '../installer/Connector.Upgrade.DeploymentProbe/Connector.Upgrade.DeploymentProbe.csproj')
 if (!$?) { throw 'Native upgrade fixture failed.' }
 $proof=Get-Content -LiteralPath (Join-Path $output 'failure-proof.json') -Raw | ConvertFrom-Json
 if (!$proof.installedRuntimePayloadsVerified -or !$proof.nativeCallerStarted -or
-    !$proof.deploymentConfigurationVerified -or !$proof.relatedBundleRollbackNotInvoked) {
+    !$proof.deploymentConfigurationVerified -or !$proof.relatedBundleRollbackNotInvoked -or !$proof.productionPreflightVerified) {
     throw 'Native upgrade evidence is incomplete.'
 }
 $proof | Add-Member -MemberType NoteProperty -Name sourceSha -Value $env:GITHUB_SHA

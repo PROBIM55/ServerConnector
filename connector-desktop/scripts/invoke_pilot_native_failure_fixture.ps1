@@ -6,6 +6,7 @@ param(
     [Parameter(Mandatory)][string]$ExpectedBootstrapperDirectory,
     [Parameter(Mandatory)][string]$ExpectedHelperDirectory,
     [Parameter(Mandatory)][string]$ExpectedConfiguration,
+    [string]$ProductionPreflightProbeProject,
     [Parameter(Mandatory)][string]$Output
 )
 $ErrorActionPreference='Stop'
@@ -73,9 +74,16 @@ try {
         if (!$callerProbe.HasExited) { $callerProbe.Kill($true); [void]$callerProbe.WaitForExit(5000) }
         $callerProbe.Dispose()
     }
+    $productionPreflightVerified = $false
+    if ($ProductionPreflightProbeProject) {
+        & dotnet run --project $ProductionPreflightProbeProject --configuration Release `
+            -p:UseSharedCompilation=false -p:BuildInParallel=false
+        if ($LASTEXITCODE -ne 0) { throw 'Actual production deployment preflight failed.' }
+        $productionPreflightVerified = $true
+    }
     [ordered]@{expectedBridgeFailure=1;machineStageRetained=$true;relatedBundleRollbackNotInvoked=$true;
         installedRuntimePayloadsVerified=$true;installedRuntimePayloadCount=$installedCount;nativeCallerStarted=$true;
-        deploymentConfigurationVerified=$true} |
+        deploymentConfigurationVerified=$true;productionPreflightVerified=$productionPreflightVerified} |
         ConvertTo-Json | Set-Content -LiteralPath (Join-Path $Output 'failure-proof.json') -Encoding utf8
 } finally {
     foreach ($path in @($CandidateInstaller,$PreviousInstaller)) {

@@ -90,11 +90,7 @@ jobs:
           $accessConfiguration = $env:CONNECTOR_ACCESS_CONFIGURATION_JSON | ConvertFrom-Json
           $serviceUri = [Uri]$accessConfiguration.serviceBaseUri
           if ($serviceUri.Scheme -cne 'https' -or $serviceUri.UserInfo -or $serviceUri.Query -or $serviceUri.Fragment) { throw 'Invalid connector service URI.' }
-          if ($serviceUri.AbsolutePath -ceq '/') {
-            $accessConfiguration.serviceBaseUri = $serviceUri.GetLeftPart([UriPartial]::Authority) + '/api/platform/connector/access/v1/'
-          } elseif ($serviceUri.AbsolutePath -cne '/api/platform/connector/access/v1/') {
-            throw 'Connector service URI must use the exact access API base path.'
-          }
+          if ($serviceUri.AbsolutePath -cne '/') { throw 'Connector enrollment service URI must be the HTTPS origin; the client adds the API path.' }
           [IO.File]::WriteAllText($access, ($accessConfiguration | ConvertTo-Json -Depth 30), [Text.UTF8Encoding]::new($false))
           Remove-Item Env:UPDATE_SIGNING_KEY_PEM,Env:HELPER_SIGNING_KEY_PEM,Env:CONNECTOR_ACCESS_CONFIGURATION_JSON
           $engine = Get-Content 'connector-desktop/workers/accepted-engines.json' -Raw | ConvertFrom-Json -ErrorAction Stop

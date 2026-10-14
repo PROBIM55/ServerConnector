@@ -105,7 +105,8 @@ public static class CommonAccessDeploymentFactory
                     coordinator = new CommonConnectorConnectionCoordinator(enrollment, overlay, gate);
                     controlPlaneBaseUri = controlPlane.BaseUri;
                     netBirdManagementUri = expectedManagementUri;
-                    publicProfileUri = new Uri(configuration.ServiceBaseUri.TrimEnd('/') + "/profile", UriKind.Absolute);
+                    publicProfileUri = new Uri(new Uri(configuration.ServiceBaseUri.TrimEnd('/') + "/", UriKind.Absolute),
+                        "api/platform/connector/access/v1/profile");
                 }
             }
         }
