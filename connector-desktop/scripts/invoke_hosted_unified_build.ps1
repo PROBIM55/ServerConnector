@@ -25,7 +25,7 @@ Add-Type -Path $guard
 function Invoke-GuardedHostedProcess([string[]]$Arguments, [string]$Label) {
     # The 2 GiB reserve applies only to this isolated hosted VM. Local policy keeps 6 GiB.
     $result = [PlatformBuild.Guard]::RunWithPolicy((Get-Command pwsh).Source, $Arguments,
-        $env:GITHUB_WORKSPACE, $Label, 0, $null, [uint64](2GB), [uint64](2GB), 25,
+        $env:GITHUB_WORKSPACE, $Label, 0, $null, [uint64](2GB), [uint64](2GB), 100,
         [PlatformBuild.Guard]::MutexName,
         [Func[PlatformBuild.Guard+Memory]]{ [PlatformBuild.Guard]::ReadMemory() })
     if ($result -ne 0) { throw "$Label failed under resource protection (exit $result); no automatic retry." }

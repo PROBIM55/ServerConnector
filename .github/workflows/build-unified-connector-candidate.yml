@@ -124,7 +124,7 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $root = '${{ steps.prepare.outputs.root }}'
           & 'connector-desktop/scripts/invoke_hosted_unified_build.ps1' -PackVersion $env:BUILD_PACK_VERSION -InstallerVersion $env:BUILD_INSTALLER_VERSION -Channel $env:BUILD_CHANNEL -FeedUrl $env:BUILD_FEED_URL -IfcWorkerPath '${{ steps.prepare.outputs.worker }}' -UpdateSigningKeyPemPath '${{ steps.prepare.outputs.key1 }}' -HelperManifestSigningKeyPemPath '${{ steps.prepare.outputs.key2 }}' -HelperReleasePublicKeyFile 'connector-desktop/installer/release-public-key.pem' -ConnectorAccessConfigurationPath '${{ steps.prepare.outputs.access }}' -ProtectedOutputRoot '${{ steps.prepare.outputs.output }}' -PinnedAssetBundleDirectory '${{ steps.prepare.outputs.bundle }}'
-          if ($LASTEXITCODE -ne 0) { throw 'Unified candidate build failed.' }
+          if (-not $?) { throw 'Unified candidate build failed.' }
           $run = Get-ChildItem -LiteralPath '${{ steps.prepare.outputs.output }}' -Directory -Filter "unified-$env:BUILD_PACK_VERSION-*" | Select-Object -Last 1
           if ($null -eq $run) { throw 'Builder output directory not found.' }
           $candidate = Join-Path $run.FullName 'candidate-artifacts'
