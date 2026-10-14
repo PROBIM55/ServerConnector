@@ -42,3 +42,11 @@ jobs:
             pilot-repack/output/Structura.Connector.Installer.wixpdb
             pilot-repack/output/repack-proof.json
             pilot-repack/output/native-layout.log
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: pilot-repack-diagnostics
+          if-no-files-found: ignore
+          retention-days: 7
+          path: |
+            pilot-repack/output/*.log

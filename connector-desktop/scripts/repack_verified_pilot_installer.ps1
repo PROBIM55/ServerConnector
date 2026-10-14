@@ -53,9 +53,12 @@ $exe = Join-Path $output 'Structura.Connector.Installer.exe'
 $layout = Join-Path $root 'native-layout'
 $log = Join-Path $output 'native-layout.log'
 # Burn layout loads the actual bootstrapper and extracts the chain without running any MSI/EXE package.
-Invoke-HostedGuard $exe @('/layout', $layout, '/quiet', '/norestart', '/log', $log) 'pilot-native-layout'
+$layoutWorker = Join-Path $PSScriptRoot 'invoke_pilot_native_layout.ps1'
+Invoke-HostedGuard (Get-Command pwsh).Source @('-NoProfile', '-File', $layoutWorker,
+    '-Executable', $exe, '-Layout', $layout, '-Log', $log) 'pilot-native-layout'
 foreach ($name in @('Connector.Unified.Setup.msi','Connector.Upgrade.LaunchBridge.exe')) {
     $files = @(Get-ChildItem -LiteralPath $layout -Recurse -File -Filter $name)
+    $files | Select-Object FullName,Length | Format-Table | Out-String | Write-Host
     if ($files.Count -ne 1 -or (Get-FileHash -LiteralPath $files[0].FullName -Algorithm SHA256).Hash.ToLowerInvariant() -ne $pins[$name]) {
         throw "Native layout did not preserve the verified payload: $name"
     }
