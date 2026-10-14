@@ -1,6 +1,6 @@
 # Repackage the existing signed pilot components; never compile the desktop client.
 [CmdletBinding()]
-param([Parameter(Mandatory)][ValidatePattern('^pilot-packaging-20261014-[a-f0-9]{8}$')][string]$InputRelease)
+param()
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 if ($env:GITHUB_ACTIONS -ne 'true' -or $env:RUNNER_ENVIRONMENT -ne 'github-hosted' -or $env:RUNNER_OS -ne 'Windows') {
@@ -11,40 +11,62 @@ $inputs = Join-Path $root 'inputs'
 $output = Join-Path $root 'output'
 New-Item -ItemType Directory -Path $inputs,$output -Force | Out-Null
 $pins = [ordered]@{
-    'Connector.Unified.Setup.msi' = 'd8302ffe7c7176417c5a54d32830751804ccd9cf1952c6f41ff6e3b4e5898c2c'
-    'Connector.Upgrade.LaunchBridge.exe' = 'ba1e0528b14b65229df00785859ff9683ffc8e978256d03ccd25c68eb1462a01'
+    'Connector.Unified.Setup.msi' = 'ab139abdd3783b6d18c30ad370916ca5dfaa8a9f45725439f6940635ecf246de'
+    'Connector.Upgrade.LaunchBridge.exe' = 'f59635eccea98dd93ea14bb55687fcb9248886f3ed444fad633fc8ac81cb51eb'
     'platform-build-guard.cs' = '99f6d32467f46042a367fad6383d088432c54a9e181e72a92d397a314a1a4c09'
 }
-$release = gh release view $InputRelease --repo $env:GITHUB_REPOSITORY --json isDraft | ConvertFrom-Json
-if ($LASTEXITCODE -ne 0 -or -not $release.isDraft) { throw 'Inputs must remain in an unpublished draft.' }
-foreach ($name in $pins.Keys) {
-    gh release download $InputRelease --repo $env:GITHUB_REPOSITORY --pattern $name --dir $inputs
-    if ($LASTEXITCODE -ne 0) { throw "Input download failed: $name" }
-    if ((Get-FileHash -LiteralPath (Join-Path $inputs $name) -Algorithm SHA256).Hash.ToLowerInvariant() -ne $pins[$name]) {
-        throw "Verified pilot input changed: $name"
+foreach ($item in @(
+    @{Run=38557543241; Sha='d13c709f0e639a053d5609b800907fa7cf8db174'; Name='unified-connector-installer-1.1.0'; Directory='source'; Hash='48e991842b1ed7ed08b6b6bb631dd6049dbc18c0ba3220e53ba75e9c0785cca6'},
+    @{Run=38548514207; Sha='91de098ef9f50905275be25ab2955baeb3c17d74'; Name='verified-unified-installer'; Directory='previous'; Hash='44e4f750463b6fc5b48352ffa0f4b0fe3be5730012dcb5ae5b89a008af325cf7'}
+)) {
+    $run = gh api "repos/$env:GITHUB_REPOSITORY/actions/runs/$($item.Run)" | ConvertFrom-Json
+    if ($LASTEXITCODE -ne 0 -or $run.conclusion -cne 'success' -or $run.head_sha -cne $item.Sha) { throw 'Verified input run identity differs.' }
+    $directory = Join-Path $inputs $item.Directory
+    gh run download $item.Run --repo $env:GITHUB_REPOSITORY --name $item.Name --dir $directory
+    if ($LASTEXITCODE -ne 0 -or (Get-FileHash -LiteralPath (Join-Path $directory 'Structura.Connector.Installer.exe')).Hash.ToLowerInvariant() -cne $item.Hash) {
+        throw 'Verified installer input changed.'
     }
 }
-Add-Type -Path (Join-Path $inputs 'platform-build-guard.cs')
+$guard = Join-Path $PSScriptRoot 'resource-guard/platform-build-guard.cs'
+if ((Get-FileHash -LiteralPath $guard).Hash.ToLowerInvariant() -cne $pins['platform-build-guard.cs']) { throw 'Build guard changed.' }
+Add-Type -Path $guard
 function Invoke-HostedGuard([string]$Executable, [string[]]$Arguments, [string]$Label) {
     # This reserve applies to the disposable CI machine, never to the user's PC.
     $result = [PlatformBuild.Guard]::RunWithPolicy($Executable, $Arguments, $env:GITHUB_WORKSPACE,
-        $Label, 0, $null, [uint64](2GB), [uint64](2GB), 25, [PlatformBuild.Guard]::MutexName,
+        $Label, 0, $null, [uint64](2GB), [uint64](2GB), 100, [PlatformBuild.Guard]::MutexName,
         [Func[PlatformBuild.Guard+Memory]]{ [PlatformBuild.Guard]::ReadMemory() })
     if ($result -ne 0) { throw "$Label failed under resource protection (exit $result); no automatic retry." }
+}
+Invoke-HostedGuard (Get-Command dotnet).Source @('restore',
+    'connector-desktop/Connector.Unified.Bundle/Connector.Unified.Bundle.wixproj', '-m:1') 'pilot-wix-restore'
+$sdk = Join-Path $env:USERPROFILE '.nuget/packages/wixtoolset.sdk/6.0.2'
+$wix = @(Get-ChildItem -LiteralPath $sdk -Recurse -File -Filter wix.dll)
+if ($wix.Count -ne 1) { throw 'Expected the exact WiX 6.0.2 CLI.' }
+foreach ($kind in @('source','previous')) {
+    Invoke-HostedGuard (Get-Command dotnet).Source @($wix[0].FullName, 'burn', 'extract',
+        (Join-Path $inputs "$kind/Structura.Connector.Installer.exe"),
+        '-o', (Join-Path $inputs "$kind/extracted"), '-oba', (Join-Path $inputs "$kind/ba")) "pilot-$kind-input-extraction"
+}
+$sourcePayloads = Join-Path $inputs 'source/extracted/WixAttachedContainer'
+$previousMsi = Join-Path $inputs 'previous/extracted/WixAttachedContainer/Connector.Unified.Setup.msi'
+foreach ($name in @('Connector.Unified.Setup.msi','Connector.Upgrade.LaunchBridge.exe')) {
+    if ((Get-FileHash -LiteralPath (Join-Path $sourcePayloads $name)).Hash.ToLowerInvariant() -cne $pins[$name]) { throw "Input payload changed: $name" }
 }
 $stagingOutput = Join-Path $root 'staging-output'
 $stagingWorker = Join-Path $PSScriptRoot 'repack_pilot_staging_msi.ps1'
 Invoke-HostedGuard (Get-Command pwsh).Source @('-NoProfile', '-File', $stagingWorker,
-    '-InputMsi', (Join-Path $inputs 'Connector.Unified.Setup.msi'), '-Output', $stagingOutput) 'pilot-staging-repack'
+    '-InputMsi', (Join-Path $sourcePayloads 'Connector.Unified.Setup.msi'), '-PreviousMsi', $previousMsi,
+    '-Output', $stagingOutput) 'pilot-staging-repack'
 $stagingProof = Get-Content -LiteralPath (Join-Path $stagingOutput 'staging-proof.json') -Raw | ConvertFrom-Json
-if (-not $stagingProof.sameVersionUpgradeVerified -or -not $stagingProof.runtimePayloadsUnchanged) {
+if (-not $stagingProof.sameVersionUpgradeVerified -or -not $stagingProof.runtimePayloadsUnchanged -or
+    -not $stagingProof.installedRuntimePayloadsVerified -or -not $stagingProof.nativeCallerStarted) {
     throw 'The existing pilot staging must upgrade without changing runtime bytes.'
 }
 $finalMsi = Join-Path $stagingOutput 'Connector.Unified.Setup.msi'
 $buildArgs = @('build', 'connector-desktop/Connector.Unified.Bundle/Connector.Unified.Bundle.wixproj',
     '-c', 'Release', '-m:1', '-nr:false', '-p:UseSharedCompilation=false', '-p:BuildInParallel=false',
     '-p:ProductVersion=1.1.0', "-p:UnifiedSetupMsiPath=$finalMsi",
-    "-p:LaunchBridgePath=$(Join-Path $inputs 'Connector.Upgrade.LaunchBridge.exe')", '-o', $output, '--nologo')
+    "-p:LaunchBridgePath=$(Join-Path $sourcePayloads 'Connector.Upgrade.LaunchBridge.exe')", '-o', $output, '--nologo')
 Invoke-HostedGuard (Get-Command dotnet).Source $buildArgs 'pilot-burn-repack'
 $pdb = Join-Path $output 'Structura.Connector.Installer.wixpdb'
 $zip = [IO.Compression.ZipFile]::OpenRead($pdb)
@@ -96,10 +118,20 @@ foreach ($pair in @(@('thm.xml','InstallerTheme.xml'), @('thm.wxl','Installer.ru
 if (Select-String -LiteralPath $log -SimpleMatch 'manifest is missing wixstdba information') {
     throw 'The original native bootstrapper failure is still present.'
 }
+if ((Get-FileHash -LiteralPath (Join-Path $ba 'platform_connector.ico')).Hash -ne
+    (Get-FileHash -LiteralPath (Join-Path $env:GITHUB_WORKSPACE 'connector-desktop/Connector.Desktop/Assets/platform_connector.ico')).Hash) {
+    throw 'Window icon payload differs.'
+}
+Invoke-HostedGuard (Get-Command pwsh).Source @('-NoProfile','-File',
+    (Join-Path $PSScriptRoot 'invoke_pilot_native_failure_fixture.ps1'),
+    '-PreviousInstaller', (Join-Path $inputs 'previous/Structura.Connector.Installer.exe'),
+    '-CandidateInstaller', $exe, '-CandidateProductCode', $stagingProof.productCode,
+    '-Output', (Join-Path $root 'failure-fixture')) 'pilot-native-failure-recovery'
 [ordered]@{
     sourceSha = $env:GITHUB_SHA
-    runtimeSourceSha = '64760620a93365e3d0809dc7f84d59b51069b4a3'
-    inputRelease = $InputRelease
+    runtimeSourceSha = 'd13c709f0e639a053d5609b800907fa7cf8db174'
+    sourceInstallerRun = 38557543241
+    previousInstallerRun = 38548514207
     inputHashes = $pins
     staging = $stagingProof
     installerSha256 = (Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -108,7 +140,8 @@ if (Select-String -LiteralPath $log -SimpleMatch 'manifest is missing wixstdba i
     nativeLayoutVerified = $true
     embeddedPayloadsVerified = $true
     customThemeVerified = $true
+    failedRelatedBundleRollbackDisabledVerified = $true
     installedFunctionalVerified = $false
     localUiVerified = $false
-    guard = @{ location = 'github-hosted'; aggregateMemoryGiB = 2; reserveGiB = 2; cpuPercent = 25 }
+    guard = @{ location = 'github-hosted'; aggregateMemoryGiB = 2; reserveGiB = 2; cpuPercent = 100 }
 } | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $output 'repack-proof.json') -Encoding utf8

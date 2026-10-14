@@ -12,6 +12,9 @@
            Language="1049">
     <MajorUpgrade AllowSameVersionUpgrades="yes" Schedule="afterInstallInitialize"
                   DowngradeErrorMessage="Установлена более новая версия установщика Structura Connector." />
+    <!-- A pilot can carry a newer app-local runtime. Costing must not skip its
+         files before RemoveExistingProducts deletes that previous package. -->
+    <Property Id="REINSTALLMODE" Value="amus" />
     <MediaTemplate EmbedCab="yes" />
     <Icon Id="PlatformConnector.exe" SourceFile="$(var.BootstrapperDir)\Connector.Upgrade.Bootstrapper.exe" />
     <Property Id="ARPPRODUCTICON" Value="PlatformConnector.exe" />

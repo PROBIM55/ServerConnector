@@ -18,7 +18,9 @@
           SuppressOptionsUI="yes" />
     </BootstrapperApplication>
 
-    <Chain>
+    <!-- Machine MSI has its own transaction; user migration owns its recovery.
+         A later user-stage failure must not reinstall failed related bundles. -->
+    <Chain DisableRollback="yes">
       <MsiPackage Id="UnifiedMachineSetup"
                   SourceFile="$(var.UnifiedSetupMsi)"
                   Vital="yes"
