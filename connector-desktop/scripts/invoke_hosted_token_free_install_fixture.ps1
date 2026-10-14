@@ -21,8 +21,14 @@ foreach ($pair in @(@('S-1-5-18','FullControl'),@('S-1-5-32-544','FullControl'),
 Set-Acl -LiteralPath $publicRoot -AclObject $acl
 $probeRoot = Join-Path $publicRoot 'probe'
 Copy-Item -LiteralPath (Split-Path $ProbeExecutable) -Destination $probeRoot -Recurse
+# CopyFile may retain the protected build output's ACL. The test user must be
+# able to read every copied executable/DLL, not only the containing directory.
+& icacls.exe $probeRoot /grant '*S-1-5-32-545:(OI)(CI)RX' /T /Q | Out-Null
+if ($LASTEXITCODE -ne 0) { throw 'Cannot grant test users read access to the native probe.' }
 $previous = Join-Path $publicRoot 'previous-Setup.exe'
 Copy-Item -LiteralPath $PreviousSetup -Destination $previous
+& icacls.exe $previous /grant '*S-1-5-32-545:RX' /Q | Out-Null
+if ($LASTEXITCODE -ne 0) { throw 'Cannot grant test users read access to the baseline desktop setup.' }
 $caller = Join-Path $env:ProgramFiles 'StructuraConnectorInstaller/Bootstrapper/Connector.Upgrade.Bootstrapper.exe'
 $rules = @()
 try {
@@ -59,6 +65,10 @@ try {
             do {
                 Start-Sleep -Seconds 2
                 $state = (Get-ScheduledTask -TaskName $taskName).State
+                $info = Get-ScheduledTaskInfo -TaskName $taskName
+                if ($state -ne 'Running' -and $info.LastRunTime -gt (Get-Date).AddMinutes(-10) -and !(Test-Path -LiteralPath $resultPath)) {
+                    throw ('Native task ended before producing evidence: 0x' + $info.LastTaskResult.ToString('X8'))
+                }
                 if ($timer.Elapsed.TotalMinutes -gt 9) { throw 'Native user-stage fixture timed out.' }
             } while ($state -eq 'Running' -or !(Test-Path -LiteralPath $resultPath))
             $result = Get-Content -LiteralPath $resultPath -Raw | ConvertFrom-Json

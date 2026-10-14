@@ -177,6 +177,21 @@ jobs:
             ${{ steps.build.outputs.artifact_dir }}/native-upgrade-proof.json
           if-no-files-found: error
           retention-days: 14
+      - name: Preserve allowlisted runtime and diagnostics after a verification failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unverified-runtime-diagnostics-${{ inputs.pack_version }}
+          path: |
+            ${{ steps.prepare.outputs.output }}/unified-*/unified-installer/Structura.Connector.Installer.exe
+            ${{ steps.prepare.outputs.output }}/unified-*/unified-setup/Connector.Unified.Setup.msi
+            ${{ steps.prepare.outputs.output }}/unified-*/bootstrapper/**
+            ${{ steps.prepare.outputs.output }}/unified-*/machine-helper/**
+            ${{ steps.prepare.outputs.output }}/unified-*/native-upgrade-fixture/*.json
+            ${{ steps.prepare.outputs.output }}/unified-*/native-upgrade-fixture/*.log
+            ${{ steps.prepare.outputs.output }}/unified-*/prerequisite-payloads.json
+          if-no-files-found: warn
+          retention-days: 3
       - name: Upload candidate artifacts
         uses: actions/upload-artifact@v4
         with:
