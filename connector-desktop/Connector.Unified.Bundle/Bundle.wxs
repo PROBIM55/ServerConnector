@@ -8,7 +8,8 @@
           IconSourceFile="$(sys.SOURCEFILEDIR)..\Connector.Desktop\Assets\platform_connector.ico"
           Compressed="yes">
     <BootstrapperApplication>
-      <bal:WixStandardBootstrapperApplication Theme="none" LicenseUrl=""
+      <!-- The hyperlink payload group supplies WixStdbaInformation even with a custom theme. -->
+      <bal:WixStandardBootstrapperApplication Theme="hyperlinkLicense" LicenseUrl=""
           ThemeFile="$(sys.SOURCEFILEDIR)InstallerTheme.xml"
           LocalizationFile="$(sys.SOURCEFILEDIR)Installer.ru-ru.wxl"
           LogoFile="$(sys.SOURCEFILEDIR)..\Connector.Desktop\Assets\platform_installer_logo.png"

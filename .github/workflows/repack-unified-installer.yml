@@ -1,0 +1,44 @@
+name: Repack unified installer from verified pilot components
+
+on:
+  workflow_dispatch:
+    inputs:
+      input_release:
+        description: Unpublished draft containing the verified MSI, bridge and build guard
+        required: true
+        type: string
+
+permissions:
+  contents: write # GitHub requires push access to read unpublished draft assets.
+
+concurrency:
+  group: unified-installer-repack
+  cancel-in-progress: false
+
+jobs:
+  repack:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Repack only Burn and verify native layout without installation
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INPUT_RELEASE: ${{ inputs.input_release }}
+        run: ./connector-desktop/scripts/repack_verified_pilot_installer.ps1 -InputRelease $env:INPUT_RELEASE
+      - uses: actions/upload-artifact@v4
+        with:
+          name: verified-unified-installer
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            pilot-repack/output/Structura.Connector.Installer.exe
+            pilot-repack/output/Structura.Connector.Installer.wixpdb
+            pilot-repack/output/repack-proof.json
+            pilot-repack/output/native-layout.log
