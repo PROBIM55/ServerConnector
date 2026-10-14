@@ -152,7 +152,10 @@ jobs:
           $feedFiles += Get-Item -LiteralPath $velopackIndex
           $feedFiles = @($feedFiles | Sort-Object FullName -Unique)
           foreach ($file in $feedFiles) { Copy-Item -LiteralPath $file.FullName -Destination $candidate }
-          $binaries = @(Get-ChildItem -LiteralPath $run.FullName -Filter 'Structura.Connector.Installer.exe' -File -Recurse) + @(Get-ChildItem -LiteralPath $run.FullName -Filter 'Connector.Unified.Setup.msi' -File -Recurse)
+          $binaries = @(
+            Get-Item -LiteralPath (Join-Path $run.FullName 'unified-installer/Structura.Connector.Installer.exe') -ErrorAction Stop
+            Get-Item -LiteralPath (Join-Path $run.FullName 'unified-setup/Connector.Unified.Setup.msi') -ErrorAction Stop
+          )
           if ($binaries.Count -ne 2) { throw 'Expected installer EXE and MSI missing.' }
           foreach ($file in $binaries) { Copy-Item -LiteralPath $file.FullName -Destination $candidate }
           Get-ChildItem -LiteralPath $candidate -File | ForEach-Object { $hash=(Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant(); "$hash  $($_.Name)" | Add-Content (Join-Path $candidate 'checksums.sha256') -Encoding ascii }
