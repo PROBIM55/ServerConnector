@@ -42,3 +42,6 @@ $layoutArguments = @('-NoProfile', '-NonInteractive', '-File', (Join-Path $PSScr
     '-Executable', $installer, '-Layout', (Join-Path $runs[0].FullName 'native-layout'),
     '-Log', (Join-Path $runs[0].FullName 'native-layout.log'))
 Invoke-GuardedHostedProcess $layoutArguments 'unified-native-layout'
+$upgradeArguments = @('-NoProfile', '-NonInteractive', '-File', (Join-Path $PSScriptRoot 'invoke_hosted_unified_upgrade_fixture.ps1'),
+    '-RunDirectory', $runs[0].FullName, '-ExpectedConfiguration', $ConnectorAccessConfigurationPath)
+Invoke-GuardedHostedProcess $upgradeArguments 'unified-native-upgrade'

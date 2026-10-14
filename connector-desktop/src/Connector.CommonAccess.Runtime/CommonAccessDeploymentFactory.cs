@@ -16,6 +16,10 @@ public sealed record CommonAccessDeployment(
     Uri? NetBirdManagementUri,
     ManagedOverlayDestinationPolicy SmbDestinations)
 {
+    // Enrollment and its read-only readiness probe are public HTTPS. Protected
+    // control-plane requests still use ControlPlaneBaseUri through the overlay gate.
+    public Uri? PublicProfileUri { get; init; }
+
     public bool IsConfigured => Coordinator is not null && EnrollmentClient is not null &&
         OverlayClient is not null && ProtectedNetworkGate is not null;
 
@@ -49,6 +53,7 @@ public static class CommonAccessDeploymentFactory
         CommonConnectorConnectionCoordinator? coordinator = null;
         Uri? controlPlaneBaseUri = null;
         Uri? netBirdManagementUri = null;
+        Uri? publicProfileUri = null;
         ManagedOverlayDestinationPolicy smbDestinations = new([]);
         IConnectorEnrollmentClient? enrollmentClient = null;
         INetworkOverlayClient? overlayClient = null;
@@ -100,6 +105,7 @@ public static class CommonAccessDeploymentFactory
                     coordinator = new CommonConnectorConnectionCoordinator(enrollment, overlay, gate);
                     controlPlaneBaseUri = controlPlane.BaseUri;
                     netBirdManagementUri = expectedManagementUri;
+                    publicProfileUri = new Uri(configuration.ServiceBaseUri.TrimEnd('/') + "/profile", UriKind.Absolute);
                 }
             }
         }
@@ -108,7 +114,8 @@ public static class CommonAccessDeploymentFactory
             // A malformed or user-writable deployment cannot select an unprotected public route.
         }
         return new CommonAccessDeployment(store.StateFilePath, coordinator, enrollmentClient, overlayClient,
-            protectedNetworkGate, controlPlaneBaseUri, netBirdManagementUri, smbDestinations);
+            protectedNetworkGate, controlPlaneBaseUri, netBirdManagementUri, smbDestinations)
+            { PublicProfileUri = publicProfileUri };
     }
 
     private static WindowsNetBirdInstallationOwnershipOptions CreateNetBirdOwnershipOptions()

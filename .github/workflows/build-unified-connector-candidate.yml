@@ -22,6 +22,7 @@ jobs:
     environment: production
     permissions:
       contents: read
+      actions: read
     defaults:
       run:
         shell: pwsh
@@ -124,6 +125,7 @@ jobs:
       - name: Build candidate and stage allowed outputs
         id: build
         env:
+          GH_TOKEN: ${{ github.token }}
           BUILD_FEED_URL: ${{ inputs.feed_url }}
           BUILD_CHANNEL: ${{ inputs.channel }}
           BUILD_PACK_VERSION: ${{ inputs.pack_version }}
@@ -166,6 +168,7 @@ jobs:
           )
           if ($binaries.Count -ne 2) { throw 'Expected installer EXE and MSI missing.' }
           foreach ($file in $binaries) { Copy-Item -LiteralPath $file.FullName -Destination $candidate }
+          Copy-Item -LiteralPath (Join-Path $run.FullName 'native-upgrade-proof.json') -Destination $candidate
           Get-ChildItem -LiteralPath $candidate -File | ForEach-Object { $hash=(Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant(); "$hash  $($_.Name)" | Add-Content (Join-Path $candidate 'checksums.sha256') -Encoding ascii }
           "artifact_dir=$candidate" >> $env:GITHUB_OUTPUT
       - name: Upload installer for native verification
@@ -175,6 +178,7 @@ jobs:
           path: |
             ${{ steps.build.outputs.artifact_dir }}/Structura.Connector.Installer.exe
             ${{ steps.build.outputs.artifact_dir }}/checksums.sha256
+            ${{ steps.build.outputs.artifact_dir }}/native-upgrade-proof.json
           if-no-files-found: error
           retention-days: 14
       - name: Upload candidate artifacts

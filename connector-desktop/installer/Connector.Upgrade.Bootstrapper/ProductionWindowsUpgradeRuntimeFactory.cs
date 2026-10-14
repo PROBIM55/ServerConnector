@@ -39,7 +39,7 @@ public sealed class ProductionWindowsUpgradeRuntimeFactory : IWindowsUpgradeBoot
             var localRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                 "Structura Unified Connector", "Agent");
             var deployment = CommonAccessDeploymentFactory.OpenProduction(localRoot);
-            if (!deployment.IsConfigured || deployment.ControlPlaneBaseUri is null ||
+            if (!deployment.IsConfigured || deployment.PublicProfileUri is null ||
                 deployment.NetBirdManagementUri is null)
                 return Blocked("shared-common-access-runtime-factory-unavailable");
 
@@ -78,7 +78,7 @@ public sealed class ProductionWindowsUpgradeRuntimeFactory : IWindowsUpgradeBoot
             var host = new WindowsHostProductionOptions(
                 new WindowsHostSession(operationId.ToString("N"), sid), rollback, netBird,
                 setupPin, TimeSpan.FromMinutes(10)) { PreserveLegacyApplications = true };
-            var profileUri = new Uri(deployment.ControlPlaneBaseUri.AbsoluteUri.TrimEnd('/') + "/profile");
+            var profileUri = deployment.PublicProfileUri;
             var allowedSigner = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             if (!string.IsNullOrWhiteSpace(releaseSetup.SignerThumbprint))
                 allowedSigner.Add(releaseSetup.SignerThumbprint);
