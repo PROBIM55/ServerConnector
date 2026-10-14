@@ -17,10 +17,10 @@ function Read-Identity([string]$Path) {
     $installer = New-Object -ComObject WindowsInstaller.Installer
     $db = $installer.OpenDatabase($Path,0)
     $view = $db.OpenView('SELECT `Property`, `Value` FROM `Property`')
-    $view.Execute()
+    [void]$view.Execute()
     $values = @{}
     while ($null -ne ($row = $view.Fetch())) { $values[$row.StringData(1)] = $row.StringData(2) }
-    $view.Close()
+    [void]$view.Close()
     return $values
 }
 $original = Join-Path $Output 'original-image'
@@ -57,10 +57,10 @@ $properties = [ordered]@{
     NetBirdVerifierScriptPath = Find-Payload 'verify_netbird_installer.ps1'
     NetBirdIdentityLockPath = Find-Payload 'v0.79.0-windows-x64.lock.json'
 }
-$args = @('build', 'connector-desktop/Connector.Unified.Setup/Connector.Unified.Setup.wixproj', '-c', 'Release',
+$msbuildArgs = @('build', 'connector-desktop/Connector.Unified.Setup/Connector.Unified.Setup.wixproj', '-c', 'Release',
     '-m:1', '-nr:false', '-p:UseSharedCompilation=false', '-p:BuildInParallel=false', '-o', $Output, '--nologo')
-foreach ($key in $properties.Keys) { $args += "-p:$key=$($properties[$key])" }
-& dotnet @args
+foreach ($key in $properties.Keys) { $msbuildArgs += "-p:$key=$($properties[$key])" }
+& dotnet @msbuildArgs
 if ($LASTEXITCODE -ne 0) { throw 'MSI repack failed; desktop runtime was not compiled.' }
 $final = Join-Path $Output 'Connector.Unified.Setup.msi'
 $rebuilt = Join-Path $Output 'rebuilt-image'
