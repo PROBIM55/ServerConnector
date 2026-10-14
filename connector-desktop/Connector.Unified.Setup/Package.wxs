@@ -12,8 +12,8 @@
            Language="1049">
     <MajorUpgrade DowngradeErrorMessage="Установлена более новая версия установщика Structura Connector." />
     <MediaTemplate EmbedCab="yes" />
-    <Icon Id="PlatformConnectorIcon" SourceFile="$(sys.SOURCEFILEDIR)..\Connector.Desktop\Assets\platform_connector.ico" />
-    <Property Id="ARPPRODUCTICON" Value="PlatformConnectorIcon" />
+    <Icon Id="PlatformConnector.exe" SourceFile="$(var.BootstrapperDir)\Connector.Upgrade.Bootstrapper.exe" />
+    <Property Id="ARPPRODUCTICON" Value="PlatformConnector.exe" />
 
     <StandardDirectory Id="ProgramFiles64Folder">
       <Directory Id="PF_STRUCTURA_CONNECTOR" Name="Structura Connector">
@@ -90,7 +90,7 @@
              ProgramMenuFolder resolves to All Users for this per-machine package. -->
         <Shortcut Id="OriginalUserBootstrapperShortcut" Name="Structura Connector — подключение"
                   Directory="ProgramMenuFolder" Advertise="yes"
-                  Icon="PlatformConnectorIcon" IconIndex="0"
+                  Icon="PlatformConnector.exe" IconIndex="0"
                   WorkingDirectory="BOOTSTRAPPER_DIR" />
       </File>
     </Component>
