@@ -7,6 +7,7 @@ param(
     [Parameter(Mandatory)][string]$ExpectedHelperDirectory,
     [Parameter(Mandatory)][string]$ExpectedConfiguration,
     [string]$ProductionPreflightProbeProject,
+    [string]$StandaloneInstallProbeExecutable,
     [Parameter(Mandatory)][string]$Output
 )
 $ErrorActionPreference='Stop'
@@ -35,6 +36,10 @@ try {
     $previousExit = Invoke-FixtureBundle $PreviousInstaller 'install' $previousLog
     if ($previousExit -ne 1 -or !(Test-Path -LiteralPath (Registration $previousProduct))) {
         throw 'Previous failed bundle fixture did not leave its committed machine stage.'
+    }
+    $previousSetup = Join-Path $Output 'previous-desktop-Setup.exe'
+    if ($StandaloneInstallProbeExecutable) {
+        Copy-Item -LiteralPath (Join-Path $env:ProgramData 'StructuraConnectorInstaller/Helper/Setup.exe') -Destination $previousSetup
     }
     $candidateLog = Join-Path $Output 'candidate-failure.log'
     $candidateExit = Invoke-FixtureBundle $CandidateInstaller 'install' $candidateLog
@@ -81,9 +86,17 @@ try {
         if ($LASTEXITCODE -ne 0) { throw 'Actual production deployment preflight failed.' }
         $productionPreflightVerified = $true
     }
+    $defaultInstallationVerified = $false
+    if ($StandaloneInstallProbeExecutable) {
+        & (Join-Path $PSScriptRoot 'invoke_hosted_token_free_install_fixture.ps1') -ProbeExecutable $StandaloneInstallProbeExecutable `
+            -PreviousSetup $previousSetup -Output (Join-Path $Output 'token-free-install-proof.json')
+        if (!$?) { throw 'Default no-token installation verification failed.' }
+        $defaultInstallationVerified = $true
+    }
     [ordered]@{expectedBridgeFailure=1;machineStageRetained=$true;relatedBundleRollbackNotInvoked=$true;
         installedRuntimePayloadsVerified=$true;installedRuntimePayloadCount=$installedCount;nativeCallerStarted=$true;
-        deploymentConfigurationVerified=$true;productionPreflightVerified=$productionPreflightVerified} |
+        deploymentConfigurationVerified=$true;productionPreflightVerified=$productionPreflightVerified;
+        defaultInstallationVerified=$defaultInstallationVerified} |
         ConvertTo-Json | Set-Content -LiteralPath (Join-Path $Output 'failure-proof.json') -Encoding utf8
 } finally {
     foreach ($path in @($CandidateInstaller,$PreviousInstaller)) {

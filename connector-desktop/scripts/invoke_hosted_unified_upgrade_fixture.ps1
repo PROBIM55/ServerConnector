@@ -26,16 +26,25 @@ $view=$database.OpenView('SELECT `Value` FROM `Property` WHERE `Property` = ''Pr
 [void]$view.Execute()
 $productCode=$view.Fetch().StringData(1)
 [void]$view.Close()
+$probeOutput = Join-Path $RunDirectory 'standalone-install-probe'
+& dotnet publish (Join-Path $PSScriptRoot '../installer/Connector.Upgrade.StandaloneInstallProbe/Connector.Upgrade.StandaloneInstallProbe.csproj') `
+    --configuration Release --runtime win-x64 --self-contained true -o $probeOutput `
+    --artifacts-path (Join-Path $RunDirectory 'standalone-install-probe-artifacts') `
+    -p:UseSharedCompilation=false -p:BuildInParallel=false -p:UnifiedReleaseBuild=true `
+    "-p:HelperReleasePublicKeyFile=$([IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../installer/release-public-key.pem')))"
+if ($LASTEXITCODE -ne 0) { throw 'Native install probe build failed.' }
 & (Join-Path $PSScriptRoot 'invoke_pilot_native_failure_fixture.ps1') -PreviousInstaller $previousExe `
     -CandidateInstaller (Join-Path $RunDirectory 'unified-installer/Structura.Connector.Installer.exe') `
     -CandidateProductCode $productCode -ExpectedBootstrapperDirectory (Join-Path $RunDirectory 'bootstrapper') `
     -ExpectedHelperDirectory (Join-Path $RunDirectory 'machine-helper') `
     -ExpectedConfiguration $ExpectedConfiguration -Output $output `
-    -ProductionPreflightProbeProject (Join-Path $PSScriptRoot '../installer/Connector.Upgrade.DeploymentProbe/Connector.Upgrade.DeploymentProbe.csproj')
+    -ProductionPreflightProbeProject (Join-Path $PSScriptRoot '../installer/Connector.Upgrade.DeploymentProbe/Connector.Upgrade.DeploymentProbe.csproj') `
+    -StandaloneInstallProbeExecutable (Join-Path $probeOutput 'Connector.Upgrade.StandaloneInstallProbe.exe')
 if (!$?) { throw 'Native upgrade fixture failed.' }
 $proof=Get-Content -LiteralPath (Join-Path $output 'failure-proof.json') -Raw | ConvertFrom-Json
 if (!$proof.installedRuntimePayloadsVerified -or !$proof.nativeCallerStarted -or
-    !$proof.deploymentConfigurationVerified -or !$proof.relatedBundleRollbackNotInvoked -or !$proof.productionPreflightVerified) {
+    !$proof.deploymentConfigurationVerified -or !$proof.relatedBundleRollbackNotInvoked -or !$proof.productionPreflightVerified -or
+    !$proof.defaultInstallationVerified) {
     throw 'Native upgrade evidence is incomplete.'
 }
 $proof | Add-Member -MemberType NoteProperty -Name sourceSha -Value $env:GITHUB_SHA

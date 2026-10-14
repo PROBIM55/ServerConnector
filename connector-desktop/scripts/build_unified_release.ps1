@@ -488,10 +488,38 @@ if ((Get-Sha256 $stagedHelper) -cne (Get-Sha256 $helperExe) -or
     (Get-Item -LiteralPath $bootstrapperExe -ErrorAction Stop).Length -ne $signedCallerSize) {
     throw 'Installer inputs changed after the signed release manifest was created.'
 }
+# Download the complete Microsoft runtime into this protected cloud build output;
+# customer installation is offline and skips it when a working runtime exists.
+$webView2Path = Join-Path $runDirectory 'MicrosoftEdgeWebView2RuntimeInstallerX64.exe'
+$client = [Net.Http.HttpClient]::new()
+try {
+    $response = $client.GetAsync('https://go.microsoft.com/fwlink/?linkid=2124701', [Net.Http.HttpCompletionOption]::ResponseHeadersRead).GetAwaiter().GetResult()
+    try {
+        $response.EnsureSuccessStatusCode()
+        if ($response.RequestMessage.RequestUri.Scheme -cne 'https') { throw 'WebView2 download redirected away from HTTPS.' }
+        $stream = $response.Content.ReadAsStreamAsync().GetAwaiter().GetResult()
+        try { $file = [IO.File]::Create($webView2Path); try { $stream.CopyTo($file) } finally { $file.Dispose() } } finally { $stream.Dispose() }
+    } finally { $response.Dispose() }
+} finally { $client.Dispose() }
+$webViewSignature = Get-AuthenticodeSignature -LiteralPath $webView2Path
+if ($webViewSignature.Status -ne 'Valid' -or $webViewSignature.SignerCertificate.Subject -notmatch '(^|, )O=Microsoft Corporation(,|$)' -or
+    (Get-Item -LiteralPath $webView2Path).Length -lt 50MB) { throw 'The Microsoft WebView2 standalone installer identity is invalid.' }
+$msiInstaller = New-Object -ComObject WindowsInstaller.Installer
+$netBirdDatabase = $msiInstaller.OpenDatabase($netBirdPath, 0)
+$netBirdView = $netBirdDatabase.OpenView('SELECT `Value` FROM `Property` WHERE `Property` = ''UpgradeCode''')
+[void]$netBirdView.Execute()
+$netBirdUpgradeCode = $netBirdView.Fetch().StringData(1)
+[void]$netBirdView.Close()
+if ($netBirdUpgradeCode -notmatch '^\{[A-Fa-f0-9-]{36}\}$') { throw 'The NetBird upgrade code is invalid.' }
+[ordered]@{netBirdSha256=(Get-Sha256 $netBirdPath);webView2Sha256=(Get-Sha256 $webView2Path);
+    webView2SignerThumbprint=$webViewSignature.SignerCertificate.Thumbprint;blenderIncluded=$false;
+    desktopSelfContained=$true;vcRuntimeAppLocal=$true} | ConvertTo-Json |
+    Set-Content -LiteralPath (Join-Path $runDirectory 'prerequisite-payloads.json') -Encoding utf8
 $bundleArguments = @('build', $script:UnifiedBundleProject, '--configuration', 'Release',
     '--artifacts-path', $bundleArtifactsDirectory, '-o', $bundleOutputDirectory,
     "-p:ProductVersion=$InstallerVersion", "-p:UnifiedSetupMsiPath=$($msiOutputs[0].FullName)",
-    "-p:LaunchBridgePath=$launchBridgeExe")
+    "-p:LaunchBridgePath=$launchBridgeExe", "-p:NetBirdMsiPath=$netBirdPath",
+    "-p:NetBirdUpgradeCode=$netBirdUpgradeCode", "-p:WebView2InstallerPath=$webView2Path")
 Write-Host 'BUILD_STEP: final installer EXE'
 Invoke-Dotnet $bundleArguments
 $bundleOutputs = @(Get-ChildItem -LiteralPath $bundleOutputDirectory -Filter '*.exe' -File -Recurse -ErrorAction Stop)

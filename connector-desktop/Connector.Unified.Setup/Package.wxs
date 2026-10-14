@@ -96,7 +96,7 @@
         <PermissionEx Sddl="O:SYG:SYD:P(A;;FA;;;SY)(A;;FA;;;BA)(A;;GRGX;;;BU)" />
         <!-- Advertised shortcut belongs to the same machine file component.
              ProgramMenuFolder resolves to All Users for this per-machine package. -->
-        <Shortcut Id="OriginalUserBootstrapperShortcut" Name="Structura Connector — подключение"
+        <Shortcut Id="OriginalUserBootstrapperShortcut" Name="Structura Connector — восстановить установку"
                   Directory="ProgramMenuFolder" Advertise="yes"
                   Icon="PlatformConnector.exe" IconIndex="0"
                   WorkingDirectory="BOOTSTRAPPER_DIR" />

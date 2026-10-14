@@ -7,7 +7,7 @@ internal static class Program
     {
         ApplicationConfiguration.Initialize();
         // Deliberately no command-line or environment-variable input is consumed.
-        using var form = new BootstrapperForm(new ProductionWindowsUpgradeRuntimeFactory());
+        using var form = new StandaloneInstallForm(new ProductionStandaloneDesktopInstaller());
         Application.Run(form);
         return form.ExitCode;
     }

@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
-     xmlns:bal="http://wixtoolset.org/schemas/v4/wxs/bal">
+     xmlns:bal="http://wixtoolset.org/schemas/v4/wxs/bal"
+     xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
   <Bundle Name="Structura Connector"
           Manufacturer="Structura"
           Version="$(var.ProductVersion)"
@@ -18,9 +19,31 @@
           SuppressOptionsUI="yes" />
     </BootstrapperApplication>
 
+    <Variable Name="WebView2MachineVersion" Type="version" Value="0.0.0.0" />
+    <Variable Name="WebView2UserVersion" Type="version" Value="0.0.0.0" />
+    <Variable Name="NetBirdInstalledVersion" Type="version" Value="0.0.0.0" />
+    <util:ProductSearch Id="NetBirdVersionSearch" UpgradeCode="$(var.NetBirdUpgradeCode)"
+        Result="version" Variable="NetBirdInstalledVersion" />
+    <util:RegistrySearch Id="WebView2MachineSearch" Root="HKLM" Bitness="always32"
+        Key="SOFTWARE\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}"
+        Value="pv" Variable="WebView2MachineVersion" />
+    <util:RegistrySearch Id="WebView2UserSearch" Root="HKCU" Bitness="always32"
+        Key="SOFTWARE\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}"
+        Value="pv" Variable="WebView2UserVersion" />
+
     <!-- Machine MSI has its own transaction; user migration owns its recovery.
          A later user-stage failure must not reinstall failed related bundles. -->
     <Chain DisableRollback="yes">
+      <!-- Shared prerequisites are retained on connector removal. No token, server
+           access, Blender download or optional-user action gates these packages. -->
+      <ExePackage Id="WebView2Runtime" DisplayName="Microsoft Edge WebView2 Runtime"
+                  SourceFile="$(var.WebView2Installer)" InstallArguments="/silent /install"
+                  DetectCondition="WebView2MachineVersion &gt; v0.0.0.0 OR WebView2UserVersion &gt; v0.0.0.0"
+                  PerMachine="yes" Permanent="yes" Vital="yes" Compressed="yes" />
+      <MsiPackage Id="NetBirdRuntime" DisplayName="NetBird"
+                  SourceFile="$(var.NetBirdMsi)" Permanent="yes" Vital="yes" Visible="no"
+                  InstallCondition="NetBirdInstalledVersion &lt;= v0.79.0" />
+
       <MsiPackage Id="UnifiedMachineSetup"
                   SourceFile="$(var.UnifiedSetupMsi)"
                   Vital="yes"

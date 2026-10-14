@@ -234,7 +234,7 @@ internal sealed class BootstrapperForm : Form, IBootstrapperStatusSink
         }
     }
 
-    private static class InstallerTheme
+    internal static class InstallerTheme
     {
         // Graphite palette from design/kit-tokens.js; the desktop HTML/CSS kit stays unchanged.
         public static readonly Color Background = Color.FromArgb(0x12, 0x17, 0x1d);
