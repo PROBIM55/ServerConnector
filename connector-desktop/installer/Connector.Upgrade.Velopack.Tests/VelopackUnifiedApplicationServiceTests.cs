@@ -203,13 +203,15 @@ public sealed class VelopackUnifiedApplicationServiceTests
               <metadata>
                 <id>{fixture.Pin.PackId}</id>
                 <version>{fixture.Pin.Version}</version>
+                <title>Structura Connector (новый)</title>
                 <mainExe>{UnifiedVelopackApplication.MainExecutable}</mainExe>
               </metadata>
             </package>
             """);
         File.WriteAllText(Path.Combine(fixture.InstallRoot, "current", UnifiedVelopackApplication.MainExecutable), "app");
         File.WriteAllText(Path.Combine(fixture.InstallRoot, "Update.exe"), "update");
-        File.WriteAllText(Path.Combine(fixture.InstallRoot, UnifiedVelopackApplication.MainExecutable), "launcher");
+        var rootLauncherPath = Path.Combine(fixture.InstallRoot, UnifiedVelopackApplication.RootLauncher);
+        File.WriteAllText(rootLauncherPath, "launcher");
         var registration = fixture.Registration();
         var probe = new SystemVelopackInstallProbe(
             CurrentSid,
@@ -221,7 +223,12 @@ public sealed class VelopackUnifiedApplicationServiceTests
         Assert.Equal(VelopackInstallPresence.ExactInstalled, observation.Presence);
         Assert.Equal(fixture.Pin.Version, observation.Identity!.Version);
         Assert.Equal(HashFile(sqVersionPath), observation.Identity.SqVersionSha256);
+        Assert.Equal(HashFile(rootLauncherPath), observation.Identity.RootLauncherSha256);
         Assert.Equal(registration, observation.Identity.Registration);
+
+        // A current/Connector.Desktop.exe alone must not stand in for Velopack's title launcher.
+        File.Move(rootLauncherPath, Path.Combine(fixture.InstallRoot, UnifiedVelopackApplication.MainExecutable));
+        Assert.Equal(VelopackInstallPresence.Conflicting, probe.Inspect(fixture.Pin, CurrentSid).Presence);
     }
 
     private static string HashFile(string path) =>

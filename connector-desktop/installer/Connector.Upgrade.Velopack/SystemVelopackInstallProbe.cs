@@ -73,7 +73,7 @@ public sealed class SystemVelopackInstallProbe : IVelopackInstallProbe
         var sqVersion = Path.Combine(current, "sq.version");
         var mainExecutable = Path.Combine(current, UnifiedVelopackApplication.MainExecutable);
         var updateExecutable = Path.Combine(root, "Update.exe");
-        var rootLauncher = Path.Combine(root, UnifiedVelopackApplication.MainExecutable);
+        var rootLauncher = Path.Combine(root, UnifiedVelopackApplication.RootLauncher);
         foreach (var path in new[] { sqVersion, mainExecutable, updateExecutable, rootLauncher })
         {
             if (!File.Exists(path) || IsReparsePoint(path))
