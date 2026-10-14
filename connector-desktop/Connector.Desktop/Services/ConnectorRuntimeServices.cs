@@ -57,10 +57,11 @@ public sealed class ConnectorRuntimeServices : IAsyncDisposable
         var platformSettings = new PlatformSettingsPersistence(runtimeRoot is null
             ? null
             : Path.Combine(localRuntimeRoot, "Platform"));
-        if (runtimeRoot is null)
+        if (runtimeRoot is null && !CommonAccess.IsSelected)
         {
-            // The production composition is the only path that may inspect the
-            // previous Platform profile. Fixtures always stay within runtimeRoot.
+            // Legacy credential import belongs only to an explicitly legacy session.
+            // The common-access desktop starts without reading old token locations
+            // (which may be unavailable network files), or creating a second credential.
             PlatformLegacyImport = platformSettings.ImportLegacyIfFresh();
             if (!PlatformLegacyImport.Imported)
             {

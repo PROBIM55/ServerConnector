@@ -94,6 +94,15 @@ if ($IfcWorkerSha256) { $bundleEnginesArguments.IfcWorkerSha256 = $IfcWorkerSha2
 & $bundleEnginesScript @bundleEnginesArguments
 & (Join-Path $PSScriptRoot 'copy_vc_runtime.ps1') -TargetDir $publishDir -VcRuntimeSourceDir $VcRuntimeSourceDir
 
+# Fresh cloud checkouts have no ignored tools/git folder. Include the pinned
+# portable Git in the actual package so synchronization never needs a user install.
+$gitDestination = [IO.Path]::GetFullPath((Join-Path $publishDir 'tools/git'))
+$publishPrefix = [IO.Path]::GetFullPath($publishDir).TrimEnd('\') + '\'
+if (!$gitDestination.StartsWith($publishPrefix, [StringComparison]::OrdinalIgnoreCase)) { throw 'Git destination escaped the fresh publish directory.' }
+& (Join-Path $PSScriptRoot 'ensure_bundled_git.ps1') -TargetDir $gitDestination
+if (!(Test-Path -LiteralPath (Join-Path $gitDestination 'cmd/git.exe') -PathType Leaf) -and
+    !(Test-Path -LiteralPath (Join-Path $gitDestination 'bin/git.exe') -PathType Leaf)) { throw 'The pinned Git runtime is missing from the package.' }
+
 # Match the MSI gate: an update package without the AGR managed/native set is incomplete.
 foreach ($name in @('Connector.AgrConversion.dll', 'Assimp64.dll', 'Silk.NET.Assimp.dll', 'Silk.NET.Core.dll',
                     'SharpGLTF.Core.dll', 'SharpGLTF.Toolkit.dll', 'THIRD_PARTY_NOTICES.txt')) {

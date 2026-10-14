@@ -63,7 +63,7 @@ try {
             } while ($state -eq 'Running' -or !(Test-Path -LiteralPath $resultPath))
             $result = Get-Content -LiteralPath $resultPath -Raw | ConvertFrom-Json
             if (!$result.success -or $result.tokenRequired -or $result.enrollmentCreated -or $result.blenderIncluded -or
-                !$result.defaultCallerVerified -or !$result.repeatedInstallVerified -or !$result.desktopWebViewVerified) {
+                !$result.defaultCallerVerified -or !$result.repeatedInstallVerified -or !$result.desktopWebViewVerified -or !$result.bundledGitVerified) {
                 throw ('Native token-free ' + $mode + ' fixture failed: ' + ($result | ConvertTo-Json -Compress))
             }
             $results += $result

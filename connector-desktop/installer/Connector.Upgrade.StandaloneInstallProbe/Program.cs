@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.IO;
 using System.Security.Principal;
 using System.Text.Json;
 using System.Windows.Automation;
@@ -39,6 +40,12 @@ try
     if (File.Exists(deployment.StateFilePath)) throw new InvalidOperationException("Installation created an enrollment credential.");
     if (Directory.EnumerateFiles(root, "blender.exe", SearchOption.AllDirectories).Any())
         throw new InvalidOperationException("Default installation included Blender.");
+    var git = Path.Combine(root, "current", "tools", "git", "cmd", "git.exe");
+    if (!File.Exists(git)) git = Path.Combine(root, "current", "tools", "git", "bin", "git.exe");
+    using (var gitProbe = Process.Start(new ProcessStartInfo(git, "--version") { UseShellExecute = false, CreateNoWindow = true })!)
+    {
+        if (!gitProbe.WaitForExit(10000) || gitProbe.ExitCode != 0) throw new InvalidOperationException("The packaged Git runtime is unavailable.");
+    }
     var desktop = Path.Combine(root, "current", UnifiedVelopackApplication.MainExecutable);
     using var app = Process.Start(new ProcessStartInfo(desktop) { UseShellExecute = false })!;
     var ready = false;
@@ -62,7 +69,7 @@ try
     finally { if (!app.HasExited) { app.Kill(true); app.WaitForExit(5000); } }
     File.WriteAllText(output, JsonSerializer.Serialize(new { success = true, version = release.Version,
         tokenRequired = false, enrollmentCreated = false, defaultCallerVerified = true, repeatedInstallVerified = true,
-        desktopWebViewVerified = ready, blenderIncluded = false, upgradedPreviousDesktop = args.Length == 2 }));
+        desktopWebViewVerified = ready, bundledGitVerified = true, blenderIncluded = false, upgradedPreviousDesktop = args.Length == 2 }));
 }
 catch (Exception error)
 {
