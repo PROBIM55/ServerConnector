@@ -18,7 +18,8 @@ param(
     [string]$PreviousReleasesDir,
     [string]$UpdateSigningKeyPemPath,
     [ValidatePattern('^[a-f0-9]{40}$')][string]$HostedSigningRef,
-    [string]$PackageOutputDir
+    [string]$PackageOutputDir,
+    [string]$VcRuntimeSourceDir
 )
 
 $ErrorActionPreference = 'Stop'
@@ -29,6 +30,11 @@ $publishDir = Join-Path $root (Join-Path 'artifacts\package-update-build' $build
 $buildArtifactsDir = Join-Path $root (Join-Path 'artifacts\package-update-obj' $buildId)
 $outputDir = if ($PackageOutputDir) { [IO.Path]::GetFullPath($PackageOutputDir) } else {
     Join-Path $root (Join-Path (Join-Path 'artifacts\package-update' $Channel) ([Guid]::NewGuid().ToString('N')))
+}
+if ($PackageOutputDir) {
+    # Unified releases keep intermediates under their protected output root too.
+    $publishDir = Join-Path ([IO.Directory]::GetParent($outputDir).FullName) ('desktop-publish-' + $buildId)
+    $buildArtifactsDir = Join-Path ([IO.Directory]::GetParent($outputDir).FullName) ('desktop-artifacts-' + $buildId)
 }
 $toolPath = Join-Path $root '.tools\vpk-1.2.161'
 $vpk = Join-Path $toolPath 'vpk.exe'
@@ -86,7 +92,7 @@ $bundleEnginesArguments = @{
 }
 if ($IfcWorkerSha256) { $bundleEnginesArguments.IfcWorkerSha256 = $IfcWorkerSha256 }
 & $bundleEnginesScript @bundleEnginesArguments
-& (Join-Path $PSScriptRoot 'copy_vc_runtime.ps1') -TargetDir $publishDir
+& (Join-Path $PSScriptRoot 'copy_vc_runtime.ps1') -TargetDir $publishDir -VcRuntimeSourceDir $VcRuntimeSourceDir
 
 # Match the MSI gate: an update package without the AGR managed/native set is incomplete.
 foreach ($name in @('Connector.AgrConversion.dll', 'Assimp64.dll', 'Silk.NET.Assimp.dll', 'Silk.NET.Core.dll',

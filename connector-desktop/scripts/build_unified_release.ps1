@@ -9,6 +9,7 @@ param(
     [string]$UpdateSigningKeyPemPath,
     [string]$HelperManifestSigningKeyPemPath,
     [ValidatePattern('^[a-f0-9]{40}$')][string]$HostedSigningRef,
+    [string]$VcRuntimeSourceDir,
     [Parameter(Mandatory = $true)][string]$HelperReleasePublicKeyFile,
     [Parameter(Mandatory = $true)][string]$ConnectorAccessConfigurationPath,
     [Parameter(Mandatory = $true)][string]$ProtectedOutputRoot,
@@ -330,6 +331,9 @@ $script:NetBirdPreflight = Assert-PinnedSourceHash $script:NetBirdPreflight 'Net
 $script:NetBirdVerifier = Assert-PinnedSourceHash $script:NetBirdVerifier 'NetBird verifier script' 'DFFFA2EC3BBDFB57583F66AB651F12259AFFFBCF39AA014B11411F9C152EA834'
 $script:NetBirdLock = Assert-PinnedSourceHash $script:NetBirdLock 'NetBird identity lock' 'EE48F195FAE2A08B83C0A44F238C237C79F05F27BCA8DBC995542B1FCD23FA96'
 $outputRoot = Assert-ProtectedOutputRoot $ProtectedOutputRoot
+if ($VcRuntimeSourceDir) {
+    & (Join-Path $PSScriptRoot 'copy_vc_runtime.ps1') -TargetDir $outputRoot -VcRuntimeSourceDir $VcRuntimeSourceDir -ValidateOnly
+}
 
 # All paths and inputs are now preflighted. Every generated artifact is isolated under a
 # fresh child of the caller-supplied protected directory; existing data is never cleared.
@@ -366,6 +370,7 @@ $packageParameters = @{
     PackageOutputDir = $packageDirectory
 }
 if ($HostedSigningRef) { $packageParameters.HostedSigningRef = $HostedSigningRef }
+if ($VcRuntimeSourceDir) { $packageParameters.VcRuntimeSourceDir = $VcRuntimeSourceDir }
 Write-Host 'BUILD_STEP: desktop, engines and signed update package'
 & $script:BuildPackageUpdate @packageParameters
 if (!$?) { throw 'build_package_update.ps1 failed.' }

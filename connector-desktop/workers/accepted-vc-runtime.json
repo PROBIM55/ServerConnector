@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "architecture": "x64",
+  "version": "14.51.36247.0",
+  "source": {
+    "package": "Structura.Connector.Desktop-1.1.0-stable-full.nupkg",
+    "sha256": "96c2547d07ec86887db2222bfa73e25c48f98cd035540e7f37ac17af891c8c40",
+    "ciRunId": "38420281314",
+    "sourceGitSha": "667f3bd274e884ffd3350497a7f19645c0daf8d3"
+  },
+  "files": [
+    { "name": "msvcp140.dll", "bytes": 643512, "sha256": "7c26614e1d733892c2deac7e245ce115504b1d80592dd0a01b08e3e5a55f89ca" },
+    { "name": "vcruntime140.dll", "bytes": 178616, "sha256": "d1f4225df2cd877dbf130d5668a021dce3f94118455ff5ec952061c30afc9ce7" },
+    { "name": "vcruntime140_1.dll", "bytes": 50112, "sha256": "a7146c08f89fe5b04541ab507cdb59ff7b44534d4ba3c668a426c6450a03434e" }
+  ]
+}

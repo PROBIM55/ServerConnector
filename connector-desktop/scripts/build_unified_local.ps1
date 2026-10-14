@@ -13,6 +13,7 @@ param(
     [string]$PinnedAssetBundleDirectory = (Join-Path $PSScriptRoot '..\artifacts\migration-helper-bundle-20261003'),
     [Parameter(Mandatory)][string]$SharedGuardSourcePath,
     [string]$CancelFile,
+    [string]$VcRuntimeSourceDir,
     [switch]$PlanOnly
 )
 $ErrorActionPreference = 'Stop'
@@ -74,6 +75,10 @@ foreach ($name in @('PackVersion','InstallerVersion','Channel','FeedUrl','IfcWor
     $arguments.Add([string](Get-Variable -Name $name -ValueOnly))
 }
 $env:DOTNET_CLI_USE_MSBUILD_SERVER = '0'
+if ($VcRuntimeSourceDir) {
+    $arguments.Add('-VcRuntimeSourceDir')
+    $arguments.Add($VcRuntimeSourceDir)
+}
 $env:MSBUILDDISABLENODEREUSE = '1'
 # One shared mutex/Job covers the existing sequential pipeline, including every
 # descendant. A denied admission or memory stop never launches an automatic retry.
