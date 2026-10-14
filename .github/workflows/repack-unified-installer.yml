@@ -50,3 +50,4 @@ jobs:
           retention-days: 7
           path: |
             pilot-repack/output/*.log
+            pilot-repack/staging-output/*.log

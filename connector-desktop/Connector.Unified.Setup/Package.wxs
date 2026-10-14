@@ -10,7 +10,8 @@
            Scope="perMachine"
            Codepage="1251"
            Language="1049">
-    <MajorUpgrade DowngradeErrorMessage="Установлена более новая версия установщика Structura Connector." />
+    <MajorUpgrade AllowSameVersionUpgrades="yes" Schedule="afterInstallInitialize"
+                  DowngradeErrorMessage="Установлена более новая версия установщика Structura Connector." />
     <MediaTemplate EmbedCab="yes" />
     <Icon Id="PlatformConnector.exe" SourceFile="$(var.BootstrapperDir)\Connector.Upgrade.Bootstrapper.exe" />
     <Property Id="ARPPRODUCTICON" Value="PlatformConnector.exe" />

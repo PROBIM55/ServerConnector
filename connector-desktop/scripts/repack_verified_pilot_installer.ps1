@@ -32,9 +32,18 @@ function Invoke-HostedGuard([string]$Executable, [string[]]$Arguments, [string]$
         [Func[PlatformBuild.Guard+Memory]]{ [PlatformBuild.Guard]::ReadMemory() })
     if ($result -ne 0) { throw "$Label failed under resource protection (exit $result); no automatic retry." }
 }
+$stagingOutput = Join-Path $root 'staging-output'
+$stagingWorker = Join-Path $PSScriptRoot 'repack_pilot_staging_msi.ps1'
+Invoke-HostedGuard (Get-Command pwsh).Source @('-NoProfile', '-File', $stagingWorker,
+    '-InputMsi', (Join-Path $inputs 'Connector.Unified.Setup.msi'), '-Output', $stagingOutput) 'pilot-staging-repack'
+$stagingProof = Get-Content -LiteralPath (Join-Path $stagingOutput 'staging-proof.json') -Raw | ConvertFrom-Json
+if (-not $stagingProof.sameVersionUpgradeVerified -or -not $stagingProof.runtimePayloadsUnchanged) {
+    throw 'The existing pilot staging must upgrade without changing runtime bytes.'
+}
+$finalMsi = Join-Path $stagingOutput 'Connector.Unified.Setup.msi'
 $buildArgs = @('build', 'connector-desktop/Connector.Unified.Bundle/Connector.Unified.Bundle.wixproj',
     '-c', 'Release', '-m:1', '-nr:false', '-p:UseSharedCompilation=false', '-p:BuildInParallel=false',
-    '-p:ProductVersion=1.1.0', "-p:UnifiedSetupMsiPath=$(Join-Path $inputs 'Connector.Unified.Setup.msi')",
+    '-p:ProductVersion=1.1.0', "-p:UnifiedSetupMsiPath=$finalMsi",
     "-p:LaunchBridgePath=$(Join-Path $inputs 'Connector.Upgrade.LaunchBridge.exe')", '-o', $output, '--nologo')
 Invoke-HostedGuard (Get-Command dotnet).Source $buildArgs 'pilot-burn-repack'
 $pdb = Join-Path $output 'Structura.Connector.Installer.wixpdb'
@@ -72,7 +81,8 @@ Invoke-HostedGuard (Get-Command dotnet).Source @($wix[0].FullName, 'burn', 'extr
 foreach ($name in @('Connector.Unified.Setup.msi','Connector.Upgrade.LaunchBridge.exe')) {
     $files = @(Get-ChildItem -LiteralPath $extracted -Recurse -File -Filter $name)
     $files | Select-Object FullName,Length | Format-Table | Out-String | Write-Host
-    if ($files.Count -ne 1 -or (Get-FileHash -LiteralPath $files[0].FullName -Algorithm SHA256).Hash.ToLowerInvariant() -ne $pins[$name]) {
+    $expected = if ($name -eq 'Connector.Unified.Setup.msi') { $stagingProof.sha256 } else { $pins[$name] }
+    if ($files.Count -ne 1 -or (Get-FileHash -LiteralPath $files[0].FullName -Algorithm SHA256).Hash.ToLowerInvariant() -ne $expected) {
         throw "Native layout did not preserve the verified payload: $name"
     }
 }
@@ -91,6 +101,7 @@ if (Select-String -LiteralPath $log -SimpleMatch 'manifest is missing wixstdba i
     runtimeSourceSha = '64760620a93365e3d0809dc7f84d59b51069b4a3'
     inputRelease = $InputRelease
     inputHashes = $pins
+    staging = $stagingProof
     installerSha256 = (Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash.ToLowerInvariant()
     installerBytes = (Get-Item -LiteralPath $exe).Length
     wixStdbaInformationVerified = $true
