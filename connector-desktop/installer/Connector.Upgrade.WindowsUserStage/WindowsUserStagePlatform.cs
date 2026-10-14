@@ -20,7 +20,7 @@ internal sealed class WindowsUserStagePlatform : IWindowsUserStagePlatform
     public void AssertElevatedAdministrator()
     {
         AssertWindows();
-        using var identity = WindowsIdentity.GetCurrent(TokenAccessLevels.Query);
+        using var identity = WindowsIdentity.GetCurrent(TokenAccessLevels.Query | TokenAccessLevels.Duplicate);
         if (!new WindowsPrincipal(identity).IsInRole(WindowsBuiltInRole.Administrator))
             throw new UnauthorizedAccessException("An already elevated administrator token is required to create the user-state stage.");
     }

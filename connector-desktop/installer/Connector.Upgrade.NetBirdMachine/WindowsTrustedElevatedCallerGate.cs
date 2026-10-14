@@ -16,7 +16,7 @@ public sealed class WindowsTrustedElevatedCallerGate : ITrustedElevatedCallerGat
         if (!OperatingSystem.IsWindows())
             throw new PlatformNotSupportedException("NetBird machine mutation is available only on Windows.");
 
-        using var identity = WindowsIdentity.GetCurrent(TokenAccessLevels.Query);
+        using var identity = WindowsIdentity.GetCurrent(TokenAccessLevels.Query | TokenAccessLevels.Duplicate);
         if (identity.User is not null && TrustedServiceSids.Contains(identity.User.Value))
             return;
         if (!new WindowsPrincipal(identity).IsInRole(WindowsBuiltInRole.Administrator))

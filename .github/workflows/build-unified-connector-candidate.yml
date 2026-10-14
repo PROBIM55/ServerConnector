@@ -12,9 +12,13 @@ on:
       legacy_platform_msi_url: {description: "HTTPS legacy Platform MSI URL", required: true, type: string}
 permissions:
   contents: read
+concurrency:
+  group: unified-connector-candidate
+  cancel-in-progress: false
 jobs:
   candidate:
     runs-on: windows-latest
+    timeout-minutes: 45
     environment: production
     permissions:
       contents: read
@@ -119,7 +123,7 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           $root = '${{ steps.prepare.outputs.root }}'
-          & 'connector-desktop/scripts/build_unified_release.ps1' -PackVersion $env:BUILD_PACK_VERSION -InstallerVersion $env:BUILD_INSTALLER_VERSION -Channel $env:BUILD_CHANNEL -FeedUrl $env:BUILD_FEED_URL -IfcWorkerPath '${{ steps.prepare.outputs.worker }}' -UpdateSigningKeyPemPath '${{ steps.prepare.outputs.key1 }}' -HelperManifestSigningKeyPemPath '${{ steps.prepare.outputs.key2 }}' -HelperReleasePublicKeyFile 'connector-desktop/installer/release-public-key.pem' -ConnectorAccessConfigurationPath '${{ steps.prepare.outputs.access }}' -ProtectedOutputRoot '${{ steps.prepare.outputs.output }}' -PinnedAssetBundleDirectory '${{ steps.prepare.outputs.bundle }}'
+          & 'connector-desktop/scripts/invoke_hosted_unified_build.ps1' -PackVersion $env:BUILD_PACK_VERSION -InstallerVersion $env:BUILD_INSTALLER_VERSION -Channel $env:BUILD_CHANNEL -FeedUrl $env:BUILD_FEED_URL -IfcWorkerPath '${{ steps.prepare.outputs.worker }}' -UpdateSigningKeyPemPath '${{ steps.prepare.outputs.key1 }}' -HelperManifestSigningKeyPemPath '${{ steps.prepare.outputs.key2 }}' -HelperReleasePublicKeyFile 'connector-desktop/installer/release-public-key.pem' -ConnectorAccessConfigurationPath '${{ steps.prepare.outputs.access }}' -ProtectedOutputRoot '${{ steps.prepare.outputs.output }}' -PinnedAssetBundleDirectory '${{ steps.prepare.outputs.bundle }}'
           if ($LASTEXITCODE -ne 0) { throw 'Unified candidate build failed.' }
           $run = Get-ChildItem -LiteralPath '${{ steps.prepare.outputs.output }}' -Directory -Filter "unified-$env:BUILD_PACK_VERSION-*" | Select-Object -Last 1
           if ($null -eq $run) { throw 'Builder output directory not found.' }
@@ -153,6 +157,15 @@ jobs:
           foreach ($file in $binaries) { Copy-Item -LiteralPath $file.FullName -Destination $candidate }
           Get-ChildItem -LiteralPath $candidate -File | ForEach-Object { $hash=(Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant(); "$hash  $($_.Name)" | Add-Content (Join-Path $candidate 'checksums.sha256') -Encoding ascii }
           "artifact_dir=$candidate" >> $env:GITHUB_OUTPUT
+      - name: Upload installer for native verification
+        uses: actions/upload-artifact@v4
+        with:
+          name: unified-connector-installer-${{ inputs.pack_version }}
+          path: |
+            ${{ steps.build.outputs.artifact_dir }}/Structura.Connector.Installer.exe
+            ${{ steps.build.outputs.artifact_dir }}/checksums.sha256
+          if-no-files-found: error
+          retention-days: 14
       - name: Upload candidate artifacts
         uses: actions/upload-artifact@v4
         with:

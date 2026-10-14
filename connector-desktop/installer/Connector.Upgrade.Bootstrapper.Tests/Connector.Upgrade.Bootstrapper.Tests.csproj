@@ -18,5 +18,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Connector.Upgrade.Bootstrapper\Connector.Upgrade.Bootstrapper.csproj" />
+    <ProjectReference Include="..\Connector.Upgrade.LaunchBridge\Connector.Upgrade.LaunchBridge.csproj"
+                      AdditionalProperties="SelfContained=false;PublishSingleFile=false" />
   </ItemGroup>
 </Project>

@@ -8,6 +8,8 @@
           IconSourceFile="$(sys.SOURCEFILEDIR)..\Connector.Desktop\Assets\platform_connector.ico"
           Compressed="yes">
     <BootstrapperApplication>
+      <Payload Name="platform_connector.ico"
+               SourceFile="$(sys.SOURCEFILEDIR)..\Connector.Desktop\Assets\platform_connector.ico" />
       <!-- The hyperlink payload group supplies WixStdbaInformation even with a custom theme. -->
       <bal:WixStandardBootstrapperApplication Theme="hyperlinkLicense" LicenseUrl=""
           ThemeFile="$(sys.SOURCEFILEDIR)InstallerTheme.xml"

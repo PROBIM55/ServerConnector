@@ -377,7 +377,7 @@ internal sealed class WindowsNetBirdProtectedStorage
 
     private static void RequireTrustedElevatedCaller()
     {
-        using var identity = WindowsIdentity.GetCurrent(TokenAccessLevels.Query);
+        using var identity = WindowsIdentity.GetCurrent(TokenAccessLevels.Query | TokenAccessLevels.Duplicate);
         if (identity.User is { Value: var sid } && TrustedSids.Contains(sid))
             return;
         if (!new WindowsPrincipal(identity).IsInRole(WindowsBuiltInRole.Administrator))

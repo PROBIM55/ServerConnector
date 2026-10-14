@@ -260,7 +260,7 @@ internal sealed class WindowsMachineStagingSecurity : IWindowsMachineStagingSecu
     {
         if (!OperatingSystem.IsWindows())
             throw new PlatformNotSupportedException("Protected rollback staging is available only on Windows.");
-        using var identity = WindowsIdentity.GetCurrent(TokenAccessLevels.Query);
+        using var identity = WindowsIdentity.GetCurrent(TokenAccessLevels.Query | TokenAccessLevels.Duplicate);
         var userSid = identity.User?.Value;
         if (userSid is not null && TrustedSids.Contains(userSid))
             return;

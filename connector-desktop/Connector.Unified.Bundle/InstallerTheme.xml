@@ -5,7 +5,7 @@
   <Font Id="1" Height="-30" Weight="650" Foreground="f6f2ed">Segoe UI</Font>
   <Font Id="2" Height="-21" Weight="600" Foreground="ddb877">Segoe UI</Font>
   <Font Id="3" Height="-14" Weight="500" Foreground="c4b9ae" Background="1d1712">Segoe UI</Font>
-  <Window Width="640" Height="380" HexStyle="100a0000" FontId="0" Caption="#(loc.Caption)">
+  <Window Width="640" Height="380" HexStyle="100a0000" FontId="0" Caption="#(loc.Caption)" IconFile="platform_connector.ico">
     <ImageControl X="28" Y="24" Width="52" Height="52" ImageFile="logo.png" Visible="yes" />
     <Label X="96" Y="26" Width="-28" Height="48" FontId="1" Visible="yes" DisablePrefix="yes">#(loc.Title)</Label>
     <Label X="30" Y="92" Width="-30" Height="42" FontId="3" Visible="yes" DisablePrefix="yes">#(loc.InstallDescription)</Label>

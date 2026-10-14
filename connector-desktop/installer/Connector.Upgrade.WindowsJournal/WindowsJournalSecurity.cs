@@ -22,7 +22,7 @@ internal static class WindowsJournalSecurity
         if (!OperatingSystem.IsWindows())
             throw new PlatformNotSupportedException("The protected upgrade journal requires Windows.");
 
-        using var identity = WindowsIdentity.GetCurrent(TokenAccessLevels.Query);
+        using var identity = WindowsIdentity.GetCurrent(TokenAccessLevels.Query | TokenAccessLevels.Duplicate);
         if (identity.User is { Value: var sid } && profile.TrustedOwnerSids.Contains(sid))
             return;
         if (profile.RequireElevatedCaller && !new WindowsPrincipal(identity).IsInRole(WindowsBuiltInRole.Administrator))

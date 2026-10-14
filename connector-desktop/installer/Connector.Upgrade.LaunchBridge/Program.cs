@@ -88,7 +88,9 @@ internal static class Program
 
     private static void AssertUnelevatedCurrentToken()
     {
-        using var current = WindowsIdentity.GetCurrent(TokenAccessLevels.Query);
+        // IsAuthenticated checks group membership through an impersonation token.
+        // TOKEN_QUERY alone makes that Windows check fail with access denied.
+        using var current = WindowsIdentity.GetCurrent(TokenAccessLevels.Query | TokenAccessLevels.Duplicate);
         if (!current.IsAuthenticated || current.User is null ||
             current.User.Equals(new SecurityIdentifier(WellKnownSidType.LocalSystemSid, null)))
             throw new SecurityException("The bridge requires an interactive authenticated user.");

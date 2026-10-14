@@ -58,7 +58,7 @@ internal sealed class WindowsNetBirdMachineStagingSecurity : INetBirdMachineStag
     public void ValidateProtectedFile(string path) { WindowsNetBirdPathSafety.AssertNoReparseComponents(path); ValidateEntry(path, false, true, Mutation); }
     private static void RequireElevatedTrustedCaller()
     {
-        using var identity = WindowsIdentity.GetCurrent(TokenAccessLevels.Query);
+        using var identity = WindowsIdentity.GetCurrent(TokenAccessLevels.Query | TokenAccessLevels.Duplicate);
         if (identity.User is { Value: var sid } && Trusted.Contains(sid)) return;
         if (!new WindowsPrincipal(identity).IsInRole(WindowsBuiltInRole.Administrator))
             throw new UnauthorizedAccessException("NetBird protected staging requires an elevated administrator, SYSTEM, or TrustedInstaller process; it never self-elevates.");

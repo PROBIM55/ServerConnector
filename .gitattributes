@@ -5,6 +5,7 @@ connector-desktop/Connector.Desktop/ThirdPartyLicenses/** -text
 connector-desktop/scripts/netbird_windows_preflight.ps1 -text
 connector-desktop/scripts/verify_netbird_installer.ps1 -text
 connector-desktop/infra/netbird/v0.79.0-windows-x64.lock.json -text
+connector-desktop/scripts/resource-guard/platform-build-guard.cs -text
 
 # Approved desktop design resources retain LF bytes across Windows checkouts.
 connector-desktop/design/desktop.html text eol=lf
