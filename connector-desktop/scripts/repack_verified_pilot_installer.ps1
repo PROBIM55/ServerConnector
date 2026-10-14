@@ -56,11 +56,31 @@ $log = Join-Path $output 'native-layout.log'
 $layoutWorker = Join-Path $PSScriptRoot 'invoke_pilot_native_layout.ps1'
 Invoke-HostedGuard (Get-Command pwsh).Source @('-NoProfile', '-File', $layoutWorker,
     '-Executable', $exe, '-Layout', $layout, '-Log', $log) 'pilot-native-layout'
+$layoutExe = Join-Path $layout 'Structura.Connector.Installer.exe'
+if ((Get-FileHash -LiteralPath $layoutExe -Algorithm SHA256).Hash -ne (Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash) {
+    throw 'Native layout did not preserve the complete embedded bundle.'
+}
+# A compressed bundle lays out the EXE with its containers intact. Extract those
+# containers separately to verify the MSI, bridge and custom UI byte for byte.
+$sdk = Join-Path $env:USERPROFILE '.nuget/packages/wixtoolset.sdk/6.0.2'
+$wix = @(Get-ChildItem -LiteralPath $sdk -Recurse -File -Filter wix.dll)
+if ($wix.Count -ne 1) { throw 'Expected the exact WiX 6.0.2 CLI used by the bundle SDK.' }
+$extracted = Join-Path $root 'extracted'
+$ba = Join-Path $root 'bootstrapper-application'
+Invoke-HostedGuard (Get-Command dotnet).Source @($wix[0].FullName, 'burn', 'extract', $exe,
+    '-o', $extracted, '-oba', $ba) 'pilot-payload-extraction'
 foreach ($name in @('Connector.Unified.Setup.msi','Connector.Upgrade.LaunchBridge.exe')) {
-    $files = @(Get-ChildItem -LiteralPath $layout -Recurse -File -Filter $name)
+    $files = @(Get-ChildItem -LiteralPath $extracted -Recurse -File -Filter $name)
     $files | Select-Object FullName,Length | Format-Table | Out-String | Write-Host
     if ($files.Count -ne 1 -or (Get-FileHash -LiteralPath $files[0].FullName -Algorithm SHA256).Hash.ToLowerInvariant() -ne $pins[$name]) {
         throw "Native layout did not preserve the verified payload: $name"
+    }
+}
+foreach ($pair in @(@('thm.xml','InstallerTheme.xml'), @('thm.wxl','Installer.ru-ru.wxl'))) {
+    $embedded = Join-Path $ba $pair[0]
+    $source = Join-Path $env:GITHUB_WORKSPACE ("connector-desktop/Connector.Unified.Bundle/" + $pair[1])
+    if ((Get-FileHash -LiteralPath $embedded).Hash -ne (Get-FileHash -LiteralPath $source).Hash) {
+        throw "Custom installer UI payload changed: $($pair[0])"
     }
 }
 if (Select-String -LiteralPath $log -SimpleMatch 'manifest is missing wixstdba information') {
@@ -75,6 +95,8 @@ if (Select-String -LiteralPath $log -SimpleMatch 'manifest is missing wixstdba i
     installerBytes = (Get-Item -LiteralPath $exe).Length
     wixStdbaInformationVerified = $true
     nativeLayoutVerified = $true
+    embeddedPayloadsVerified = $true
+    customThemeVerified = $true
     installedFunctionalVerified = $false
     localUiVerified = $false
     guard = @{ location = 'github-hosted'; aggregateMemoryGiB = 2; reserveGiB = 2; cpuPercent = 25 }
