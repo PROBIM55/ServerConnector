@@ -12,8 +12,11 @@ if ((Get-FileHash -LiteralPath $InputMsi).Hash -ne 'AB139ABDD3783B6D18C30AD37091
 }
 New-Item -ItemType Directory -Path $Output -Force | Out-Null
 function Invoke-Msi([string[]]$Arguments) {
-    $p = Start-Process -FilePath "$env:WINDIR/System32/msiexec.exe" -ArgumentList $Arguments -Wait -PassThru -WindowStyle Hidden
-    if ($p.ExitCode -notin @(0,3010)) { throw "Disposable runner MSI operation failed: $($p.ExitCode)" }
+    $p = Start-Process -FilePath "$env:WINDIR/System32/msiexec.exe" -ArgumentList $Arguments -PassThru -WindowStyle Hidden
+    try {
+        if (!$p.WaitForExit(180000)) { $p.Kill($true); throw 'Disposable runner MSI operation timed out.' }
+        if ($p.ExitCode -notin @(0,3010)) { throw "Disposable runner MSI operation failed: $($p.ExitCode)" }
+    } finally { $p.Dispose() }
 }
 function Read-Identity([string]$Path) {
     $installer = New-Object -ComObject WindowsInstaller.Installer
@@ -126,8 +129,7 @@ if ((Test-Path -LiteralPath (Registration $oldIdentity.ProductCode)) -or
 try {
     Invoke-Msi @('/i', ('"' + $PreviousMsi + '"'), '/qn', '/norestart', 'REBOOT=ReallySuppress', '/L*v',
         ('"' + (Join-Path $Output 'install-original-pilot.log') + '"'))
-    Invoke-Msi @('/i', ('"' + $final + '"'), '/qn', '/norestart', 'REBOOT=ReallySuppress', '/L*v',
-        'REINSTALLMODE=muso',
+    Invoke-Msi @('/i', ('"' + $final + '"'), '/qn', '/norestart', 'REBOOT=ReallySuppress', 'REINSTALLMODE=muso', '/L*v',
         ('"' + (Join-Path $Output 'upgrade-same-version.log') + '"'))
     if ((Test-Path -LiteralPath (Registration $oldIdentity.ProductCode)) -or
         -not (Test-Path -LiteralPath (Registration $newIdentity.ProductCode))) { throw 'Same-version pilot upgrade did not replace the old registration.' }

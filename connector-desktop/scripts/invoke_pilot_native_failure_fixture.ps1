@@ -21,8 +21,11 @@ try {
 New-Item -ItemType Directory -Path $Output -Force | Out-Null
 function Invoke-FixtureBundle([string]$Path, [string]$Action, [string]$Log) {
     $arguments = @(('/' + $Action), '/quiet', '/norestart', '/log', ('"' + $Log + '"'))
-    $process = Start-Process -FilePath $Path -ArgumentList $arguments -Wait -PassThru -WindowStyle Hidden
-    return $process.ExitCode
+    $process = Start-Process -FilePath $Path -ArgumentList $arguments -PassThru -WindowStyle Hidden
+    try {
+        if (!$process.WaitForExit(180000)) { $process.Kill($true); throw 'Native bundle fixture timed out.' }
+        return $process.ExitCode
+    } finally { $process.Dispose() }
 }
 function Registration([string]$Code) { return 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\' + $Code }
 $previousProduct = '{5490E9F5-4C12-4797-A497-28D4EB309718}'
