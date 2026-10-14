@@ -126,7 +126,13 @@ Invoke-HostedGuard (Get-Command pwsh).Source @('-NoProfile','-File',
     (Join-Path $PSScriptRoot 'invoke_pilot_native_failure_fixture.ps1'),
     '-PreviousInstaller', (Join-Path $inputs 'previous/Structura.Connector.Installer.exe'),
     '-CandidateInstaller', $exe, '-CandidateProductCode', $stagingProof.productCode,
+    '-ExpectedBootstrapperDirectory', (Join-Path $stagingOutput $stagingProof.fixtureBootstrapperDirectory),
+    '-ExpectedHelperDirectory', (Join-Path $stagingOutput $stagingProof.fixtureHelperDirectory),
+    '-ExpectedConfiguration', (Join-Path $stagingOutput 'connector-access.json'),
     '-Output', (Join-Path $root 'failure-fixture')) 'pilot-native-failure-recovery'
+$bundleProof = Get-Content -LiteralPath (Join-Path $root 'failure-fixture/failure-proof.json') -Raw | ConvertFrom-Json
+if (!$bundleProof.installedRuntimePayloadsVerified -or !$bundleProof.nativeCallerStarted -or
+    !$bundleProof.deploymentConfigurationVerified) { throw 'Native EXE upgrade verification is incomplete.' }
 [ordered]@{
     sourceSha = $env:GITHUB_SHA
     runtimeSourceSha = 'd13c709f0e639a053d5609b800907fa7cf8db174'
@@ -134,6 +140,7 @@ Invoke-HostedGuard (Get-Command pwsh).Source @('-NoProfile','-File',
     previousInstallerRun = 38548514207
     inputHashes = $pins
     staging = $stagingProof
+    bundleUpgrade = $bundleProof
     installerSha256 = (Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash.ToLowerInvariant()
     installerBytes = (Get-Item -LiteralPath $exe).Length
     wixStdbaInformationVerified = $true

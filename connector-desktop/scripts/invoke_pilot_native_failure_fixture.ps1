@@ -3,6 +3,9 @@ param(
     [Parameter(Mandatory)][string]$PreviousInstaller,
     [Parameter(Mandatory)][string]$CandidateInstaller,
     [Parameter(Mandatory)][ValidatePattern('^\{[A-Fa-f0-9-]{36}\}$')][string]$CandidateProductCode,
+    [Parameter(Mandatory)][string]$ExpectedBootstrapperDirectory,
+    [Parameter(Mandatory)][string]$ExpectedHelperDirectory,
+    [Parameter(Mandatory)][string]$ExpectedConfiguration,
     [Parameter(Mandatory)][string]$Output
 )
 $ErrorActionPreference='Stop'
@@ -40,7 +43,36 @@ try {
         !$log.Contains('OriginalUserUpgradeBridge exited with code: 0x1')) {
         throw 'Native failure recovery retried a related bundle or did not exercise the intended bridge rejection.'
     }
-    [ordered]@{expectedBridgeFailure=1;machineStageRetained=$true;relatedBundleRollbackNotInvoked=$true} |
+    # Elevated bridge rejection happens before the installed caller starts. Verify
+    # the complete runtime after the EXE chain, not just the standalone MSI test.
+    $installedCaller = "$env:ProgramFiles/StructuraConnectorInstaller/Bootstrapper/Connector.Upgrade.Bootstrapper.exe"
+    $installedCount = 0
+    foreach ($pair in @(
+        @{Source=$ExpectedBootstrapperDirectory; Target=(Split-Path $installedCaller -Parent)},
+        @{Source=$ExpectedHelperDirectory; Target=(Join-Path $env:ProgramData 'StructuraConnectorInstaller/Helper')}
+    )) {
+        foreach ($file in Get-ChildItem -LiteralPath $pair.Source -Recurse -File) {
+            $target = Join-Path $pair.Target ([IO.Path]::GetRelativePath($pair.Source, $file.FullName))
+            if (!(Test-Path -LiteralPath $target -PathType Leaf) -or
+                (Get-FileHash -LiteralPath $target).Hash -ne (Get-FileHash -LiteralPath $file.FullName).Hash) {
+                throw "Bundle upgrade omitted or changed runtime file: $($file.Name)"
+            }
+            $installedCount++
+        }
+    }
+    $installedConfiguration = "$env:ProgramFiles/Structura Connector/NetBird/connector-access.json"
+    if ((Get-FileHash -LiteralPath $installedConfiguration).Hash -ne
+        (Get-FileHash -LiteralPath $ExpectedConfiguration).Hash) { throw 'Bundle installed a different API configuration.' }
+    $callerProbe = Start-Process -FilePath $installedCaller -PassThru -WindowStyle Hidden
+    try {
+        if ($callerProbe.WaitForExit(5000)) { throw "Caller failed after bundle upgrade: $($callerProbe.ExitCode)" }
+    } finally {
+        if (!$callerProbe.HasExited) { $callerProbe.Kill($true); [void]$callerProbe.WaitForExit(5000) }
+        $callerProbe.Dispose()
+    }
+    [ordered]@{expectedBridgeFailure=1;machineStageRetained=$true;relatedBundleRollbackNotInvoked=$true;
+        installedRuntimePayloadsVerified=$true;installedRuntimePayloadCount=$installedCount;nativeCallerStarted=$true;
+        deploymentConfigurationVerified=$true} |
         ConvertTo-Json | Set-Content -LiteralPath (Join-Path $Output 'failure-proof.json') -Encoding utf8
 } finally {
     foreach ($path in @($CandidateInstaller,$PreviousInstaller)) {

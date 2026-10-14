@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
-  <!-- Protected machine staging only. This package deliberately has no custom actions. -->
+  <!-- Protected machine staging only; no executable or deferred custom actions. -->
   <Package Name="Structura Unified Connector Installer"
            Manufacturer="Structura"
            Version="$(var.ProductVersion)"
@@ -15,6 +15,10 @@
     <!-- A pilot can carry a newer app-local runtime. Costing must not skip its
          files before RemoveExistingProducts deletes that previous package. -->
     <Property Id="REINSTALLMODE" Value="amus" />
+    <!-- Burn supplies muso on its command line. Reset it before file costing,
+         including quiet installs, so the old app-local runtime cannot be skipped. -->
+    <SetProperty Id="REINSTALLMODE" Value="amus" Before="CostInitialize"
+                 Sequence="both" Condition="NOT REMOVE~=&quot;ALL&quot;" />
     <MediaTemplate EmbedCab="yes" />
     <Icon Id="PlatformConnector.exe" SourceFile="$(var.BootstrapperDir)\Connector.Upgrade.Bootstrapper.exe" />
     <Property Id="ARPPRODUCTICON" Value="PlatformConnector.exe" />

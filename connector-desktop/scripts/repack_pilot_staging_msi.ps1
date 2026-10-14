@@ -37,6 +37,24 @@ function Find-Payload([string]$Name) {
 }
 $bootstrapper = Split-Path (Find-Payload 'Connector.Upgrade.Bootstrapper.exe') -Parent
 $originalHelper = Split-Path (Find-Payload 'Connector.Upgrade.MachineHelper.exe') -Parent
+$originalAccess = Find-Payload 'connector-access.json'
+$originalAccessHash = (Get-FileHash -LiteralPath $originalAccess).Hash
+if ($originalAccessHash -cne '66D7AFB73CAE22F9A466D0CA1B15CC827A63F2AC503C068716363C2199FB642B') {
+    throw 'The known pilot deployment configuration changed.'
+}
+$access = Get-Content -LiteralPath $originalAccess -Raw | ConvertFrom-Json
+if ($access.serviceBaseUri -cne 'https://connector-access.structura-most.ru/') {
+    throw 'The known pilot service URI differs.'
+}
+$access.serviceBaseUri = 'https://connector-access.structura-most.ru/api/platform/connector/access/v1/'
+$fixedAccess = Join-Path $Output 'connector-access.json'
+[IO.File]::WriteAllText($fixedAccess, ($access | ConvertTo-Json -Depth 30), [Text.UTF8Encoding]::new($false))
+$roundtripAccess = Get-Content -LiteralPath $fixedAccess -Raw | ConvertFrom-Json
+$roundtripAccess.serviceBaseUri = 'https://connector-access.structura-most.ru/'
+if (($roundtripAccess | ConvertTo-Json -Depth 30 -Compress) -cne
+    ((Get-Content -LiteralPath $originalAccess -Raw | ConvertFrom-Json) | ConvertTo-Json -Depth 30 -Compress)) {
+    throw 'Deployment repair changed more than the service URI.'
+}
 $helper = Join-Path $Output 'helper-runtime'
 New-Item -ItemType Directory -Path $helper -Force | Out-Null
 $explicitHelperPayloads = @('Setup.exe','netbird_installer_0.79.0_windows_amd64.msi',
@@ -54,7 +72,7 @@ $properties = [ordered]@{
     NetBirdMsiPath = Find-Payload 'netbird_installer_0.79.0_windows_amd64.msi'
     LegacyConnectorMsiPath = Find-Payload 'Connector.Desktop.Setup.msi'
     LegacyPlatformMsiPath = Find-Payload 'Platform.Connector.Desktop.Setup.msi'
-    ConnectorAccessConfigurationPath = Find-Payload 'connector-access.json'
+    ConnectorAccessConfigurationPath = $fixedAccess
     NetBirdPreflightScriptPath = Find-Payload 'netbird_windows_preflight.ps1'
     NetBirdVerifierScriptPath = Find-Payload 'verify_netbird_installer.ps1'
     NetBirdIdentityLockPath = Find-Payload 'v0.79.0-windows-x64.lock.json'
@@ -80,7 +98,17 @@ function Get-PayloadMap([string]$Directory) {
 $oldFiles = Get-PayloadMap $original
 $newFiles = Get-PayloadMap $rebuilt
 if ($oldFiles.Count -ne $newFiles.Count) { throw 'MSI repack changed the runtime file inventory.' }
+if (@($oldFiles.Keys | Where-Object { [IO.Path]::GetFileName($_) -ceq 'connector-access.json' }).Count -ne 1) {
+    throw 'Expected exactly one deployment configuration in the MSI.'
+}
 foreach ($name in $oldFiles.Keys) {
+    if ([IO.Path]::GetFileName($name) -ceq 'connector-access.json') {
+        if (-not $newFiles.ContainsKey($name) -or $oldFiles[$name] -cne $originalAccessHash -or
+            $newFiles[$name] -cne (Get-FileHash -LiteralPath $fixedAccess).Hash) {
+            throw 'Deployment configuration repair differs.'
+        }
+        continue
+    }
     if (-not $newFiles.ContainsKey($name) -or $oldFiles[$name] -ne $newFiles[$name]) {
         throw "MSI repack changed a runtime payload: $name"
     }
@@ -99,6 +127,7 @@ try {
     Invoke-Msi @('/i', ('"' + $PreviousMsi + '"'), '/qn', '/norestart', 'REBOOT=ReallySuppress', '/L*v',
         ('"' + (Join-Path $Output 'install-original-pilot.log') + '"'))
     Invoke-Msi @('/i', ('"' + $final + '"'), '/qn', '/norestart', 'REBOOT=ReallySuppress', '/L*v',
+        'REINSTALLMODE=muso',
         ('"' + (Join-Path $Output 'upgrade-same-version.log') + '"'))
     if ((Test-Path -LiteralPath (Registration $oldIdentity.ProductCode)) -or
         -not (Test-Path -LiteralPath (Registration $newIdentity.ProductCode))) { throw 'Same-version pilot upgrade did not replace the old registration.' }
@@ -134,11 +163,21 @@ try {
         productCode = $newIdentity.ProductCode
         upgradeCode = $newIdentity.UpgradeCode
         runtimePayloadsUnchanged = $true
-        runtimePayloadCount = $oldFiles.Count
+        runtimePayloadCount = $oldFiles.Count - 1
+        deploymentConfiguration = @{
+            onlyServiceUriChanged = $true
+            previousSha256 = $originalAccessHash.ToLowerInvariant()
+            sha256 = (Get-FileHash -LiteralPath $fixedAccess).Hash.ToLowerInvariant()
+            serviceBaseUri = $access.serviceBaseUri
+        }
         sameVersionUpgradeVerified = $true
         installedRuntimePayloadsVerified = $true
         installedRuntimePayloadCount = $installedCount
         nativeCallerStarted = $true
+        fixtureBootstrapperDirectory = [IO.Path]::GetRelativePath($Output,
+            (Split-Path (@(Get-ChildItem -LiteralPath $rebuilt -Recurse -File -Filter 'Connector.Upgrade.Bootstrapper.exe')[0].FullName) -Parent))
+        fixtureHelperDirectory = [IO.Path]::GetRelativePath($Output,
+            (Split-Path (@(Get-ChildItem -LiteralPath $rebuilt -Recurse -File -Filter 'Connector.Upgrade.MachineHelper.exe')[0].FullName) -Parent))
         replacedFixtureProductCode = $oldIdentity.ProductCode
     } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $Output 'staging-proof.json') -Encoding utf8
 } finally {
