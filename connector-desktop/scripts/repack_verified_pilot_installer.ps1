@@ -15,8 +15,8 @@ $pins = [ordered]@{
     'Connector.Upgrade.LaunchBridge.exe' = 'ba1e0528b14b65229df00785859ff9683ffc8e978256d03ccd25c68eb1462a01'
     'platform-build-guard.cs' = '99f6d32467f46042a367fad6383d088432c54a9e181e72a92d397a314a1a4c09'
 }
-$release = gh api "repos/$env:GITHUB_REPOSITORY/releases/tags/$InputRelease" | ConvertFrom-Json
-if ($LASTEXITCODE -ne 0 -or -not $release.draft) { throw 'Inputs must remain in an unpublished draft.' }
+$release = gh release view $InputRelease --repo $env:GITHUB_REPOSITORY --json isDraft | ConvertFrom-Json
+if ($LASTEXITCODE -ne 0 -or -not $release.isDraft) { throw 'Inputs must remain in an unpublished draft.' }
 foreach ($name in $pins.Keys) {
     gh release download $InputRelease --repo $env:GITHUB_REPOSITORY --pattern $name --dir $inputs
     if ($LASTEXITCODE -ne 0) { throw "Input download failed: $name" }
