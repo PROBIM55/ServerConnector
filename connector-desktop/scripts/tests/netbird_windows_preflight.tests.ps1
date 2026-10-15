@@ -87,6 +87,12 @@ function New-Snapshot {
 Assert-Equal (ConvertTo-PackedMsiGuid '{463D0C9D-ED41-451E-A44F-937932C8B267}') 'D9C0D36414DEE1544AF43997238C2B76' 'MSI packed ProductCode.'
 Assert-Equal (Test-NetBirdVersionText '0.79.0.35374398338' '0.79.0') $true 'Numeric vendor build version.'
 Assert-Equal (Test-NetBirdVersionText '0.79.0-rc1' '0.79.0') $false 'Prerelease version must not match pinned release.'
+$mutationRights = Get-NetBirdMutationRights
+Assert-Equal ([int]([long][Security.AccessControl.FileSystemRights]::ReadAndExecute -band $mutationRights)) 0 'Normal users RX access is not a write permission.'
+Assert-Equal ([int]([long][Security.AccessControl.FileSystemRights]::Synchronize -band $mutationRights)) 0 'Synchronize does not permit mutation.'
+Assert-Equal (([long][Security.AccessControl.FileSystemRights]::WriteData -band $mutationRights) -ne 0) $true 'WriteData remains rejected for untrusted users.'
+Assert-Equal (([long]0x40000000 -band $mutationRights) -ne 0) $true 'GenericWrite remains rejected for untrusted users.'
+Assert-Equal (([long]0x10000000 -band $mutationRights) -ne 0) $true 'GenericAll remains rejected for untrusted users.'
 
 $cases = @(
     @{ scenario = 'absent'; state = 'absent'; install = $true; use = $false },

@@ -108,6 +108,20 @@ function Get-NetBirdExpectedIdentity {
     }
 }
 
+function Get-NetBirdMutationRights {
+    # FullControl/Modify are composite flags that include read and synchronize.
+    # Including them in an intersection mask rejects every normal RX rule.
+    return [long]0x50000000 -bor
+        [long][Security.AccessControl.FileSystemRights]::WriteData -bor
+        [long][Security.AccessControl.FileSystemRights]::AppendData -bor
+        [long][Security.AccessControl.FileSystemRights]::WriteAttributes -bor
+        [long][Security.AccessControl.FileSystemRights]::WriteExtendedAttributes -bor
+        [long][Security.AccessControl.FileSystemRights]::ChangePermissions -bor
+        [long][Security.AccessControl.FileSystemRights]::TakeOwnership -bor
+        [long][Security.AccessControl.FileSystemRights]::Delete -bor
+        [long][Security.AccessControl.FileSystemRights]::DeleteSubdirectoriesAndFiles
+}
+
 function Test-ProtectedWindowsPath {
     param(
         [Parameter(Mandatory = $true)][string]$Path,
@@ -125,13 +139,7 @@ function Test-ProtectedWindowsPath {
             'S-1-5-32-544',
             'S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464'
         )
-        $writeMask = [Security.AccessControl.FileSystemRights]::Write -bor
-            [Security.AccessControl.FileSystemRights]::Modify -bor
-            [Security.AccessControl.FileSystemRights]::FullControl -bor
-            [Security.AccessControl.FileSystemRights]::ChangePermissions -bor
-            [Security.AccessControl.FileSystemRights]::TakeOwnership -bor
-            [Security.AccessControl.FileSystemRights]::Delete -bor
-            [Security.AccessControl.FileSystemRights]::DeleteSubdirectoriesAndFiles
+        $writeMask = Get-NetBirdMutationRights
         $relative = $fullPath.Substring([Math]::Min($fullRoot.Length, $fullPath.Length)).TrimStart('\')
         $current = $fullRoot
         foreach ($part in @($relative.Split('\', [StringSplitOptions]::RemoveEmptyEntries))) {
@@ -146,7 +154,8 @@ function Test-ProtectedWindowsPath {
             $rules = $acl.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier])
             foreach ($rule in $rules) {
                 if ($rule.AccessControlType -eq [Security.AccessControl.AccessControlType]::Allow -and
-                    (($rule.FileSystemRights -band $writeMask) -ne 0) -and
+                    ($rule.PropagationFlags -band [Security.AccessControl.PropagationFlags]::InheritOnly) -eq 0 -and
+                    (([long]$rule.FileSystemRights -band $writeMask) -ne 0) -and
                     $trustedSids -notcontains $rule.IdentityReference.Value) {
                     $reasons.Add("untrusted-writer:$current")
                     break

@@ -327,7 +327,7 @@ foreach ($requiredPath in @($script:BuildPackageUpdate, $script:BootstrapperProj
                             $script:NetBirdVerifier, $script:NetBirdLock)) {
     [void](Assert-ExistingRegularFile $requiredPath 'Required release source')
 }
-$script:NetBirdPreflight = Assert-PinnedSourceHash $script:NetBirdPreflight 'NetBird preflight script' 'B410F5BA38FCE1DA70789578BF6F7A3B73BCEA2173DFE79142700F67C339A049'
+$script:NetBirdPreflight = Assert-PinnedSourceHash $script:NetBirdPreflight 'NetBird preflight script' 'B549546E97D6EE68B415DAD4789FCF19D979939CA49211B3F0DCCCD4E56BC0BB'
 $script:NetBirdVerifier = Assert-PinnedSourceHash $script:NetBirdVerifier 'NetBird verifier script' 'DFFFA2EC3BBDFB57583F66AB651F12259AFFFBCF39AA014B11411F9C152EA834'
 $script:NetBirdLock = Assert-PinnedSourceHash $script:NetBirdLock 'NetBird identity lock' 'EE48F195FAE2A08B83C0A44F238C237C79F05F27BCA8DBC995542B1FCD23FA96'
 $outputRoot = Assert-ProtectedOutputRoot $ProtectedOutputRoot
