@@ -1,0 +1,52 @@
+name: Verify private Platform identity in cloud
+on:
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Exact private Platform source commit
+        required: true
+        type: string
+      diagnostics_public_key_pem:
+        description: Public RSA key for encrypted private diagnostics
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: platform-identity-cloud
+  cancel-in-progress: false
+jobs:
+  identity:
+    runs-on: windows-latest
+    environment: production
+    timeout-minutes: 35
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+      DOTNET_GCHeapHardLimit: '0x80000000'
+      MSBUILDDISABLENODEREUSE: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify exact private source without public source or logs
+        env:
+          PRIVATE_PLATFORM_READ_KEY: ${{ secrets.TEMP_PLATFORM_IDENTITY_READ_KEY }}
+          PRIVATE_SOURCE_SHA: ${{ inputs.source_sha }}
+          DIAGNOSTICS_PUBLIC_KEY_PEM: ${{ inputs.diagnostics_public_key_pem }}
+        run: ./.github/scripts/verify-platform-identity-cloud.ps1
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: encrypted-platform-identity-diagnostics
+          path: '${{ runner.temp }}/platform-identity-private/diagnostics.enc.json'
+          if-no-files-found: error
+          retention-days: 7
