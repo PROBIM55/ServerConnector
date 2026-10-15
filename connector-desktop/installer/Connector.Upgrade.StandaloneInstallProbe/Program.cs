@@ -4,6 +4,7 @@ using System.Security.Principal;
 using System.Text.Json;
 using System.Windows.Automation;
 using Connector.CommonAccess.Runtime;
+using Connector.Network;
 using Connector.Upgrade.HelperReleaseTrust;
 using Connector.Upgrade.Velopack;
 
@@ -91,6 +92,35 @@ try
 }
 catch (Exception error)
 {
-    File.WriteAllText(output, JsonSerializer.Serialize(new { success = false, failure = error.Message, type = error.GetType().Name }));
+    object? preflightDiagnostic = null;
+    if (error is NetworkGateException networkFailure)
+    {
+        Console.WriteLine("NETBIRD_FAILURE_CODE=" + networkFailure.Code);
+        try
+        {
+            Progress("netbird-failure-diagnostics");
+            var networkRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Structura Connector", "NetBird");
+            var start = new ProcessStartInfo(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "WindowsPowerShell", "v1.0", "powershell.exe"))
+                { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
+            foreach (var argument in new[] { "-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File",
+                         Path.Combine(networkRoot, "scripts", "netbird_windows_preflight.ps1"), "-MsiPath",
+                         Path.Combine(networkRoot, "installer", "netbird_installer_0.79.0_windows_amd64.msi") }) start.ArgumentList.Add(argument);
+            var timer = Stopwatch.StartNew();
+            using var diagnostic = Process.Start(start)!;
+            var stdout = diagnostic.StandardOutput.ReadToEndAsync();
+            var stderr = diagnostic.StandardError.ReadToEndAsync();
+            try { await diagnostic.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(90)); }
+            catch (TimeoutException) { diagnostic.Kill(true); throw; }
+            using var report = JsonDocument.Parse(await stdout);
+            var root = report.RootElement;
+            preflightDiagnostic = new { elapsedSeconds = timer.Elapsed.TotalSeconds, exitCode = diagnostic.ExitCode,
+                state = root.GetProperty("state").Clone(), reasons = root.GetProperty("reasons").Clone(), checks = root.GetProperty("checks").Clone() };
+            Console.WriteLine("NETBIRD_READONLY_DIAGNOSTIC=" + JsonSerializer.Serialize(preflightDiagnostic));
+            _ = await stderr; // Never emit raw native output or environment data.
+        }
+        catch (Exception diagnosticError) { preflightDiagnostic = new { failure = diagnosticError.GetType().Name }; }
+    }
+    File.WriteAllText(output, JsonSerializer.Serialize(new { success = false, failure = error.Message, type = error.GetType().Name,
+        diagnosticCode = error is NetworkGateException networkError ? networkError.Code : null, preflightDiagnostic }));
     Environment.ExitCode = 1;
 }
