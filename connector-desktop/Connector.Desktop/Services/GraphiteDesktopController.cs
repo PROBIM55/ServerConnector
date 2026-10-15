@@ -266,7 +266,7 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
         switch (request.Command)
         {
             case "connect":
-                if (_commonAccess.ShouldUse()) StartCommonConnect(null, _commonAccess.HasStoredCredential, cancellationToken);
+                if (_commonAccess.ShouldUse()) StartCommonConnect(null, false, cancellationToken);
                 else if (_mode == "platform") StartPlatformConnect(ReadField(request.Payload, "token"), reconnect: false, cancellationToken);
                 else StartConnect(ReadField(request.Payload, "token"), cancellationToken);
                 break;

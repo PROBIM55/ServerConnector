@@ -128,7 +128,6 @@
   function action(id,element){
     rememberFields();
     if(desktop&&!['show-token','dialog','release-notes'].includes(id)){
-      if(id==='connect'&&connection().hasSavedCredential){desktopAction('reconnect',element);return;}
       desktopAction(id,element);return;
     }
     if(['pick-zip','pick-folder','pick-ifc'].includes(id)){document.getElementById({'pick-zip':'zip-input','pick-folder':'folder-input','pick-ifc':'ifc-input'}[id]).click();return;}
