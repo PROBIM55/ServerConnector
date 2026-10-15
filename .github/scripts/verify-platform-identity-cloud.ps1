@@ -11,8 +11,13 @@ $key=Join-Path $root 'source-read-key.pem'
 $hosts=Join-Path $root 'known_hosts'
 $source=Join-Path $root 'source'
 $log=Join-Path $root 'private-build.log'
+[IO.File]::WriteAllText($log,'',[Text.UTF8Encoding]::new($false))
 $exitCode=1
 try {
+    $sdk=@(& dotnet --list-sdks|ForEach-Object {if($_ -match '^(8\.0\.\d+) '){$Matches[1]}}|Sort-Object {[version]$_}|Select-Object -Last 1)
+    if($sdk.Count -ne 1){throw 'Pinned .NET 8 SDK is unavailable.'}
+    @{sdk=@{version=$sdk[0];rollForward='disable'}}|ConvertTo-Json|
+        Set-Content -LiteralPath (Join-Path $root 'global.json') -Encoding utf8
     [IO.File]::WriteAllText($key,$env:PRIVATE_PLATFORM_READ_KEY,[Text.UTF8Encoding]::new($false))
     $env:PRIVATE_PLATFORM_READ_KEY=''
     $acl=Get-Acl -LiteralPath $key
