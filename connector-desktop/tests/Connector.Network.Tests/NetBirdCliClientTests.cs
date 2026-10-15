@@ -81,7 +81,7 @@ public sealed class NetBirdCliClientTests : IDisposable
     [InlineData("{\"daemonStatus\":\"NeedsLogin\",\"management\":{\"url\":\"https://foreign.example.test\"}}")]
     public async Task LoginRequiredWithActiveOrIncompleteState_DoesNotPermitChangingManagement(string status)
     {
-        var runner = new QueueRunner(new(0, status, ""));
+        var runner = new QueueRunner(new NetBirdCommandResult(0, status, ""));
         var client = CreateClient(runner);
         await Assert.ThrowsAsync<NetworkGateException>(() => client.ConnectAsync(
             new NetworkOverlayBootstrap(new Uri("https://vpn.example.test"), "not-used")).AsTask());
