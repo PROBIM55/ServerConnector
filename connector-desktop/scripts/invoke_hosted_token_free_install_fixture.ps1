@@ -10,6 +10,15 @@ if ($env:GITHUB_ACTIONS -ne 'true' -or $env:RUNNER_ENVIRONMENT -ne 'github-hoste
     throw 'Token-free install verification requires disposable hosted Windows.'
 }
 if (!(Get-Service -Name NetBird -ErrorAction SilentlyContinue)) { throw 'The EXE did not install NetBird by default.' }
+Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+using System.Text;
+public static class StructuraFixtureProfile {
+    [DllImport("userenv.dll", CharSet=CharSet.Unicode, SetLastError=true)]
+    public static extern int CreateProfile(string sid, string userName, StringBuilder profilePath, uint length);
+}
+'@
 $publicRoot = Join-Path $env:PUBLIC ('StructuraInstallFixture-' + [Guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $publicRoot | Out-Null
 $acl = Get-Acl -LiteralPath $publicRoot
@@ -46,36 +55,60 @@ try {
         $password = ConvertTo-SecureString $plain -AsPlainText -Force
         $user = New-LocalUser -Name $name -Password $password -PasswordNeverExpires
         Add-LocalGroupMember -SID 'S-1-5-32-545' -Member $user
-        $taskName = 'StructuraTokenFreeFixture-' + $mode
         $resultRoot = Join-Path $publicRoot $mode
         New-Item -ItemType Directory -Path $resultRoot | Out-Null
         $resultAcl = Get-Acl -LiteralPath $resultRoot
         $resultAcl.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new($user.SID,'Modify','ContainerInherit,ObjectInherit','None','Allow'))
         Set-Acl -LiteralPath $resultRoot -AclObject $resultAcl
         $resultPath = Join-Path $resultRoot 'result.json'
+        $process = $null
         try {
-            $arguments = '"' + $resultPath + '"'
-            if ($mode -ceq 'upgrade') { $arguments += ' "' + $previous + '"' }
-            $action = New-ScheduledTaskAction -Execute (Join-Path $probeRoot 'Connector.Upgrade.StandaloneInstallProbe.exe') -Argument $arguments -WorkingDirectory $probeRoot
-            $task = New-ScheduledTask -Action $action -Principal (New-ScheduledTaskPrincipal -UserId $user.SID.Value -LogonType Password -RunLevel Limited) `
-                -Settings (New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Minutes 10))
-            Register-ScheduledTask -TaskName $taskName -InputObject $task -User "$env:COMPUTERNAME\$name" -Password $plain | Out-Null
-            Start-ScheduledTask -TaskName $taskName
+            # A demand-started Password task on hosted Windows remained queued
+            # forever (SCHED_S_TASK_HAS_NOT_RUN, LastRunTime 1999-11-30). Use the
+            # normal Windows logon API directly, with a real ordinary-user profile.
+            $profile = [Text.StringBuilder]::new(32768)
+            $created = [StructuraFixtureProfile]::CreateProfile($user.SID.Value,$name,$profile,32768)
+            if ($created -ne 0) { throw ('Cannot create disposable user profile: 0x' + $created.ToString('X8')) }
+            $start = [Diagnostics.ProcessStartInfo]::new((Join-Path $probeRoot 'Connector.Upgrade.StandaloneInstallProbe.exe'))
+            $start.UseShellExecute = $false
+            $start.UserName = $name
+            $start.Domain = $env:COMPUTERNAME
+            $start.Password = $password
+            $start.LoadUserProfile = $true
+            $start.WorkingDirectory = $probeRoot
+            $start.ArgumentList.Add($resultPath)
+            if ($mode -ceq 'upgrade') { $start.ArgumentList.Add($previous) }
+            # Do not inherit runner credentials or its APPDATA/USERPROFILE paths.
+            $start.Environment.Clear()
+            foreach ($key in @('SystemRoot','WINDIR','SystemDrive','ComSpec','ProgramFiles','ProgramFiles(x86)','ProgramW6432','CommonProgramFiles','CommonProgramFiles(x86)','CommonProgramW6432','ProgramData','PUBLIC','COMPUTERNAME','PROCESSOR_ARCHITECTURE')) {
+                $value = [Environment]::GetEnvironmentVariable($key)
+                if ($value) { $start.Environment[$key] = $value }
+            }
+            $start.Environment['PATH'] = [Environment]::GetEnvironmentVariable('PATH','Machine')
+            $start.Environment['USERNAME'] = $name
+            $start.Environment['USERDOMAIN'] = $env:COMPUTERNAME
+            $start.Environment['USERPROFILE'] = $profile.ToString()
+            $start.Environment['LOCALAPPDATA'] = Join-Path $profile.ToString() 'AppData/Local'
+            $start.Environment['APPDATA'] = Join-Path $profile.ToString() 'AppData/Roaming'
+            $start.Environment['TEMP'] = Join-Path $resultRoot 'temp'
+            $start.Environment['TMP'] = $start.Environment['TEMP']
+            New-Item -ItemType Directory -Path $start.Environment['TEMP'] | Out-Null
+            $process = [Diagnostics.Process]::Start($start)
             $timer = [Diagnostics.Stopwatch]::StartNew()
             $lastProgress = ''
+            $stageTimer = [Diagnostics.Stopwatch]::StartNew()
             do {
                 Start-Sleep -Seconds 2
-                $state = (Get-ScheduledTask -TaskName $taskName).State
-                $info = Get-ScheduledTaskInfo -TaskName $taskName
                 if (Test-Path -LiteralPath ($resultPath + '.progress.json')) {
                     $progress = Get-Content -LiteralPath ($resultPath + '.progress.json') -Raw
-                    if ($progress -cne $lastProgress) { Write-Host ($mode + ': ' + $progress); $lastProgress = $progress }
+                    if ($progress -cne $lastProgress) { Write-Host ($mode + ': ' + $progress); $lastProgress = $progress; $stageTimer.Restart() }
                 }
-                if ($state -ne 'Running' -and $info.LastRunTime -gt (Get-Date).AddMinutes(-10) -and !(Test-Path -LiteralPath $resultPath)) {
-                    throw ('Native task ended before producing evidence: 0x' + $info.LastTaskResult.ToString('X8'))
+                if ($process.HasExited -and !(Test-Path -LiteralPath $resultPath)) {
+                    throw ('Native probe exited before producing evidence: ' + $process.ExitCode)
                 }
-                if ($timer.Elapsed.TotalMinutes -gt 9) { throw 'Native user-stage fixture timed out.' }
-            } while ($state -eq 'Running' -or !(Test-Path -LiteralPath $resultPath))
+                if (!$lastProgress -and $timer.Elapsed.TotalSeconds -gt 30) { throw 'Native probe did not start within 30 seconds.' }
+                if ($stageTimer.Elapsed.TotalSeconds -gt 200 -or $timer.Elapsed.TotalMinutes -gt 7) { throw ('Native fixture stalled at: ' + $lastProgress) }
+            } while (!(Test-Path -LiteralPath $resultPath))
             $result = Get-Content -LiteralPath $resultPath -Raw | ConvertFrom-Json
             if (!$result.success -or $result.tokenRequired -or $result.enrollmentCreated -or $result.blenderIncluded -or
                 !$result.defaultCallerVerified -or !$result.repeatedInstallVerified -or !$result.desktopWebViewVerified -or !$result.bundledGitVerified) {
@@ -86,17 +119,16 @@ try {
         } finally {
             # Retain only this disposable user's probe results and bounded process metadata.
             # No command lines, passwords, environment variables or user data are captured.
-            Get-ScheduledTaskInfo -TaskName $taskName -ErrorAction SilentlyContinue |
-                Select-Object LastRunTime,LastTaskResult | ConvertTo-Json |
-                Set-Content -LiteralPath (Join-Path (Split-Path $Output) ($mode + '-task.json'))
             Get-Process -Name 'Connector.Upgrade.StandaloneInstallProbe','Connector.Upgrade.Bootstrapper','Connector.Desktop','Update','Setup' -ErrorAction SilentlyContinue |
                 Select-Object ProcessName,Id,SessionId,Responding,MainWindowHandle,CPU |
                 ConvertTo-Json | Set-Content -LiteralPath (Join-Path (Split-Path $Output) ($mode + '-processes.json'))
             foreach ($evidence in Get-ChildItem -LiteralPath $resultRoot -File -Filter '*.json') {
                 Copy-Item -LiteralPath $evidence.FullName -Destination (Join-Path (Split-Path $Output) ($mode + '-' + $evidence.Name))
             }
-            Stop-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
-            Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
+            if ($null -ne $process) {
+                if (!$process.HasExited) { $process.Kill($true); [void]$process.WaitForExit(5000) }
+                $process.Dispose()
+            }
             Remove-LocalUser -Name $name
             $plain = $null
             $password = $null
