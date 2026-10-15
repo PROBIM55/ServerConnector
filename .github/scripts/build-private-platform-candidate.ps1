@@ -9,7 +9,12 @@ $key=Join-Path $root 'source-read-key.pem';$hosts=Join-Path $root 'known_hosts'
 $source=Join-Path $root 'source';$log=Join-Path $root 'private-build.log'
 [IO.File]::WriteAllText($log,'',[Text.UTF8Encoding]::new($false))
 $exitCode=1
+$builder=$null
 try {
+    $os=Get-CimInstance Win32_OperatingSystem
+    Write-Output ('Hosted memory worker: totalMiB='+[math]::Round($os.TotalVisibleMemorySize/1024)+' freeMiB='+[math]::Round($os.FreePhysicalMemory/1024))
+    if([long]$os.FreePhysicalMemory*1KB -lt 12GB){throw 'Hosted worker requires 8 GiB Node heap plus 4 GiB free-memory reserve'}
+
     $sdk=@(& dotnet --list-sdks|ForEach-Object {if($_ -match '^(8\.0\.\d+) '){$Matches[1]}}|Sort-Object {[version]$_}|Select-Object -Last 1)
     if($sdk.Count -ne 1){throw 'Pinned .NET 8 SDK is unavailable'}
     @{sdk=@{version=$sdk[0];rollForward='disable'}}|ConvertTo-Json|Set-Content (Join-Path $root 'global.json') -Encoding utf8
@@ -38,10 +43,43 @@ try {
     $evidencePath=Join-Path $root 'cloud-evidence.json'
     $evidence|ConvertTo-Json|Set-Content $evidencePath -Encoding utf8
     Write-Output 'Exact private source available; product compilation runs only on disposable hosted Windows.'
+    # The coordinator never executes the private builder in its own process.
+    # Source credentials are gone before any builder child or monitor is started.
+    $builderEntry=Join-Path $root 'invoke-private-builder.ps1'
+    $builderScript=@'
+$ErrorActionPreference='Stop'
+try {
+    Set-Location -LiteralPath '__SOURCE__'
+    & './scripts/release/build_platform_release_bundle.ps1' -ExpectedSha '__SHA__' -CloudBuildEvidencePath '__EVIDENCE__' *>> '__LOG__'
+    if($LASTEXITCODE -ne 0){throw 'Private product builder failed'}
+    exit 0
+} catch {
+    [IO.File]::AppendAllText('__LOG__',"`nPrivate builder process failed: "+$_.Exception.Message)
+    exit 1
+}
+'@
+    foreach($pair in @(@('__SOURCE__',$source),@('__SHA__',$actual),@('__EVIDENCE__',$evidencePath),@('__LOG__',$log))){
+        $builderScript=$builderScript.Replace($pair[0],([string]$pair[1]).Replace("'","''"))
+    }
+    [IO.File]::WriteAllText($builderEntry,$builderScript,[Text.UTF8Encoding]::new($false))
+    $hostOut=Join-Path $root 'builder-host.stdout.log';$hostError=Join-Path $root 'builder-host.stderr.log'
+    $builder=Start-Process -FilePath (Get-Process -Id $PID).Path -ArgumentList @('-NoProfile','-NonInteractive','-File',('"'+$builderEntry+'"')) `
+        -WorkingDirectory $source -WindowStyle Hidden -RedirectStandardOutput $hostOut -RedirectStandardError $hostError -PassThru
+    $memoryStop=Join-Path $root 'memory-reserve-stop.txt'
+    while(!$builder.WaitForExit(2000)){
+        if([long](Get-CimInstance Win32_OperatingSystem).FreePhysicalMemory*1KB -lt 4GB){
+            [IO.File]::WriteAllText($memoryStop,'Hosted builder and its children stopped to preserve 4 GiB free RAM.')
+            & taskkill.exe /PID $builder.Id /T /F *>> $log
+            throw 'Hosted builder was stopped at the memory reserve'
+        }
+    }
+    foreach($hostLog in @($hostOut,$hostError)){
+        if(Test-Path -LiteralPath $hostLog){[IO.File]::AppendAllText($log,[IO.File]::ReadAllText($hostLog))}
+    }
+    if($builder.ExitCode -ne 0 -or (Test-Path -LiteralPath $memoryStop)){throw 'Private builder did not complete within its memory policy'}
+    $builder.Dispose();$builder=$null
     Push-Location $source
     try {
-        & ./scripts/release/build_platform_release_bundle.ps1 -ExpectedSha $actual -CloudBuildEvidencePath $evidencePath *>> $log
-        if($LASTEXITCODE -ne 0){throw 'Private product build failed'}
         . ./scripts/release/cloud_candidate_crypto.ps1
         $payload=Join-Path $root 'ready-bundles.zip'
         $archive=[IO.Compression.ZipFile]::Open($payload,[IO.Compression.ZipArchiveMode]::Create)
@@ -55,7 +93,15 @@ try {
     } finally {Pop-Location}
 } catch {
     [IO.File]::AppendAllText($log,"`nPrivate build stage failed: "+$_.Exception.Message)
+    $memoryStop=Join-Path $root 'memory-reserve-stop.txt'
+    if(Test-Path -LiteralPath $memoryStop){[IO.File]::AppendAllText($log,"`n"+[IO.File]::ReadAllText($memoryStop))}
 } finally {
+    if($builder){
+        if(!$builder.HasExited){
+            try {& taskkill.exe /PID $builder.Id /T /F *>> $log}catch{[IO.File]::AppendAllText($log,"`nBuilder termination requested.")}
+        }
+        $builder.Dispose()
+    }
     if(Test-Path -LiteralPath $key){Remove-Item -LiteralPath $key}
     $env:GIT_SSH_COMMAND='';$env:PRIVATE_PLATFORM_READ_KEY=''
     $diagnostics=[Text.Encoding]::UTF8.GetBytes((@{sourceSha=$env:PRIVATE_SOURCE_SHA;exitCode=$exitCode;log=[IO.File]::ReadAllText($log)}|ConvertTo-Json -Depth 4 -Compress))
