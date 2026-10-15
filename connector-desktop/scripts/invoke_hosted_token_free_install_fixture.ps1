@@ -66,8 +66,9 @@ try {
             # A demand-started Password task on hosted Windows remained queued
             # forever (SCHED_S_TASK_HAS_NOT_RUN, LastRunTime 1999-11-30). Use the
             # normal Windows logon API directly, with a real ordinary-user profile.
-            $profile = [Text.StringBuilder]::new(32768)
-            $created = [StructuraFixtureProfile]::CreateProfile($user.SID.Value,$name,$profile,32768)
+            # Userenv's profile RPC accepts MAX_PATH, not the extended path limit.
+            $profile = [Text.StringBuilder]::new(260)
+            $created = [StructuraFixtureProfile]::CreateProfile($user.SID.Value,$name,$profile,260)
             if ($created -ne 0) { throw ('Cannot create disposable user profile: 0x' + $created.ToString('X8')) }
             $start = [Diagnostics.ProcessStartInfo]::new((Join-Path $probeRoot 'Connector.Upgrade.StandaloneInstallProbe.exe'))
             $start.UseShellExecute = $false
