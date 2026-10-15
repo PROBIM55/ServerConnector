@@ -1,0 +1,90 @@
+name: Verify Built Unified Connector
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: unified-connector-candidate
+  cancel-in-progress: false
+jobs:
+  verify:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    environment: production
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PRODUCER_RUN: '38608126799'
+      PRODUCER_SHA: '18b8cd8b859db35b57d90b19eeaa1221d0671258'
+      PRODUCER_DIGEST: '5e9bd6fd3d171b48a6a12327b3bbebf68b79dbfc60aeefb4bf83c9ac9779f90d'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Retrieve exact previously built runtime
+        id: runtime
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $source = gh api "repos/$env:GITHUB_REPOSITORY/actions/runs/$env:PRODUCER_RUN" | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0 -or $source.head_sha -cne $env:PRODUCER_SHA) { throw 'Runtime source differs.' }
+          $items = gh api "repos/$env:GITHUB_REPOSITORY/actions/runs/$env:PRODUCER_RUN/artifacts" | ConvertFrom-Json
+          $artifact = @($items.artifacts | Where-Object name -CEQ 'unverified-runtime-diagnostics-1.1.1')
+          if ($artifact.Count -ne 1 -or $artifact[0].expired -or $artifact[0].digest -cne ('sha256:' + $env:PRODUCER_DIGEST)) { throw 'Runtime artifact differs.' }
+          $archive = Join-Path $env:RUNNER_TEMP 'runtime.zip'
+          gh api "repos/$env:GITHUB_REPOSITORY/actions/artifacts/$($artifact[0].id)/zip" > $archive
+          if ($LASTEXITCODE -ne 0 -or (Get-FileHash -LiteralPath $archive).Hash.ToLowerInvariant() -cne $env:PRODUCER_DIGEST) { throw 'Runtime download digest differs.' }
+          $root = Join-Path $env:RUNNER_TEMP 'runtime'
+          Expand-Archive -LiteralPath $archive -DestinationPath $root
+          $exe = @(Get-ChildItem -LiteralPath $root -Recurse -File -Filter 'Structura.Connector.Installer.exe')
+          if ($exe.Count -ne 1) { throw 'Runtime installer is ambiguous.' }
+          $run = Split-Path (Split-Path $exe[0].FullName)
+          # The downloaded artifact is intentionally unverified. Only the native tests
+          # below can promote these exact bytes into a distributable artifact.
+          "run=$run" >> $env:GITHUB_OUTPUT
+      - name: Verify actual installer under ordinary users
+        env:
+          ACCESS_CONFIGURATION: ${{ secrets.UNIFIED_CONNECTOR_ACCESS_CONFIGURATION_JSON }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $config = Join-Path $env:RUNNER_TEMP 'expected-connector-access.json'
+          [IO.File]::WriteAllText($config, (($env:ACCESS_CONFIGURATION | ConvertFrom-Json) | ConvertTo-Json -Depth 30))
+          Remove-Item Env:ACCESS_CONFIGURATION
+          $guard = 'connector-desktop/scripts/resource-guard/platform-build-guard.cs'
+          if ((Get-FileHash -LiteralPath $guard).Hash.ToLowerInvariant() -cne '99f6d32467f46042a367fad6383d088432c54a9e181e72a92d397a314a1a4c09') { throw 'Resource guard changed.' }
+          Add-Type -Path $guard
+          $arguments = @('-NoProfile','-NonInteractive','-File',
+            (Join-Path $env:GITHUB_WORKSPACE 'connector-desktop/scripts/invoke_hosted_unified_upgrade_fixture.ps1'),
+            '-RunDirectory','${{ steps.runtime.outputs.run }}','-ExpectedConfiguration',$config,'-RuntimeSourceSha',$env:PRODUCER_SHA)
+          $exit = [PlatformBuild.Guard]::RunWithPolicy((Get-Command pwsh).Source,$arguments,
+            $env:GITHUB_WORKSPACE,'unified-built-runtime-verification',0,$null,[uint64](2GB),[uint64](2GB),100,
+            [PlatformBuild.Guard]::MutexName,[Func[PlatformBuild.Guard+Memory]]{ [PlatformBuild.Guard]::ReadMemory() })
+          if ($exit -ne 0) { throw "Native verification failed ($exit)." }
+          $run = '${{ steps.runtime.outputs.run }}'
+          $delivery = Join-Path $env:RUNNER_TEMP 'verified-installer'
+          New-Item -ItemType Directory -Path $delivery | Out-Null
+          Copy-Item -LiteralPath (Join-Path $run 'unified-installer/Structura.Connector.Installer.exe'),(Join-Path $run 'native-upgrade-proof.json') -Destination $delivery
+          $hash = (Get-FileHash -LiteralPath (Join-Path $delivery 'Structura.Connector.Installer.exe')).Hash.ToLowerInvariant()
+          "$hash  Structura.Connector.Installer.exe" | Set-Content -LiteralPath (Join-Path $delivery 'checksums.sha256') -Encoding ascii
+      - name: Upload verified installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: unified-connector-installer-1.1.1
+          path: ${{ runner.temp }}/verified-installer/*
+          if-no-files-found: error
+          retention-days: 14
+      - name: Retain native diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: built-runtime-verification-diagnostics
+          path: |
+            ${{ steps.runtime.outputs.run }}/native-upgrade-fixture/*.json
+            ${{ steps.runtime.outputs.run }}/native-upgrade-fixture/*.log
+          if-no-files-found: warn
+          retention-days: 3

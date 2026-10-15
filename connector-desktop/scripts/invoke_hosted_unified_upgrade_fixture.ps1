@@ -1,7 +1,8 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)][string]$RunDirectory,
-    [Parameter(Mandatory)][string]$ExpectedConfiguration
+    [Parameter(Mandatory)][string]$ExpectedConfiguration,
+    [ValidatePattern('^[a-f0-9]{40}$')][string]$RuntimeSourceSha = $env:GITHUB_SHA
 )
 $ErrorActionPreference='Stop'
 Set-StrictMode -Version Latest
@@ -47,7 +48,8 @@ if (!$proof.installedRuntimePayloadsVerified -or !$proof.nativeCallerStarted -or
     !$proof.defaultInstallationVerified) {
     throw 'Native upgrade evidence is incomplete.'
 }
-$proof | Add-Member -MemberType NoteProperty -Name sourceSha -Value $env:GITHUB_SHA
+$proof | Add-Member -MemberType NoteProperty -Name sourceSha -Value $RuntimeSourceSha
+$proof | Add-Member -MemberType NoteProperty -Name verificationSourceSha -Value $env:GITHUB_SHA
 $proof | Add-Member -MemberType NoteProperty -Name productCode -Value $productCode
 $proof | Add-Member -MemberType NoteProperty -Name installerSha256 -Value (
     (Get-FileHash -LiteralPath (Join-Path $RunDirectory 'unified-installer/Structura.Connector.Installer.exe')).Hash.ToLowerInvariant())

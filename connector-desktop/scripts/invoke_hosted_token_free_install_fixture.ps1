@@ -62,10 +62,15 @@ try {
             Register-ScheduledTask -TaskName $taskName -InputObject $task -User "$env:COMPUTERNAME\$name" -Password $plain | Out-Null
             Start-ScheduledTask -TaskName $taskName
             $timer = [Diagnostics.Stopwatch]::StartNew()
+            $lastProgress = ''
             do {
                 Start-Sleep -Seconds 2
                 $state = (Get-ScheduledTask -TaskName $taskName).State
                 $info = Get-ScheduledTaskInfo -TaskName $taskName
+                if (Test-Path -LiteralPath ($resultPath + '.progress.json')) {
+                    $progress = Get-Content -LiteralPath ($resultPath + '.progress.json') -Raw
+                    if ($progress -cne $lastProgress) { Write-Host ($mode + ': ' + $progress); $lastProgress = $progress }
+                }
                 if ($state -ne 'Running' -and $info.LastRunTime -gt (Get-Date).AddMinutes(-10) -and !(Test-Path -LiteralPath $resultPath)) {
                     throw ('Native task ended before producing evidence: 0x' + $info.LastTaskResult.ToString('X8'))
                 }
@@ -79,6 +84,17 @@ try {
             $results += $result
             Write-Host "PASS: $mode, repeated install, actual desktop UI, no network, no token, no Blender."
         } finally {
+            # Retain only this disposable user's probe results and bounded process metadata.
+            # No command lines, passwords, environment variables or user data are captured.
+            Get-ScheduledTaskInfo -TaskName $taskName -ErrorAction SilentlyContinue |
+                Select-Object LastRunTime,LastTaskResult | ConvertTo-Json |
+                Set-Content -LiteralPath (Join-Path (Split-Path $Output) ($mode + '-task.json'))
+            Get-Process -Name 'Connector.Upgrade.StandaloneInstallProbe','Connector.Upgrade.Bootstrapper','Connector.Desktop','Update','Setup' -ErrorAction SilentlyContinue |
+                Select-Object ProcessName,Id,SessionId,Responding,MainWindowHandle,CPU |
+                ConvertTo-Json | Set-Content -LiteralPath (Join-Path (Split-Path $Output) ($mode + '-processes.json'))
+            foreach ($evidence in Get-ChildItem -LiteralPath $resultRoot -File -Filter '*.json') {
+                Copy-Item -LiteralPath $evidence.FullName -Destination (Join-Path (Split-Path $Output) ($mode + '-' + $evidence.Name))
+            }
             Stop-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
             Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
             Remove-LocalUser -Name $name
