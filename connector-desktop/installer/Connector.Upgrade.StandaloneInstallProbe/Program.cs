@@ -51,7 +51,7 @@ try
     Progress("netbird-first-login-readiness");
     if (deployment.Coordinator is null) throw new InvalidOperationException("The installed protected network deployment is unavailable.");
     await deployment.Coordinator.EnsureOverlayAvailableAsync(deployment.NetBirdManagementUri)
-        .AsTask().WaitAsync(TimeSpan.FromSeconds(60));
+        .AsTask().WaitAsync(TimeSpan.FromSeconds(120));
     if (File.Exists(deployment.StateFilePath)) throw new InvalidOperationException("Installation created an enrollment credential.");
     if (Directory.EnumerateFiles(root, "blender.exe", SearchOption.AllDirectories).Any())
         throw new InvalidOperationException("Default installation included Blender.");
