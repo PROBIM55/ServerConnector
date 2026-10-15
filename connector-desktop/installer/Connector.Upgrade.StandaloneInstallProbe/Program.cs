@@ -3,6 +3,8 @@ using System.IO;
 using System.Security.Principal;
 using System.Text.Json;
 using System.Windows.Automation;
+using System.Security.Cryptography;
+using System.Runtime.InteropServices;
 using Connector.CommonAccess.Runtime;
 using Connector.Network;
 using Connector.Upgrade.HelperReleaseTrust;
@@ -62,6 +64,39 @@ try
         if (!gitProbe.WaitForExit(10000) || gitProbe.ExitCode != 0) throw new InvalidOperationException("The packaged Git runtime is unavailable.");
     }
     var desktop = Path.Combine(root, "current", UnifiedVelopackApplication.MainExecutable);
+    Progress("application-name-icons-and-shortcuts");
+    using(var registration=Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Uninstall\"+release.PackageId))
+        if(registration?.GetValue("DisplayName") as string != "Structura Connector")
+            throw new InvalidOperationException("Installed Apps still contains the pilot application name.");
+    static byte[] IconBytes(string path)
+    {
+        using var icon=System.Drawing.Icon.ExtractAssociatedIcon(path) ?? throw new InvalidOperationException("Application icon is absent.");
+        using var bitmap=icon.ToBitmap(); using var stream=new MemoryStream();
+        bitmap.Save(stream,System.Drawing.Imaging.ImageFormat.Png); return SHA256.HashData(stream.ToArray());
+    }
+    var expectedIcon=IconBytes(caller);
+    foreach(var file in new[] {desktop,Path.Combine(root,UnifiedVelopackApplication.RootLauncher),Path.Combine(root,"Update.exe")})
+        if(!expectedIcon.SequenceEqual(IconBytes(file))) throw new InvalidOperationException("Installed executable icon differs from the branded installer icon.");
+    object shell=Activator.CreateInstance(Type.GetTypeFromProgID("WScript.Shell")!)!;
+    try
+    {
+        foreach(var location in new[] {Environment.SpecialFolder.DesktopDirectory,Environment.SpecialFolder.Programs})
+        {
+            var directory=Environment.GetFolderPath(location);
+            var path=Path.Combine(directory,"Structura Connector.lnk");
+            if(!File.Exists(path)||File.Exists(Path.Combine(directory,"Structura Connector (новый).lnk")))
+                throw new InvalidOperationException("A normal branded shortcut is missing or the pilot shortcut remains.");
+            object shortcut=((dynamic)shell).CreateShortcut(path);
+            try
+            {
+                if((string)((dynamic)shortcut).TargetPath != Path.Combine(root,UnifiedVelopackApplication.RootLauncher) ||
+                    (string)((dynamic)shortcut).IconLocation != desktop+",0")
+                    throw new InvalidOperationException("Shortcut target or application icon differs.");
+            }
+            finally { Marshal.FinalReleaseComObject(shortcut); }
+        }
+    }
+    finally { Marshal.FinalReleaseComObject(shell); }
     Progress("desktop-start");
     using var app = Process.Start(new ProcessStartInfo(desktop) { UseShellExecute = false })!;
     var ready = false;

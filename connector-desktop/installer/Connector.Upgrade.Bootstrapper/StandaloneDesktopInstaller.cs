@@ -84,6 +84,7 @@ public sealed class ProductionStandaloneDesktopInstaller : IStandaloneDesktopIns
             using var installedImage = File.Open(Path.Combine(installRoot, "current", UnifiedVelopackApplication.MainExecutable),
                 FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
             AssertPhysicalPath(installedImage.SafeFileHandle, Path.Combine(installRoot, "current", UnifiedVelopackApplication.MainExecutable));
+            InstalledApplicationShortcuts.Publish(installRoot);
             status.Show("Structura Connector установлен.");
             return new DesktopInstallationResult(installRoot, release.Version, result.ExitCode == 3010);
         }

@@ -126,6 +126,7 @@ $packTitle = if ($TestAppId) { 'Structura Connector Update Smoke' } else { 'Stru
 $shortcutLocations = if ($TestAppId) { 'None' } else { 'Desktop,StartMenuRoot' }
 Write-Host 'BUILD_STEP: Velopack package'
 & $vpk pack --packId $appId --packTitle $packTitle --packVersion $PackVersion `
+    --packAuthors 'Structura' `
     --shortcuts $shortcutLocations `
     --packDir $publishDir --mainExe $mainExe --runtime 'win-x64' `
     --icon (Join-Path $root 'Connector.Desktop\Assets\platform_connector.ico') --channel $Channel --outputDir $outputDir

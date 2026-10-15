@@ -101,7 +101,10 @@ public sealed class SystemVelopackInstallProbe : IVelopackInstallProbe
         var expectedQuietUninstall = expectedUninstall + " --silent";
         if (!string.Equals(registration.UserSid, _currentUserSid, StringComparison.OrdinalIgnoreCase) ||
             !PathsEqual(registration.InstallLocation, root) ||
-            !string.Equals(registration.Publisher, pin.PackId, StringComparison.Ordinal) ||
+            !(string.Equals(registration.Publisher, "Structura", StringComparison.Ordinal) ||
+              Version.TryParse(metadata.Version.Split('-')[0], out var publisherVersion) &&
+              publisherVersion < new Version(1, 1, 2) &&
+              string.Equals(registration.Publisher, pin.PackId, StringComparison.Ordinal)) ||
             !string.Equals(registration.UninstallString, expectedUninstall, StringComparison.OrdinalIgnoreCase) ||
             !string.Equals(registration.QuietUninstallString, expectedQuietUninstall, StringComparison.OrdinalIgnoreCase))
             return Conflict("The current-user uninstall registration does not match the exact Velopack install.");
