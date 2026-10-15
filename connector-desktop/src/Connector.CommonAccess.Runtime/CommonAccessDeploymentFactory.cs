@@ -128,7 +128,7 @@ public static class CommonAccessDeploymentFactory
             VerifierScriptPath = Path.Combine(root, "scripts", "verify_netbird_installer.ps1"),
             IdentityLockPath = Path.Combine(root, "infra", "netbird", "v0.79.0-windows-x64.lock.json"),
             PinnedMsiPath = Path.Combine(root, "installer", "netbird_installer_0.79.0_windows_amd64.msi"),
-            PreflightScriptSha256 = "8BF7CFB9C667374F7F165A37C42C2B47F9FB4476E89A36995358375CA59490C2",
+            PreflightScriptSha256 = "B410F5BA38FCE1DA70789578BF6F7A3B73BCEA2173DFE79142700F67C339A049",
             VerifierScriptSha256 = "DFFFA2EC3BBDFB57583F66AB651F12259AFFFBCF39AA014B11411F9C152EA834",
             IdentityLockSha256 = "EE48F195FAE2A08B83C0A44F238C237C79F05F27BCA8DBC995542B1FCD23FA96"
         };

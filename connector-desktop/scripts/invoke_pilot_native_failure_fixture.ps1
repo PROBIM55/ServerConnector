@@ -96,7 +96,7 @@ try {
     [ordered]@{expectedBridgeFailure=1;machineStageRetained=$true;relatedBundleRollbackNotInvoked=$true;
         installedRuntimePayloadsVerified=$true;installedRuntimePayloadCount=$installedCount;nativeCallerStarted=$true;
         deploymentConfigurationVerified=$true;productionPreflightVerified=$productionPreflightVerified;
-        defaultInstallationVerified=$defaultInstallationVerified} |
+        defaultInstallationVerified=$defaultInstallationVerified;netBirdFirstLoginVerified=$defaultInstallationVerified} |
         ConvertTo-Json | Set-Content -LiteralPath (Join-Path $Output 'failure-proof.json') -Encoding utf8
 } finally {
     foreach ($path in @($CandidateInstaller,$PreviousInstaller)) {

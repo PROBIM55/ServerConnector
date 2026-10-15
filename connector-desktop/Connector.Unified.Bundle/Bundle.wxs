@@ -22,6 +22,15 @@
     <Variable Name="WebView2MachineVersion" Type="version" Value="0.0.0.0" />
     <Variable Name="WebView2UserVersion" Type="version" Value="0.0.0.0" />
     <Variable Name="NetBirdInstalledVersion" Type="version" Value="0.0.0.0" />
+    <Variable Name="NetBirdServicePresent" Type="numeric" Value="0" />
+    <Variable Name="NetBirdCliPresent" Type="numeric" Value="0" />
+    <Variable Name="NetBirdDataPresent" Type="numeric" Value="0" />
+    <util:RegistrySearch Id="NetBirdServiceSearch" Root="HKLM" Bitness="always64"
+        Key="SYSTEM\CurrentControlSet\Services\NetBird" Result="exists" Variable="NetBirdServicePresent" />
+    <util:FileSearch Id="NetBirdCliSearch" Path="[ProgramFiles64Folder]NetBird\netbird.exe"
+        Result="exists" Variable="NetBirdCliPresent" />
+    <util:DirectorySearch Id="NetBirdDataSearch" Path="[CommonAppDataFolder]NetBird"
+        Result="exists" Variable="NetBirdDataPresent" />
     <util:ProductSearch Id="NetBirdVersionSearch" UpgradeCode="$(var.NetBirdUpgradeCode)"
         Result="version" Variable="NetBirdInstalledVersion" />
     <util:RegistrySearch Id="WebView2MachineSearch" Root="HKLM" Bitness="always32"
@@ -47,7 +56,14 @@
       <MsiPackage Id="UnifiedMachineSetup"
                   SourceFile="$(var.UnifiedSetupMsi)"
                   Vital="yes"
-                  Visible="no" />
+                  Visible="no">
+        <!-- These are detection-time values, before the NetBird package runs.
+             An existing installation or orphaned state must never be claimed. -->
+        <MsiProperty Name="STRUCTURA_NETBIRD_PRIOR_VERSION" Value="[NetBirdInstalledVersion]" />
+        <MsiProperty Name="STRUCTURA_NETBIRD_PRIOR_SERVICE" Value="[NetBirdServicePresent]" />
+        <MsiProperty Name="STRUCTURA_NETBIRD_PRIOR_CLI" Value="[NetBirdCliPresent]" />
+        <MsiProperty Name="STRUCTURA_NETBIRD_PRIOR_DATA" Value="[NetBirdDataPresent]" />
+      </MsiPackage>
 
       <!-- Once staging is committed, a per-user migration failure must never roll it back. -->
       <RollbackBoundary Id="UnifiedMachineSetupCommitted" />

@@ -298,6 +298,28 @@ function Get-NetBirdCliSnapshot {
 function Get-NetBirdMarkerSnapshot {
     param([Parameter(Mandatory = $true)]$Expected)
     if (!(Test-Path -LiteralPath $Expected.markerPath -PathType Leaf)) {
+        $receiptPath = Join-Path (Split-Path -Parent $Expected.markerPath) 'netbird-bundle-owner.json'
+        if (Test-Path -LiteralPath $receiptPath -PathType Leaf) {
+            try {
+                $file = Get-Item -LiteralPath $receiptPath -Force
+                if ($file.Length -le 0 -or $file.Length -gt 8192) { throw 'Invalid bundle receipt size.' }
+                $receipt = Get-Content -LiteralPath $receiptPath -Raw | ConvertFrom-Json
+                $programData = [Environment]::GetFolderPath([Environment+SpecialFolder]::CommonApplicationData)
+                $security = Test-ProtectedWindowsPath -Path $receiptPath -TrustedRoot $programData
+                # This receipt is installed only after an entirely absent NetBird
+                # inventory was detected by Burn, before its official MSI ran.
+                $valid = $receipt.schemaVersion -eq 1 -and $receipt.provisioner -ceq 'StructuraConnector.Bundle' -and
+                    $receipt.version -ceq $Expected.version -and
+                    (Normalize-GuidText $receipt.productCode) -ceq $Expected.productCode -and
+                    (Normalize-GuidText $receipt.upgradeCode) -ceq $Expected.upgradeCode -and
+                    $receipt.installerSha256 -ceq $Expected.installerSha256
+                return [pscustomobject]@{ querySucceeded=$true; present=$true; path=$receiptPath;
+                    contentValid=$valid; pathSecure=$security.secure; valid=($valid -and $security.secure); errors=@() }
+            } catch {
+                return [pscustomobject]@{ querySucceeded=$true; present=$true; path=$receiptPath;
+                    contentValid=$false; pathSecure=$false; valid=$false; errors=@('bundle-receipt-untrusted') }
+            }
+        }
         return [pscustomobject]@{ querySucceeded = $true; present = $false; path = $Expected.markerPath; contentValid = $false; pathSecure = $false; valid = $false; errors = @() }
     }
     try {

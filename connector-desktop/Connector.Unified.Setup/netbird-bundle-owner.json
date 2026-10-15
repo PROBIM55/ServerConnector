@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "provisioner": "StructuraConnector.Bundle",
+  "version": "0.79.0",
+  "productCode": "{463D0C9D-ED41-451E-A44F-937932C8B267}",
+  "upgradeCode": "{6456EC4E-3AD6-4B9B-A2BE-98E81CB21CCF}",
+  "installerSha256": "50f822c0f5f6e54e7618096cdd36b63bf4b169e125c9da06052fd4fd96115210"
+}

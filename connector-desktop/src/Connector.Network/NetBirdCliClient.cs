@@ -143,16 +143,18 @@ public sealed class NetBirdCliClient : INetworkOverlayClient
             var signalConnected = ReadNestedBoolean(root, "signal", "connected");
             var addresses = ReadAssignedAddresses(root);
             var managementUri = ReadManagementUri(root);
+            var loginRequired = IsInactiveLoginRequired(root);
+            if (loginRequired) managementUri = null; // The vendor's default URL is not an enrolled tenant.
             var publicKey = ReadPublicKey(root);
             var canonicalWireGuardPublicKey = ReadCanonicalWireGuardPublicKey(root);
             var startupPassed = startup.ExitCode == 0;
-            var managementMatches = expectedManagementUri is null || SameManagementUri(expectedManagementUri, managementUri);
+            var managementMatches = loginRequired || expectedManagementUri is null || SameManagementUri(expectedManagementUri, managementUri);
             var serviceStatus = startupPassed && managementConnected && signalConnected && addresses.Count > 0 &&
                                 managementMatches && publicKey is not null
                 ? NetworkServiceStatus.Ready
                 : string.Equals(daemonStatus, "Connecting", StringComparison.OrdinalIgnoreCase)
                     ? NetworkServiceStatus.Connecting
-                    : string.Equals(daemonStatus, "Idle", StringComparison.OrdinalIgnoreCase)
+                    : loginRequired || string.Equals(daemonStatus, "Idle", StringComparison.OrdinalIgnoreCase)
                         ? NetworkServiceStatus.Disconnected
                         : NetworkServiceStatus.Degraded;
             var snapshot = new NetworkOverlaySnapshot(
@@ -200,6 +202,7 @@ public sealed class NetBirdCliClient : INetworkOverlayClient
         {
             using var document = JsonDocument.Parse(status.StandardOutput);
             var root = document.RootElement;
+            if (IsInactiveLoginRequired(root)) return;
             var managementUri = ReadManagementUri(root);
             if (managementUri is not null)
             {
@@ -216,6 +219,15 @@ public sealed class NetBirdCliClient : INetworkOverlayClient
             throw new NetworkGateException("netbird_pre_up_status_unavailable", "NetBird daemon status cannot be parsed before bootstrap.", exception);
         }
     }
+
+    private static bool IsInactiveLoginRequired(JsonElement root) =>
+        string.Equals(ReadString(root, "daemonStatus") ?? ReadString(root, "status"), "NeedsLogin", StringComparison.OrdinalIgnoreCase) &&
+        ExplicitlyDisconnected(root, "management") && ExplicitlyDisconnected(root, "signal") &&
+        ReadAssignedAddresses(root).Count == 0;
+
+    private static bool ExplicitlyDisconnected(JsonElement root, string service) =>
+        TryGetProperty(root, service, out var nested) && nested.ValueKind == JsonValueKind.Object &&
+        TryGetProperty(nested, "connected", out var value) && value.ValueKind == JsonValueKind.False;
 
     private static bool SameManagementUri(Uri expected, Uri? actual) =>
         actual is not null && string.Equals(

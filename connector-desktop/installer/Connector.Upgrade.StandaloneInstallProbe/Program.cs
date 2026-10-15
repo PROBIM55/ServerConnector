@@ -47,6 +47,10 @@ try
     Progress("installed-runtime");
     var deployment = CommonAccessDeploymentFactory.OpenProduction(Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Structura Unified Connector", "Agent"));
+    Progress("netbird-first-login-readiness");
+    if (deployment.Coordinator is null) throw new InvalidOperationException("The installed protected network deployment is unavailable.");
+    await deployment.Coordinator.EnsureOverlayAvailableAsync(deployment.NetBirdManagementUri)
+        .AsTask().WaitAsync(TimeSpan.FromSeconds(60));
     if (File.Exists(deployment.StateFilePath)) throw new InvalidOperationException("Installation created an enrollment credential.");
     if (Directory.EnumerateFiles(root, "blender.exe", SearchOption.AllDirectories).Any())
         throw new InvalidOperationException("Default installation included Blender.");
@@ -82,7 +86,8 @@ try
     Progress("complete");
     File.WriteAllText(output, JsonSerializer.Serialize(new { success = true, version = release.Version,
         tokenRequired = false, enrollmentCreated = false, defaultCallerVerified = true, repeatedInstallVerified = true,
-        desktopWebViewVerified = ready, bundledGitVerified = true, blenderIncluded = false, upgradedPreviousDesktop = args.Length == 2 }));
+        desktopWebViewVerified = ready, bundledGitVerified = true, netBirdFirstLoginVerified = true,
+        blenderIncluded = false, upgradedPreviousDesktop = args.Length == 2 }));
 }
 catch (Exception error)
 {

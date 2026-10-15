@@ -48,6 +48,46 @@ public sealed class NetBirdCliClientTests : IDisposable
         Assert.Empty(result.AssignedInternalAddresses);
     }
 
+    private const string FreshNeedsLogin = """
+        {"daemonStatus":"NeedsLogin","management":{"connected":false,"url":"https://api.netbird.io:443"},"signal":{"connected":false},"netbirdIp":""}
+        """;
+
+    [Fact]
+    public async Task FreshVendorDefault_IsDisconnectedAndHasNoEnrolledManagementIdentity()
+    {
+        var client = CreateClient(new QueueRunner(new(1, "", "login required"), new(0, FreshNeedsLogin, "")));
+        var result = await client.GetStatusAsync();
+        Assert.Equal(NetworkServiceStatus.Disconnected, result.Status);
+        Assert.Null(result.ManagementUri);
+        Assert.Empty(result.AssignedInternalAddresses);
+    }
+
+    [Fact]
+    public async Task FreshVendorDefault_AllowsFirstBootstrapToTheAuthorizedManagementServer()
+    {
+        var connected = """
+            {"daemonStatus":"Connected","management":{"connected":true,"url":"https://vpn.example.test"},"signal":{"connected":true},"netbirdIp":"100.90.0.22/16","publicKey":"AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA="}
+            """;
+        var runner = new QueueRunner(new(0, FreshNeedsLogin, ""), new(0, "", ""), new(0, "", ""), new(0, connected, ""));
+        var client = CreateClient(runner);
+        await client.ConnectAsync(new NetworkOverlayBootstrap(new Uri("https://vpn.example.test"), "first-setup-key"));
+        Assert.Contains(runner.Calls, call => call.Arguments.Contains("up"));
+        Assert.Equal("first-setup-key", runner.Calls[1].Environment!["NB_SETUP_KEY"]);
+    }
+
+    [Theory]
+    [InlineData("{\"daemonStatus\":\"NeedsLogin\",\"management\":{\"connected\":true,\"url\":\"https://foreign.example.test\"},\"signal\":{\"connected\":false}}")]
+    [InlineData("{\"daemonStatus\":\"NeedsLogin\",\"management\":{\"connected\":false,\"url\":\"https://foreign.example.test\"},\"signal\":{\"connected\":false},\"netbirdIp\":\"100.90.0.22/16\"}")]
+    [InlineData("{\"daemonStatus\":\"NeedsLogin\",\"management\":{\"url\":\"https://foreign.example.test\"}}")]
+    public async Task LoginRequiredWithActiveOrIncompleteState_DoesNotPermitChangingManagement(string status)
+    {
+        var runner = new QueueRunner(new(0, status, ""));
+        var client = CreateClient(runner);
+        await Assert.ThrowsAsync<NetworkGateException>(() => client.ConnectAsync(
+            new NetworkOverlayBootstrap(new Uri("https://vpn.example.test"), "not-used")).AsTask());
+        Assert.Single(runner.Calls);
+    }
+
     [Fact]
     public async Task Connect_RejectsUntrustedInstallation_BeforeUp()
     {

@@ -22,6 +22,10 @@
     <MediaTemplate EmbedCab="yes" />
     <Icon Id="PlatformConnector.exe" SourceFile="$(var.BootstrapperDir)\Connector.Upgrade.Bootstrapper.exe" />
     <Property Id="ARPPRODUCTICON" Value="PlatformConnector.exe" />
+    <Property Id="STRUCTURA_NETBIRD_PRIOR_VERSION" Secure="yes" />
+    <Property Id="STRUCTURA_NETBIRD_PRIOR_SERVICE" Secure="yes" />
+    <Property Id="STRUCTURA_NETBIRD_PRIOR_CLI" Secure="yes" />
+    <Property Id="STRUCTURA_NETBIRD_PRIOR_DATA" Secure="yes" />
 
     <StandardDirectory Id="ProgramFiles64Folder">
       <Directory Id="PF_STRUCTURA_CONNECTOR" Name="Structura Connector">
@@ -39,10 +43,33 @@
       </Directory>
     </StandardDirectory>
     <StandardDirectory Id="CommonAppDataFolder">
+      <Directory Id="PD_STRUCTURA_NETWORK_PARENT" Name="Structura Connector">
+        <Directory Id="PD_STRUCTURA_NETWORK" Name="Network" />
+      </Directory>
       <Directory Id="PD_INSTALLER_ROOT" Name="StructuraConnectorInstaller">
         <Directory Id="MACHINE_HELPER_DIR" Name="Helper" />
       </Directory>
     </StandardDirectory>
+
+    <!-- NetBird is a permanent shared prerequisite. Retain its protected receipt
+         through connector upgrades/removal; never overwrite an existing receipt. -->
+    <Component Id="ProtectedSharedNetworkParent" Directory="PD_STRUCTURA_NETWORK_PARENT"
+               Guid="07245D8F-632A-4AE4-839F-53E08464DE06" Permanent="yes">
+      <CreateFolder><PermissionEx Sddl="O:SYG:SYD:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;GRGX;;;BU)" /></CreateFolder>
+      <RegistryValue Root="HKLM" Key="Software\Structura\UnifiedConnectorSetup" Name="NetworkParent" Type="integer" Value="1" KeyPath="yes" />
+    </Component>
+    <Component Id="ProtectedSharedNetworkRoot" Directory="PD_STRUCTURA_NETWORK"
+               Guid="0B483D11-A498-4FCA-8F23-6CC4AB9BCE3F" Permanent="yes">
+      <CreateFolder><PermissionEx Sddl="O:SYG:SYD:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;GRGX;;;BU)" /></CreateFolder>
+      <RegistryValue Root="HKLM" Key="Software\Structura\UnifiedConnectorSetup" Name="NetworkRoot" Type="integer" Value="1" KeyPath="yes" />
+    </Component>
+    <Component Id="NetBirdBundleOwnershipReceipt" Directory="PD_STRUCTURA_NETWORK"
+               Guid="A0710F90-3344-482A-9E8F-B6E6FF9EDB15" Permanent="yes" NeverOverwrite="yes"
+               Condition="STRUCTURA_NETBIRD_PRIOR_VERSION = &quot;0.0.0.0&quot; AND STRUCTURA_NETBIRD_PRIOR_SERVICE = &quot;0&quot; AND STRUCTURA_NETBIRD_PRIOR_CLI = &quot;0&quot; AND STRUCTURA_NETBIRD_PRIOR_DATA = &quot;0&quot;">
+      <File Id="NetBirdBundleReceipt" Source="$(sys.SOURCEFILEDIR)netbird-bundle-owner.json" KeyPath="yes">
+        <PermissionEx Sddl="O:SYG:SYD:P(A;;FA;;;SY)(A;;FA;;;BA)(A;;GRGX;;;BU)" />
+      </File>
+    </Component>
 
     <!-- All protected runtime paths are non-inheriting. BUILTIN\Users receive RX only;
          the trusted owner and mutators match TrustedHelperImageLease / release trust. -->
@@ -162,6 +189,9 @@
         <Exclude Files="$(var.HelperDir)\Connector.Upgrade.MachineHelper.exe" />
       </Files>
       <ComponentRef Id="ProtectedNetBirdMachineRootAcl" />
+      <ComponentRef Id="ProtectedSharedNetworkParent" />
+      <ComponentRef Id="ProtectedSharedNetworkRoot" />
+      <ComponentRef Id="NetBirdBundleOwnershipReceipt" />
       <ComponentRef Id="ProtectedNetBirdRuntimeRootAcl" />
       <ComponentRef Id="ProtectedNetBirdScriptsAcl" />
       <ComponentRef Id="ProtectedNetBirdInfraAcl" />

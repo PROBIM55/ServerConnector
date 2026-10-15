@@ -108,6 +108,29 @@ foreach ($case in $cases) {
     Assert-Equal $result.requiresPrivilegedRecheck $true "$($case.scenario): recheck."
 }
 
+$receiptFixture = Join-Path ([IO.Path]::GetTempPath()) ('structura-receipt-' + [guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory -Path $receiptFixture | Out-Null
+try {
+    $expected = New-Expected
+    $expected.markerPath = Join-Path $receiptFixture 'netbird-install-owner.json'
+    $receiptPath = Join-Path $receiptFixture 'netbird-bundle-owner.json'
+    $receiptSource = Join-Path (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)) 'Connector.Unified.Setup/netbird-bundle-owner.json'
+    Copy-Item -LiteralPath $receiptSource -Destination $receiptPath
+    $receipt = Get-NetBirdMarkerSnapshot $expected
+    Assert-Equal $receipt.contentValid $true 'The bundle receipt matches the official MSI identity.'
+    Assert-Equal $receipt.valid $false 'A correct receipt in user-writable TEMP must never establish ownership.'
+    $wrongReceipt = Get-Content -LiteralPath $receiptPath -Raw | ConvertFrom-Json
+    $wrongReceipt.installerSha256 = '0' * 64
+    $wrongReceipt | ConvertTo-Json | Set-Content -LiteralPath $receiptPath
+    Assert-Equal (Get-NetBirdMarkerSnapshot $expected).contentValid $false 'A receipt for other installer bytes is rejected.'
+} finally {
+    # The private directory was created above under TEMP and is never user-supplied.
+    $resolvedFixture = [IO.Path]::GetFullPath($receiptFixture)
+    $tempPrefix = [IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd('\') + '\'
+    if (!$resolvedFixture.StartsWith($tempPrefix,[StringComparison]::OrdinalIgnoreCase)) { throw 'Receipt fixture cleanup escaped TEMP.' }
+    Remove-Item -LiteralPath $resolvedFixture -Recurse -Force
+}
+
 $projectRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $stagedMsi = Join-Path $projectRoot 'artifacts/netbird-staging/v0.79.0/netbird_installer_0.79.0_windows_amd64.msi'
 $realMsiTested = $false
