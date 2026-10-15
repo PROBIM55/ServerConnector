@@ -38,7 +38,7 @@ public sealed class ProductionStandaloneDesktopInstaller : IStandaloneDesktopIns
         if (!runGuard.WaitOne(0)) throw new InvalidOperationException("Установка коннектора уже выполняется.");
         try
         {
-            status.Show("Проверяем обязательные компоненты и пакет приложения…");
+            status.Show("Проверяем компоненты приложения…");
             VerifyPrerequisites();
             var release = new HelperReleasePinSource().GetVelopackSetupPin();
             if (release.PackageId != UnifiedVelopackApplication.PackId)
@@ -73,7 +73,7 @@ public sealed class ProductionStandaloneDesktopInstaller : IStandaloneDesktopIns
             if (lease.Length != release.Size ||
                 !Convert.ToHexString(await SHA256.HashDataAsync(lease, cancellationToken)).Equals(release.Sha256, StringComparison.OrdinalIgnoreCase))
                 throw new SecurityException("Пакет приложения не соответствует подписанному выпуску.");
-            status.Show("Устанавливаем коннектор. Токен для установки не требуется…");
+            status.Show("Устанавливаем Structura Connector и создаём ярлыки…");
             var result = await new SystemVelopackProcessRunner().RunAsync(
                 new VelopackProcessRequest(release.AbsolutePath, ["--silent"], TimeSpan.FromMinutes(5)), cancellationToken);
             if (result.Completion != VelopackProcessCompletion.Exited || result.ExitCode is not (0 or 3010))
@@ -84,7 +84,7 @@ public sealed class ProductionStandaloneDesktopInstaller : IStandaloneDesktopIns
             using var installedImage = File.Open(Path.Combine(installRoot, "current", UnifiedVelopackApplication.MainExecutable),
                 FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
             AssertPhysicalPath(installedImage.SafeFileHandle, Path.Combine(installRoot, "current", UnifiedVelopackApplication.MainExecutable));
-            status.Show("Коннектор установлен. Подключение к аккаунту доступно в приложении. Blender устанавливается только по запросу.");
+            status.Show("Structura Connector установлен.");
             return new DesktopInstallationResult(installRoot, release.Version, result.ExitCode == 3010);
         }
         finally { runGuard.Release(); }

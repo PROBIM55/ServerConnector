@@ -73,8 +73,7 @@ public sealed class SystemVelopackInstallProbe : IVelopackInstallProbe
         var sqVersion = Path.Combine(current, "sq.version");
         var mainExecutable = Path.Combine(current, UnifiedVelopackApplication.MainExecutable);
         var updateExecutable = Path.Combine(root, "Update.exe");
-        var rootLauncher = Path.Combine(root, UnifiedVelopackApplication.RootLauncher);
-        foreach (var path in new[] { sqVersion, mainExecutable, updateExecutable, rootLauncher })
+        foreach (var path in new[] { sqVersion, mainExecutable, updateExecutable })
         {
             if (!File.Exists(path) || IsReparsePoint(path))
                 return Conflict($"Required Velopack file is missing or redirected: {Path.GetFileName(path)}.");
@@ -85,6 +84,18 @@ public sealed class SystemVelopackInstallProbe : IVelopackInstallProbe
             !string.Equals(metadata.Version, pin.Version, StringComparison.Ordinal) ||
             !string.Equals(metadata.MainExecutable, UnifiedVelopackApplication.MainExecutable, StringComparison.Ordinal))
             return Conflict("sq.version does not match the pinned packId, version and main executable.");
+
+        // Accept the pilot's exact old title only for old releases. Never turn arbitrary
+        // package metadata into a launch path, or require a new launcher before upgrading.
+        var launcherName = metadata.Title == "Structura Connector" ? UnifiedVelopackApplication.RootLauncher :
+            metadata.Title == "Structura Connector (новый)" &&
+            Version.TryParse(metadata.Version.Split('-')[0], out var previousVersion) &&
+            previousVersion < new Version(1, 1, 2) ? UnifiedVelopackApplication.LegacyRootLauncher : null;
+        if (launcherName is null)
+            return Conflict("sq.version contains an unsupported application title.");
+        var rootLauncher = Path.Combine(root, launcherName);
+        if (!File.Exists(rootLauncher) || IsReparsePoint(rootLauncher))
+            return Conflict("The package's exact root launcher is missing or redirected.");
 
         var expectedUninstall = $"\"{updateExecutable}\" --uninstall";
         var expectedQuietUninstall = expectedUninstall + " --silent";
@@ -112,7 +123,7 @@ public sealed class SystemVelopackInstallProbe : IVelopackInstallProbe
             "The exact same-user Velopack installation is registered and complete.");
     }
 
-    private static (string PackId, string Version, string MainExecutable) ReadSqVersion(string path)
+    private static (string PackId, string Version, string MainExecutable, string Title) ReadSqVersion(string path)
     {
         var settings = new XmlReaderSettings { DtdProcessing = DtdProcessing.Prohibit, XmlResolver = null };
         using var reader = XmlReader.Create(path, settings);
@@ -122,7 +133,7 @@ public sealed class SystemVelopackInstallProbe : IVelopackInstallProbe
         string Value(string name) => metadata.Elements()
             .FirstOrDefault(element => element.Name.LocalName == name)?.Value
             ?? string.Empty;
-        return (Value("id"), Value("version"), Value("mainExe"));
+        return (Value("id"), Value("version"), Value("mainExe"), Value("title"));
     }
 
     private static string HashFile(string path)

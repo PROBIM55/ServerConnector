@@ -42,6 +42,7 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
     private readonly ConnectorRuntimeServices _runtimeServices;
     private readonly PlatformToolsViewModel _platformTools;
     private readonly IPlatformConnectionApi _platformConnection;
+    private readonly ConnectorBrowserSignIn _browserSignIn = new();
     private readonly CommonAccessRuntime _commonAccess;
     private readonly Func<string, Task<bool>>? _confirmFolderDisconnect;
     private readonly ConverterWorkspaceViewModel _converterWorkspace;
@@ -265,7 +266,7 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
         switch (request.Command)
         {
             case "connect":
-                if (_commonAccess.ShouldUse(ReadField(request.Payload, "token"))) StartCommonConnect(ReadField(request.Payload, "token"), false, cancellationToken);
+                if (_commonAccess.ShouldUse()) StartCommonConnect(null, _commonAccess.HasStoredCredential, cancellationToken);
                 else if (_mode == "platform") StartPlatformConnect(ReadField(request.Payload, "token"), reconnect: false, cancellationToken);
                 else StartConnect(ReadField(request.Payload, "token"), cancellationToken);
                 break;
@@ -620,6 +621,12 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
         => StartOperation(async () =>
         {
             _commonAccess.Select();
+            if (!reconnect)
+                token = await _browserSignIn.SignInAsync(message =>
+                {
+                    lock (_gate) _notice = new SafeNotice("connect-common", message);
+                    PublishSnapshot();
+                }, cancellationToken);
             if (_connectorHost.IsConnected) await _connectorHost.DisconnectAsync();
             await _runtimeServices.ConnectCommonAsync(token, reconnect, cancellationToken);
         }, "connect-common", cancellationToken);
@@ -854,6 +861,10 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
         catch (OperationCanceledException)
         {
             lock (_gate) _notice = new SafeNotice(name, "Действие отменено.");
+        }
+        catch (ConnectorSignInException ex)
+        {
+            lock (_gate) _notice = new SafeNotice(name, ex.Message);
         }
         catch (Exception ex)
         {

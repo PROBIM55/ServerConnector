@@ -7,7 +7,8 @@ public static class UnifiedVelopackApplication
     public const string PackId = "Structura.Connector.Desktop";
     public const string MainExecutable = "Connector.Desktop.exe";
     // Velopack names the root launcher after --packTitle, independently of --mainExe.
-    public const string RootLauncher = "Structura Connector (новый).exe";
+    public const string RootLauncher = "Structura Connector.exe";
+    internal const string LegacyRootLauncher = "Structura Connector (новый).exe";
 }
 
 public sealed record VelopackSetupPin(

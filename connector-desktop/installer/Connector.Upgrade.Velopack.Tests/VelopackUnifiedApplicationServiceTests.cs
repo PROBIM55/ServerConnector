@@ -191,8 +191,10 @@ public sealed class VelopackUnifiedApplicationServiceTests
         Assert.Equal(VelopackInstallPresence.ExactInstalled, result.StatusProbe!.Presence);
     }
 
-    [Fact]
-    public void SystemProbeVerifiesSqVersionExecutablesAndCurrentUserRegistration()
+    [Theory]
+    [InlineData("Structura Connector", "Structura Connector.exe")]
+    [InlineData("Structura Connector (новый)", "Structura Connector (новый).exe")]
+    public void SystemProbeVerifiesSqVersionExecutablesAndCurrentUserRegistration(string title, string launcher)
     {
         using var fixture = new Fixture();
         Directory.CreateDirectory(Path.Combine(fixture.InstallRoot, "current"));
@@ -203,14 +205,14 @@ public sealed class VelopackUnifiedApplicationServiceTests
               <metadata>
                 <id>{fixture.Pin.PackId}</id>
                 <version>{fixture.Pin.Version}</version>
-                <title>Structura Connector (новый)</title>
+                <title>{title}</title>
                 <mainExe>{UnifiedVelopackApplication.MainExecutable}</mainExe>
               </metadata>
             </package>
             """);
         File.WriteAllText(Path.Combine(fixture.InstallRoot, "current", UnifiedVelopackApplication.MainExecutable), "app");
         File.WriteAllText(Path.Combine(fixture.InstallRoot, "Update.exe"), "update");
-        var rootLauncherPath = Path.Combine(fixture.InstallRoot, UnifiedVelopackApplication.RootLauncher);
+        var rootLauncherPath = Path.Combine(fixture.InstallRoot, launcher);
         File.WriteAllText(rootLauncherPath, "launcher");
         var registration = fixture.Registration();
         var probe = new SystemVelopackInstallProbe(

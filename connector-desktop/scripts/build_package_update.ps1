@@ -122,8 +122,7 @@ if ($PreviousReleasesDir) {
         Copy-Item -Destination $outputDir -Force
 }
 
-# Distinct shortcut names preserve the legacy MSI's Desktop/Start-menu launchers during the pilot.
-$packTitle = if ($TestAppId) { 'Structura Connector Update Smoke' } else { 'Structura Connector (новый)' }
+$packTitle = if ($TestAppId) { 'Structura Connector Update Smoke' } else { 'Structura Connector' }
 $shortcutLocations = if ($TestAppId) { 'None' } else { 'Desktop,StartMenuRoot' }
 Write-Host 'BUILD_STEP: Velopack package'
 & $vpk pack --packId $appId --packTitle $packTitle --packVersion $PackVersion `

@@ -26,7 +26,7 @@ internal sealed class StandaloneInstallForm : Form, IBootstrapperStatusSink
         Controls.Add(new Label { Left = 96, Top = 26, Width = 516, Height = 42, Text = "Structura Connector",
             Font = new Font("Segoe UI", 23F, FontStyle.Bold) });
         _status = new Label { Left = 30, Top = 105, Width = 580, Height = 105,
-            Text = "Установка приложения и обязательных компонентов. Токен не требуется." };
+            Text = "Подготовка Structura Connector…" };
         var progress = new ProgressBar { Left = 30, Top = 220, Width = 580, Height = 4, Style = ProgressBarStyle.Marquee };
         _close = BootstrapperForm.InstallerTheme.Button("Закрыть", 410, 260, 200);
         _close.Enabled = false;

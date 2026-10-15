@@ -128,10 +128,7 @@
   function action(id,element){
     rememberFields();
     if(desktop&&!['show-token','dialog','release-notes'].includes(id)){
-      if(id==='connect'&&!$('#token').value.trim()){
-        if(connection().hasSavedCredential){desktopAction('reconnect',element);return;}
-        $('#token-help').textContent='Введите токен устройства.';$('#token').setAttribute('aria-invalid','true');$('#token').focus();return;
-      }
+      if(id==='connect'&&connection().hasSavedCredential){desktopAction('reconnect',element);return;}
       desktopAction(id,element);return;
     }
     if(['pick-zip','pick-folder','pick-ifc'].includes(id)){document.getElementById({'pick-zip':'zip-input','pick-folder':'folder-input','pick-ifc':'ifc-input'}[id]).click();return;}
@@ -159,7 +156,7 @@
     if(id==='exports-toggle'){const item=state.exports[Number(element.dataset.index)];if(item.draft){showDialog('Выберите проект',row('Настройка', 'Подключите устройство и выберите доступный проект Structura перед включением выгрузки.'));return;}item.enabled=!item.enabled;item.fields[fieldKey('export-enabled')]=item.enabled;render(false);return;}
     if(id==='exports-run'||id==='exports-history'){const item=state.exports[Number(element.dataset.index)];showDialog(id==='exports-run'?'Запуск выгрузки':'История выгрузки',`${row('Настройка',escape(item.name))}${row('Папка моделей',escape(item.folder))}${row('Результат',escape(item.destinationLabel))}${row('Состояние','Механизм ещё не подключён. Реальная выгрузка не запускалась.')}`);return;}
     if(id==='ifc-optimize'){if(!state.ifcFiles.length){state.notices.ifc='Добавьте IFC-файлы перед обработкой.';render(false);return;}start('ifc');return;}
-    if(id==='connect'){if(!$('#token').value.trim()){$('#token-help').textContent='Введите токен устройства.';$('#token').setAttribute('aria-invalid','true');$('#token').focus();return;}state.fields[fieldKey('token')]='';$('#token').value='';showDialog('Подключение устройства',`${row('Шаг 1','Проверка одноразового токена')}${row('Шаг 2','Настройка защищённого соединения')}${row('Шаг 3','Получение доступных модулей и папок')}${row('Просмотр','Токен не отправлен. Устройство не зарегистрировано.')}`);return;}
+    if(id==='connect'){showDialog('Вход в Structura','<p>В приложении откроется браузер для входа в общую учётную запись.</p>');return;}
     if(id==='disconnect'||id==='reconnect'){state.notices.connect=id==='disconnect'?'Сценарий отключения выбран. Рабочие подключения не изменялись.':'Сценарий повторного подключения выбран. Рабочие подключения не изменялись.';render(false);return;}
     if(id==='agent-start'||id==='agent-stop'){state.running=id==='agent-start';state.notices.agent=state.running?'Фоновая работа включена в сценарии просмотра.':'Фоновая работа приостановлена в сценарии просмотра.';render(false);return;}
     if(id==='agr-install'||id==='agr-install-cancel'){state.installingBlender=id==='agr-install';state.notices.agr=state.installingBlender?'Показан сценарий установки Blender. Файлы не загружаются.':'Сценарий установки отменён.';render(false);return;}

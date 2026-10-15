@@ -42,21 +42,25 @@
 
     <!-- Machine MSI has its own transaction; user migration owns its recovery.
          A later user-stage failure must not reinstall failed related bundles. -->
-    <Chain DisableRollback="yes">
+    <Chain DisableRollback="yes" DisableSystemRestore="yes">
       <!-- Shared prerequisites are retained on connector removal. No token, server
            access, Blender download or optional-user action gates these packages. -->
-      <ExePackage Id="WebView2Runtime" DisplayName="Microsoft Edge WebView2 Runtime"
+      <ExePackage Id="WebView2Runtime" DisplayName="Компонент интерфейса Microsoft WebView2"
                   SourceFile="$(var.WebView2Installer)" InstallArguments="/silent /install"
                   DetectCondition="WebView2MachineVersion &gt; v0.0.0.0 OR WebView2UserVersion &gt; v0.0.0.0"
                   PerMachine="yes" Permanent="yes" Vital="yes" Compressed="yes" />
-      <MsiPackage Id="NetBirdRuntime" DisplayName="NetBird"
+      <MsiPackage Id="NetBirdRuntime" DisplayName="Защищённое подключение NetBird"
                   SourceFile="$(var.NetBirdMsi)" Permanent="yes" Vital="yes" Visible="no"
-                  InstallCondition="NetBirdInstalledVersion &lt;= v0.79.0" />
+                  InstallCondition="NetBirdInstalledVersion &lt;= v0.79.0">
+        <MsiProperty Name="MSIFASTINSTALL" Value="1" />
+      </MsiPackage>
 
       <MsiPackage Id="UnifiedMachineSetup"
+                  DisplayName="Компоненты Structura Connector"
                   SourceFile="$(var.UnifiedSetupMsi)"
                   Vital="yes"
                   Visible="no">
+        <MsiProperty Name="MSIFASTINSTALL" Value="1" />
         <!-- These are detection-time values, before the NetBird package runs.
              An existing installation or orphaned state must never be claimed. -->
         <MsiProperty Name="STRUCTURA_NETBIRD_PRIOR_VERSION" Value="[NetBirdInstalledVersion]" />
@@ -71,6 +75,7 @@
       <!-- Burn's default per-user execution impersonates the initiating user even when the
            machine MSI required elevation. The bridge has no arguments or uninstall action. -->
       <ExePackage Id="OriginalUserUpgradeBridge"
+                  DisplayName="Приложение Structura Connector и ярлыки"
                   Name="Connector.Upgrade.LaunchBridge.exe"
                   SourceFile="$(var.LaunchBridge)"
                   DetectCondition="0"

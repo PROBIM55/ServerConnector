@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
   <!-- Protected machine staging only; no executable or deferred custom actions. -->
-  <Package Name="Structura Unified Connector Installer"
+  <Package Name="Компоненты Structura Connector"
            Manufacturer="Structura"
            Version="$(var.ProductVersion)"
            UpgradeCode="A487F2B6-0CA7-4D5D-9E38-954D956D8312"
@@ -15,6 +15,7 @@
     <!-- A pilot can carry a newer app-local runtime. Costing must not skip its
          files before RemoveExistingProducts deletes that previous package. -->
     <Property Id="REINSTALLMODE" Value="amus" />
+    <Property Id="MSIFASTINSTALL" Value="1" />
     <!-- Burn supplies muso on its command line. Reset it before file costing,
          including quiet installs, so the old app-local runtime cannot be skipped. -->
     <SetProperty Id="REINSTALLMODE" Value="amus" Before="CostInitialize"
