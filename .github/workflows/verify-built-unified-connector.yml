@@ -1,4 +1,4 @@
-name: Verify Built Unified Connector
+name: Diagnose Ready Installer Exception
 on:
   workflow_dispatch:
 permissions:
@@ -47,7 +47,7 @@ jobs:
           # The downloaded artifact is intentionally unverified. Only the native tests
           # below can promote these exact bytes into a distributable artifact.
           "run=$run" >> $env:GITHUB_OUTPUT
-      - name: Verify actual installer under ordinary users
+      - name: Capture exact ready installer exception under ordinary users
         env:
           ACCESS_CONFIGURATION: ${{ secrets.UNIFIED_CONNECTOR_ACCESS_CONFIGURATION_JSON }}
         run: |
@@ -55,6 +55,30 @@ jobs:
           $config = Join-Path $env:RUNNER_TEMP 'expected-connector-access.json'
           [IO.File]::WriteAllText($config, (($env:ACCESS_CONFIGURATION | ConvertFrom-Json) | ConvertTo-Json -Depth 30))
           Remove-Item Env:ACCESS_CONFIGURATION
+          # Diagnostic-only marker outside the machine MSI's managed directories.
+          # The parent and file allow ordinary users to read, never replace them.
+          $readyDll = Join-Path '${{ steps.runtime.outputs.run }}' 'bootstrapper/Connector.Upgrade.Bootstrapper.dll'
+          if (!(Test-Path -LiteralPath $readyDll -PathType Leaf)) { throw 'Exact ready bootstrapper DLL missing.' }
+          $diagnosticRoot = Join-Path $env:ProgramFiles 'PlatformConnectorInstallerDiagnostic'
+          if (Test-Path -LiteralPath $diagnosticRoot) { throw 'Fresh diagnostic root already exists.' }
+          New-Item -ItemType Directory -Path $diagnosticRoot | Out-Null
+          $admins = [Security.Principal.SecurityIdentifier]::new('S-1-5-32-544')
+          $acl = [Security.AccessControl.DirectorySecurity]::new()
+          $acl.SetOwner($admins)
+          $acl.SetAccessRuleProtection($true,$false)
+          foreach ($pair in @(@('S-1-5-18','FullControl'),@('S-1-5-32-544','FullControl'),@('S-1-5-32-545','ReadAndExecute'))) {
+            $acl.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new(
+              [Security.Principal.SecurityIdentifier]::new($pair[0]),
+              [Enum]::Parse([Security.AccessControl.FileSystemRights],$pair[1]),
+              'ContainerInherit,ObjectInherit','None','Allow'))
+          }
+          Set-Acl -LiteralPath $diagnosticRoot -AclObject $acl
+          $marker = Join-Path $diagnosticRoot 'ready-method.json'
+          @{producerSha=$env:PRODUCER_SHA;bootstrapperDllSha256=(Get-FileHash -LiteralPath $readyDll).Hash.ToLowerInvariant()} |
+            ConvertTo-Json | Set-Content -LiteralPath $marker -Encoding utf8
+          $fileAcl = Get-Acl -LiteralPath $marker
+          $fileAcl.SetOwner($admins)
+          Set-Acl -LiteralPath $marker -AclObject $fileAcl
           $guard = 'connector-desktop/scripts/resource-guard/platform-build-guard.cs'
           if ((Get-FileHash -LiteralPath $guard).Hash.ToLowerInvariant() -cne '99f6d32467f46042a367fad6383d088432c54a9e181e72a92d397a314a1a4c09') { throw 'Resource guard changed.' }
           Add-Type -Path $guard
@@ -64,20 +88,7 @@ jobs:
           $exit = [PlatformBuild.Guard]::RunWithPolicy((Get-Command pwsh).Source,$arguments,
             $env:GITHUB_WORKSPACE,'unified-built-runtime-verification',0,$null,[uint64](2GB),[uint64](2GB),100,
             [PlatformBuild.Guard]::MutexName,[Func[PlatformBuild.Guard+Memory]]{ [PlatformBuild.Guard]::ReadMemory() })
-          if ($exit -ne 0) { throw "Native verification failed ($exit)." }
-          $run = '${{ steps.runtime.outputs.run }}'
-          $delivery = Join-Path $env:RUNNER_TEMP 'verified-installer'
-          New-Item -ItemType Directory -Path $delivery | Out-Null
-          Copy-Item -LiteralPath (Join-Path $run 'unified-installer/Structura.Connector.Installer.exe'),(Join-Path $run 'native-upgrade-proof.json') -Destination $delivery
-          $hash = (Get-FileHash -LiteralPath (Join-Path $delivery 'Structura.Connector.Installer.exe')).Hash.ToLowerInvariant()
-          "$hash  Structura.Connector.Installer.exe" | Set-Content -LiteralPath (Join-Path $delivery 'checksums.sha256') -Encoding ascii
-      - name: Upload verified installer
-        uses: actions/upload-artifact@v4
-        with:
-          name: unified-connector-installer-1.1.3
-          path: ${{ runner.temp }}/verified-installer/*
-          if-no-files-found: error
-          retention-days: 14
+          throw "Diagnostic-only run finished ($exit); installer acceptance is unavailable."
       - name: Retain native diagnostics
         if: always()
         uses: actions/upload-artifact@v4

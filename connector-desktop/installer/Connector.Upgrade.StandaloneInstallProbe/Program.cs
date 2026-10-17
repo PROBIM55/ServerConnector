@@ -24,6 +24,15 @@ object? postFailureReadOnlySnapshot = null;
 try
 {
     Progress("started");
+    var diagnosticMarker = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
+        "PlatformConnectorInstallerDiagnostic", "ready-method.json");
+    if (Directory.Exists(Path.GetDirectoryName(diagnosticMarker)))
+    {
+        // Dedicated non-acceptance diagnosis, invoking the exact ready product DLL.
+        Environment.ExitCode = 1;
+        DiagnoseReadyInstaller(output, diagnosticMarker, message => Progress("ready-installer-method", message));
+        return;
+    }
     if (args.Length == 2)
     {
         Progress("baseline-install");
@@ -246,4 +255,149 @@ static object ReadOnlyInstallationSnapshot(SystemVelopackInstallProbe probe,
                     oldShortcutExists = !string.IsNullOrWhiteSpace(directory) &&
                         File.Exists(Path.Combine(directory, "Structura Connector.lnk")) };
             }) }).ToArray() };
+}
+
+static void DiagnoseReadyInstaller(string output, string markerPath, Action<string> progress)
+{
+    object? capturedFailure = null;
+    var completed = false;
+    var attempted = false;
+    var taskObtained = false;
+    string? actualDllSha256 = null;
+    var worker = new Thread(() =>
+    {
+        try
+        {
+            AssertDiagnosticFile(markerPath);
+            using var markerLease = new FileStream(markerPath, FileMode.Open, FileAccess.Read, FileShare.Read);
+            using var marker = JsonDocument.Parse(markerLease);
+            if (marker.RootElement.GetProperty("producerSha").GetString() !=
+                "898edbee94060eabbeb19c701d60683167109a28")
+                throw new InvalidDataException("Diagnostic runtime source differs.");
+            var readyDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
+                "StructuraConnectorInstaller", "Bootstrapper");
+            var readyDll = Path.Combine(readyDirectory, "Connector.Upgrade.Bootstrapper.dll");
+            using (var image = File.OpenRead(readyDll))
+                actualDllSha256 = Convert.ToHexString(SHA256.HashData(image)).ToLowerInvariant();
+            if (actualDllSha256 != marker.RootElement.GetProperty("bootstrapperDllSha256").GetString())
+                throw new InvalidDataException("Installed ready DLL differs from the verified producer artifact.");
+            var context = new ReadyInstallerLoadContext(readyDll);
+            var assembly = context.LoadFromAssemblyPath(readyDll);
+            var installerType = assembly.GetType("Connector.Upgrade.Bootstrapper.ProductionStandaloneDesktopInstaller", true)!;
+            var sinkType = assembly.GetType("Connector.Upgrade.Bootstrapper.IBootstrapperStatusSink", true)!;
+            var sink = System.Reflection.DispatchProxy.Create(sinkType, typeof(ReadyInstallerStatusProxy));
+            ((ReadyInstallerStatusProxy)sink).Show = message => progress(message.Length > 512 ? message[..512] : message);
+            var installer = Activator.CreateInstance(installerType)!;
+            var method = installerType.GetMethod("InstallAsync")!;
+            System.Windows.Forms.Application.EnableVisualStyles();
+            using var form = new System.Windows.Forms.Form { ShowInTaskbar = false, Opacity = 0 };
+            form.Shown += async (_, _) =>
+            {
+                try
+                {
+                    attempted = true;
+                    var task = method.Invoke(installer, [sink, CancellationToken.None]) as Task
+                        ?? throw new InvalidDataException("Ready installer method did not return a Task.");
+                    taskObtained = true;
+                    await task;
+                    completed = true;
+                }
+                catch (Exception error) { capturedFailure = Capture(error); }
+                finally { form.Close(); }
+            };
+            System.Windows.Forms.Application.Run(form);
+        }
+        catch (Exception error) { capturedFailure = Capture(error); }
+    });
+    worker.SetApartmentState(ApartmentState.STA);
+    worker.Start();
+    // The existing disposable-user fixture owns the bounded watchdog and process tree.
+    worker.Join();
+    File.WriteAllText(output, JsonSerializer.Serialize(new { success = false, diagnosticOnly = true,
+        failure = "Ready installer method diagnosis; this result cannot accept or publish an installer.",
+        // A task-boundary failure can still originate in loader/status instrumentation.
+        // Assess captured method names before attributing it to product code.
+        failureBoundary = taskObtained ? "await-ready-installer-task" : attempted ? "invoke-ready-installer-method" : "diagnostic-host-setup",
+        actualDllSha256, installationCompleted = completed, capturedFailure }));
+
+    static object Capture(Exception error)
+    {
+        while (error is System.Reflection.TargetInvocationException && error.InnerException is not null)
+            error = error.InnerException;
+        // InstallAsync performs no enrollment or credential read. No environment dump.
+        return new { type = error.GetType().FullName, hResult = error.HResult.ToString("X8"),
+            message = error.Message[..Math.Min(error.Message.Length, 1024)],
+            methods = new StackTrace(error, false).GetFrames().Take(12).Select(frame => frame.GetMethod())
+                .Where(method => method is not null).Select(method => method!.DeclaringType?.FullName + "." + method.Name).ToArray() };
+    }
+}
+
+static void AssertDiagnosticFile(string path)
+{
+    const System.Security.AccessControl.FileSystemRights mutation =
+        (System.Security.AccessControl.FileSystemRights)0x10000000 |
+        (System.Security.AccessControl.FileSystemRights)0x40000000 |
+        System.Security.AccessControl.FileSystemRights.WriteData |
+        System.Security.AccessControl.FileSystemRights.AppendData |
+        System.Security.AccessControl.FileSystemRights.WriteAttributes |
+        System.Security.AccessControl.FileSystemRights.WriteExtendedAttributes |
+        System.Security.AccessControl.FileSystemRights.Delete |
+        System.Security.AccessControl.FileSystemRights.DeleteSubdirectoriesAndFiles |
+        System.Security.AccessControl.FileSystemRights.ChangePermissions |
+        System.Security.AccessControl.FileSystemRights.TakeOwnership;
+    var trusted = new HashSet<string>(StringComparer.Ordinal)
+    {
+        "S-1-5-18", "S-1-5-32-544",
+        "S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464"
+    };
+    foreach (var item in new FileSystemInfo[] { new DirectoryInfo(Path.GetDirectoryName(path)!), new FileInfo(path) })
+    {
+        if ((item.Attributes & FileAttributes.ReparsePoint) != 0)
+            throw new InvalidDataException("Diagnostic marker or parent is redirected.");
+        System.Security.AccessControl.FileSystemSecurity security = item is DirectoryInfo directory
+            ? System.IO.FileSystemAclExtensions.GetAccessControl(directory)
+            : System.IO.FileSystemAclExtensions.GetAccessControl((FileInfo)item);
+        var owner = (SecurityIdentifier)security.GetOwner(typeof(SecurityIdentifier));
+        if (!trusted.Contains(owner.Value)) throw new InvalidDataException("Diagnostic marker owner differs.");
+        foreach (System.Security.AccessControl.FileSystemAccessRule rule in security.GetAccessRules(true, true, typeof(SecurityIdentifier)))
+            if (rule.AccessControlType == System.Security.AccessControl.AccessControlType.Allow &&
+                (rule.FileSystemRights & mutation) != 0 &&
+                !trusted.Contains(((SecurityIdentifier)rule.IdentityReference).Value))
+                throw new InvalidDataException("Diagnostic marker or parent permits untrusted replacement.");
+    }
+}
+
+public class ReadyInstallerStatusProxy : System.Reflection.DispatchProxy
+{
+    public Action<string>? Show { get; set; }
+    protected override object? Invoke(System.Reflection.MethodInfo? targetMethod, object?[]? args)
+    {
+        if (targetMethod?.Name != "Show" || args is not [string message])
+            throw new InvalidOperationException("Unexpected ready installer status method.");
+        Show?.Invoke(message);
+        return null;
+    }
+}
+
+public sealed class ReadyInstallerLoadContext : System.Runtime.Loader.AssemblyLoadContext
+{
+    private readonly string _directory;
+    private readonly System.Runtime.Loader.AssemblyDependencyResolver _resolver;
+    public ReadyInstallerLoadContext(string readyDll) : base("ExactReadyInstallerDiagnostic")
+    {
+        _directory = Path.GetDirectoryName(readyDll)!;
+        _resolver = new System.Runtime.Loader.AssemblyDependencyResolver(readyDll);
+    }
+    protected override System.Reflection.Assembly? Load(System.Reflection.AssemblyName name)
+    {
+        if (name.Name is "mscorlib" or "netstandard" or "Microsoft.CSharp" ||
+            name.Name?.StartsWith("System", StringComparison.Ordinal) == true ||
+            name.Name?.StartsWith("Microsoft.Win32", StringComparison.Ordinal) == true) return null;
+        var path = _resolver.ResolveAssemblyToPath(name);
+        if (path is null)
+            throw new InvalidDataException("Ready dependency is unavailable; probe-copy fallback is forbidden.");
+        if (!Path.GetFullPath(path).StartsWith(_directory + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException("Ready dependency is outside the protected runtime.");
+        return LoadFromAssemblyPath(path);
+    }
 }
