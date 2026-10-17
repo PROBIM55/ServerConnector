@@ -73,7 +73,7 @@ public sealed class ProductionStandaloneDesktopInstaller : IStandaloneDesktopIns
             if (lease.Length != release.Size ||
                 !Convert.ToHexString(await SHA256.HashDataAsync(lease, cancellationToken)).Equals(release.Sha256, StringComparison.OrdinalIgnoreCase))
                 throw new SecurityException("Пакет приложения не соответствует подписанному выпуску.");
-            status.Show("Устанавливаем Платформа Коннектор и создаём ярлыки…");
+            status.Show("Устанавливаем приложение и создаём ярлыки…");
             var result = await new SystemVelopackProcessRunner().RunAsync(
                 new VelopackProcessRequest(release.AbsolutePath, ["--silent"], TimeSpan.FromMinutes(5)), cancellationToken);
             if (result.Completion != VelopackProcessCompletion.Exited || result.ExitCode is not (0 or 3010))
