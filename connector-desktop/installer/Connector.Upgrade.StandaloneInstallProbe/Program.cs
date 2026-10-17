@@ -20,6 +20,7 @@ void Progress(string stage, string? detail = null) => File.WriteAllText(output +
     stage, detail, utc = DateTimeOffset.UtcNow, processId = Environment.ProcessId,
     sessionId = Process.GetCurrentProcess().SessionId
 }));
+object? postFailureReadOnlySnapshot = null;
 try
 {
     Progress("started");
@@ -77,6 +78,7 @@ try
             }
             if (errorPage)
             {
+                postFailureReadOnlySnapshot = ReadOnlyInstallationSnapshot(probe, pin, sid, root);
                 installation.Kill(true);
                 installation.WaitForExit(5000);
                 throw new InvalidOperationException("Default installer displayed an error: " + lastStatus);
@@ -200,6 +202,48 @@ catch (Exception error)
         catch (Exception diagnosticError) { preflightDiagnostic = new { failure = diagnosticError.GetType().Name }; }
     }
     File.WriteAllText(output, JsonSerializer.Serialize(new { success = false, failure = error.Message, type = error.GetType().Name,
-        diagnosticCode = error is NetworkGateException networkError ? networkError.Code : null, preflightDiagnostic }));
+        diagnosticCode = error is NetworkGateException networkError ? networkError.Code : null, preflightDiagnostic,
+        postFailureReadOnlySnapshot }));
     Environment.ExitCode = 1;
+}
+
+// These observations are collected only after the real default installer has failed.
+// They never install/repair/retry and never count as acceptance of the failed GUI path.
+static object ReadOnlyInstallationSnapshot(SystemVelopackInstallProbe probe,
+    Connector.Upgrade.Velopack.VelopackSetupPin pin, string sid, string root)
+{
+    object Read(Func<object> operation)
+    {
+        try { return new { observed = true, value = operation() }; }
+        catch (Exception snapshotError)
+        {
+            // This describes the independent read, not the exception hidden by the GUI.
+            // Omit exception messages, local paths, file contents and environment values.
+            return new { observed = false, snapshotReadException = new {
+                type = snapshotError.GetType().FullName, hResult = snapshotError.HResult.ToString("X8"),
+                methods = new StackTrace(snapshotError, false).GetFrames().Take(8)
+                    .Select(frame => frame.GetMethod()).Where(method => method is not null)
+                    .Select(method => method!.DeclaringType?.FullName + "." + method.Name).ToArray() } };
+        }
+    }
+    var files = new[] { "current/sq.version", "current/" + UnifiedVelopackApplication.MainExecutable,
+        "Update.exe", UnifiedVelopackApplication.RootLauncher, "Structura Connector.exe" }
+        .Select(relative => new { relative, observation = Read(() => {
+            var path = Path.Combine(root, relative);
+            return new { exists = File.Exists(path),
+                reparsePoint = File.Exists(path) && (File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0 };
+        }) }).ToArray();
+    return new { source = "read-only observations after default installer failure; original exception unavailable",
+        exactInstallProbe = Read(() => { var result = probe.Inspect(pin, sid);
+            return new { presence = result.Presence.ToString(), identityPresent = result.Identity is not null,
+                detail = result.Detail[..Math.Min(result.Detail.Length, 512)] }; }),
+        files, shortcuts = new[] { Environment.SpecialFolder.DesktopDirectory, Environment.SpecialFolder.Programs }
+            .Select(location => new { location = location.ToString(), observation = Read(() => {
+                var directory = Environment.GetFolderPath(location);
+                return new { knownFolderAvailable = !string.IsNullOrWhiteSpace(directory),
+                    currentShortcutExists = !string.IsNullOrWhiteSpace(directory) &&
+                        File.Exists(Path.Combine(directory, "Платформа Коннектор.lnk")),
+                    oldShortcutExists = !string.IsNullOrWhiteSpace(directory) &&
+                        File.Exists(Path.Combine(directory, "Structura Connector.lnk")) };
+            }) }).ToArray() };
 }
