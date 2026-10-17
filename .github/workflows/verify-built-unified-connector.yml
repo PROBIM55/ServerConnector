@@ -17,9 +17,9 @@ jobs:
         shell: pwsh
     env:
       GH_TOKEN: ${{ github.token }}
-      PRODUCER_RUN: '38713535827'
-      PRODUCER_SHA: 'bfd40908a902ae27d15a0889233658921a4ec294'
-      PRODUCER_DIGEST: '90a2c59994fdc8ce1379fa22fe55dfb308aa56786cbb94cd05b1303496d7bf1f'
+      PRODUCER_RUN: '39070880102'
+      PRODUCER_SHA: '898edbee94060eabbeb19c701d60683167109a28'
+      PRODUCER_DIGEST: 'd81acb864ad006c828df16d01a6393646a3850c5185ef77fb7d3a0e5708a1656'
     steps:
       - uses: actions/checkout@v4
         with:
@@ -34,7 +34,7 @@ jobs:
           $source = gh api "repos/$env:GITHUB_REPOSITORY/actions/runs/$env:PRODUCER_RUN" | ConvertFrom-Json
           if ($LASTEXITCODE -ne 0 -or $source.head_sha -cne $env:PRODUCER_SHA) { throw 'Runtime source differs.' }
           $items = gh api "repos/$env:GITHUB_REPOSITORY/actions/runs/$env:PRODUCER_RUN/artifacts" | ConvertFrom-Json
-          $artifact = @($items.artifacts | Where-Object name -CEQ 'unverified-runtime-diagnostics-1.1.1')
+          $artifact = @($items.artifacts | Where-Object name -CEQ 'unverified-runtime-diagnostics-1.1.3')
           if ($artifact.Count -ne 1 -or $artifact[0].expired -or $artifact[0].digest -cne ('sha256:' + $env:PRODUCER_DIGEST)) { throw 'Runtime artifact differs.' }
           $archive = Join-Path $env:RUNNER_TEMP 'runtime.zip'
           gh api "repos/$env:GITHUB_REPOSITORY/actions/artifacts/$($artifact[0].id)/zip" > $archive
@@ -74,7 +74,7 @@ jobs:
       - name: Upload verified installer
         uses: actions/upload-artifact@v4
         with:
-          name: unified-connector-installer-1.1.1
+          name: unified-connector-installer-1.1.3
           path: ${{ runner.temp }}/verified-installer/*
           if-no-files-found: error
           retention-days: 14

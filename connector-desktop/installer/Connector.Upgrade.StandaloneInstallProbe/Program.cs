@@ -15,9 +15,9 @@ using var identity = WindowsIdentity.GetCurrent(TokenAccessLevels.Query | TokenA
 if (new WindowsPrincipal(identity).IsInRole(WindowsBuiltInRole.Administrator) || !identity.IsAuthenticated)
     throw new InvalidOperationException("The native user-stage fixture must run unelevated.");
 var output = Path.GetFullPath(args[0]);
-void Progress(string stage) => File.WriteAllText(output + ".progress.json", JsonSerializer.Serialize(new
+void Progress(string stage, string? detail = null) => File.WriteAllText(output + ".progress.json", JsonSerializer.Serialize(new
 {
-    stage, utc = DateTimeOffset.UtcNow, processId = Environment.ProcessId,
+    stage, detail, utc = DateTimeOffset.UtcNow, processId = Environment.ProcessId,
     sessionId = Process.GetCurrentProcess().SessionId
 }));
 try
@@ -43,7 +43,51 @@ try
         // Exercise the actual default GUI entrypoint, including its automatic Shown handler.
         // A token prompt, extra Finish click or network preflight makes this bounded test fail.
         using var installation = Process.Start(new ProcessStartInfo(caller) { UseShellExecute = false })!;
-        if (!installation.WaitForExit(180000)) { installation.Kill(true); throw new InvalidOperationException("Default installation waited for user input or network."); }
+        var installationTimer = Stopwatch.StartNew();
+        var lastStatus = string.Empty;
+        var exited = false;
+        while (!(exited = installation.WaitForExit(1000)) && installationTimer.Elapsed < TimeSpan.FromMinutes(3))
+        {
+            installation.Refresh();
+            if (installation.MainWindowHandle == IntPtr.Zero) continue;
+            string? status = null;
+            var errorPage = false;
+            try
+            {
+                var window = AutomationElement.FromHandle(installation.MainWindowHandle);
+                // The production token-free form contains only installation status, no account fields.
+                var labels = window.FindAll(TreeScope.Descendants,
+                    new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Text));
+                status = string.Join(" | ", labels.Cast<AutomationElement>().Select(element => element.Current.Name)
+                    .Where(name => !string.IsNullOrWhiteSpace(name)).Take(12));
+                if (status.Length > 1600) status = status[..1600];
+                // Direct form controls exclude the enabled Close button inside the native title bar.
+                var close = window.FindFirst(TreeScope.Children, new AndCondition(
+                    new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Button),
+                    new PropertyCondition(AutomationElement.NameProperty, "Закрыть")));
+                // This exact form enables Close only after InstallAsync throws.
+                errorPage = close is not null && close.Current.IsEnabled;
+            }
+            catch (ElementNotAvailableException) { }
+            catch (System.Runtime.InteropServices.COMException) { }
+            if (!string.IsNullOrWhiteSpace(status) && status != lastStatus)
+            {
+                lastStatus = status;
+                Progress("default-caller-" + attempt, status);
+            }
+            if (errorPage)
+            {
+                installation.Kill(true);
+                installation.WaitForExit(5000);
+                throw new InvalidOperationException("Default installer displayed an error: " + lastStatus);
+            }
+        }
+        if (!exited)
+        {
+            installation.Kill(true);
+            installation.WaitForExit(5000);
+            throw new InvalidOperationException("Default installation exceeded three minutes. Last status: " + lastStatus);
+        }
         if (installation.ExitCode is not (0 or 3010) || probe.Inspect(pin, sid).Presence != VelopackInstallPresence.ExactInstalled)
             throw new InvalidOperationException("Default installation did not complete and verify its desktop package.");
     }
