@@ -192,11 +192,15 @@ public sealed class VelopackUnifiedApplicationServiceTests
     }
 
     [Theory]
-    [InlineData("Structura Connector", "Structura Connector.exe")]
-    [InlineData("Structura Connector (новый)", "Structura Connector (новый).exe")]
-    public void SystemProbeVerifiesSqVersionExecutablesAndCurrentUserRegistration(string title, string launcher)
+    [InlineData("Платформа Коннектор", "Платформа Коннектор.exe", "1.1.3", true)]
+    [InlineData("Structura Connector", "Structura Connector.exe", "1.1.2", true)]
+    [InlineData("Structura Connector", "Structura Connector.exe", "1.1.3", false)]
+    [InlineData("Structura Connector (новый)", "Structura Connector (новый).exe", "1.1.1", true)]
+    [InlineData("Structura Connector (новый)", "Structura Connector (новый).exe", "1.1.2", false)]
+    [InlineData("Unknown title", "Платформа Коннектор.exe", "1.1.3", false)]
+    public void SystemProbeVerifiesSqVersionExecutablesAndCurrentUserRegistration(string title, string launcher, string version, bool supported)
     {
-        using var fixture = new Fixture();
+        using var fixture = new Fixture(version: version);
         Directory.CreateDirectory(Path.Combine(fixture.InstallRoot, "current"));
         var sqVersionPath = Path.Combine(fixture.InstallRoot, "current", "sq.version");
         File.WriteAllText(sqVersionPath, $"""
@@ -222,7 +226,8 @@ public sealed class VelopackUnifiedApplicationServiceTests
 
         var observation = probe.Inspect(fixture.Pin, CurrentSid);
 
-        Assert.Equal(VelopackInstallPresence.ExactInstalled, observation.Presence);
+        Assert.Equal(supported ? VelopackInstallPresence.ExactInstalled : VelopackInstallPresence.Conflicting, observation.Presence);
+        if (!supported) return;
         Assert.Equal(fixture.Pin.Version, observation.Identity!.Version);
         Assert.Equal(HashFile(sqVersionPath), observation.Identity.SqVersionSha256);
         Assert.Equal(HashFile(rootLauncherPath), observation.Identity.RootLauncherSha256);
@@ -240,7 +245,7 @@ public sealed class VelopackUnifiedApplicationServiceTests
     {
         private readonly string _root = Path.Combine(Path.GetTempPath(), "velopack-service-tests", Guid.NewGuid().ToString("N"));
 
-        public Fixture(string setupBytes = "expected", string? pinnedBytes = null)
+        public Fixture(string setupBytes = "expected", string? pinnedBytes = null, string version = "1.1.0-preview.12")
         {
             Directory.CreateDirectory(_root);
             LocalApplicationData = Path.Combine(_root, "LocalAppData");
@@ -250,7 +255,7 @@ public sealed class VelopackUnifiedApplicationServiceTests
             var pinned = pinnedBytes ?? setupBytes;
             Pin = new VelopackSetupPin(
                 UnifiedVelopackApplication.PackId,
-                "1.1.0-preview.12",
+                version,
                 pinned.Length,
                 Convert.ToHexString(SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(pinned))).ToLowerInvariant());
             Lease = new FakeLease(SetupPath, Pin);
@@ -305,7 +310,7 @@ public sealed class VelopackUnifiedApplicationServiceTests
                 CurrentSid,
                 $@"Software\Microsoft\Windows\CurrentVersion\Uninstall\{Pin.PackId}",
                 InstallRoot,
-                Pin.PackId,
+                Version.Parse(Pin.Version.Split('-')[0]) < new Version(1, 1, 2) ? Pin.PackId : "Structura",
                 "1.1.0",
                 $"\"{update}\" --uninstall",
                 $"\"{update}\" --uninstall --silent");

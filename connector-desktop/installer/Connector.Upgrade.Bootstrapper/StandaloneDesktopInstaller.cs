@@ -73,7 +73,7 @@ public sealed class ProductionStandaloneDesktopInstaller : IStandaloneDesktopIns
             if (lease.Length != release.Size ||
                 !Convert.ToHexString(await SHA256.HashDataAsync(lease, cancellationToken)).Equals(release.Sha256, StringComparison.OrdinalIgnoreCase))
                 throw new SecurityException("Пакет приложения не соответствует подписанному выпуску.");
-            status.Show("Устанавливаем Structura Connector и создаём ярлыки…");
+            status.Show("Устанавливаем Платформа Коннектор и создаём ярлыки…");
             var result = await new SystemVelopackProcessRunner().RunAsync(
                 new VelopackProcessRequest(release.AbsolutePath, ["--silent"], TimeSpan.FromMinutes(5)), cancellationToken);
             if (result.Completion != VelopackProcessCompletion.Exited || result.ExitCode is not (0 or 3010))
@@ -85,7 +85,7 @@ public sealed class ProductionStandaloneDesktopInstaller : IStandaloneDesktopIns
                 FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
             AssertPhysicalPath(installedImage.SafeFileHandle, Path.Combine(installRoot, "current", UnifiedVelopackApplication.MainExecutable));
             InstalledApplicationShortcuts.Publish(installRoot);
-            status.Show("Structura Connector установлен.");
+            status.Show("Платформа Коннектор установлен.");
             return new DesktopInstallationResult(installRoot, release.Version, result.ExitCode == 3010);
         }
         finally { runGuard.Release(); }

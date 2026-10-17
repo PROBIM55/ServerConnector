@@ -2,7 +2,7 @@
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
      xmlns:bal="http://wixtoolset.org/schemas/v4/wxs/bal"
      xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
-  <Bundle Name="Structura Connector"
+  <Bundle Name="Платформа Коннектор"
           Manufacturer="Structura"
           Version="$(var.ProductVersion)"
           UpgradeCode="DC40328B-3AD1-4F4C-8A34-9A876DA14E23"
@@ -56,7 +56,7 @@
       </MsiPackage>
 
       <MsiPackage Id="UnifiedMachineSetup"
-                  DisplayName="Компоненты Structura Connector"
+                  DisplayName="Компоненты Платформа Коннектор"
                   SourceFile="$(var.UnifiedSetupMsi)"
                   Vital="yes"
                   Visible="no">
@@ -75,7 +75,7 @@
       <!-- Burn's default per-user execution impersonates the initiating user even when the
            machine MSI required elevation. The bridge has no arguments or uninstall action. -->
       <ExePackage Id="OriginalUserUpgradeBridge"
-                  DisplayName="Приложение Structura Connector и ярлыки"
+                  DisplayName="Приложение Платформа Коннектор и ярлыки"
                   Name="Connector.Upgrade.LaunchBridge.exe"
                   SourceFile="$(var.LaunchBridge)"
                   DetectCondition="0"

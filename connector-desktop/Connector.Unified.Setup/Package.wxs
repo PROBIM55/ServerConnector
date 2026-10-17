@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
   <!-- Protected machine staging only; no executable or deferred custom actions. -->
-  <Package Name="Компоненты Structura Connector"
+  <Package Name="Компоненты Платформа Коннектор"
            Manufacturer="Structura"
            Version="$(var.ProductVersion)"
            UpgradeCode="A487F2B6-0CA7-4D5D-9E38-954D956D8312"
@@ -11,7 +11,7 @@
            Codepage="1251"
            Language="1049">
     <MajorUpgrade AllowSameVersionUpgrades="yes" Schedule="afterInstallInitialize"
-                  DowngradeErrorMessage="Установлена более новая версия установщика Structura Connector." />
+                  DowngradeErrorMessage="Установлена более новая версия установщика Платформа Коннектор." />
     <!-- A pilot can carry a newer app-local runtime. Costing must not skip its
          files before RemoveExistingProducts deletes that previous package. -->
     <Property Id="REINSTALLMODE" Value="amus" />
@@ -124,7 +124,7 @@
         <PermissionEx Sddl="O:SYG:SYD:P(A;;FA;;;SY)(A;;FA;;;BA)(A;;GRGX;;;BU)" />
         <!-- Advertised shortcut belongs to the same machine file component.
              ProgramMenuFolder resolves to All Users for this per-machine package. -->
-        <Shortcut Id="OriginalUserBootstrapperShortcut" Name="Structura Connector — восстановить установку"
+        <Shortcut Id="OriginalUserBootstrapperShortcut" Name="Платформа Коннектор — восстановить установку"
                   Directory="ProgramMenuFolder" Advertise="yes"
                   Icon="PlatformConnector.exe" IconIndex="0"
                   WorkingDirectory="BOOTSTRAPPER_DIR" />

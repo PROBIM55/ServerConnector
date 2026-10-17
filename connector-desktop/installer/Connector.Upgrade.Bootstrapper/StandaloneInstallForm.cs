@@ -13,7 +13,7 @@ internal sealed class StandaloneInstallForm : Form, IBootstrapperStatusSink
     public StandaloneInstallForm(IStandaloneDesktopInstaller installer)
     {
         _installer = installer;
-        Text = "Structura Connector — установка";
+        Text = "Платформа Коннектор — установка";
         ClientSize = new Size(640, 330);
         Font = new Font("Segoe UI", 10F);
         BackColor = BootstrapperForm.InstallerTheme.Background;
@@ -23,10 +23,10 @@ internal sealed class StandaloneInstallForm : Form, IBootstrapperStatusSink
         StartPosition = FormStartPosition.CenterScreen;
         Icon = System.Drawing.Icon.ExtractAssociatedIcon(Application.ExecutablePath);
         Controls.Add(BootstrapperForm.InstallerTheme.Logo(28, 24, 52));
-        Controls.Add(new Label { Left = 96, Top = 26, Width = 516, Height = 42, Text = "Structura Connector",
+        Controls.Add(new Label { Left = 96, Top = 26, Width = 516, Height = 42, Text = "Платформа Коннектор",
             Font = new Font("Segoe UI", 23F, FontStyle.Bold) });
         _status = new Label { Left = 30, Top = 105, Width = 580, Height = 105,
-            Text = "Подготовка Structura Connector…" };
+            Text = "Подготовка Платформа Коннектор…" };
         var progress = new ProgressBar { Left = 30, Top = 220, Width = 580, Height = 4, Style = ProgressBarStyle.Marquee };
         _close = BootstrapperForm.InstallerTheme.Button("Закрыть", 410, 260, 200);
         _close.Enabled = false;

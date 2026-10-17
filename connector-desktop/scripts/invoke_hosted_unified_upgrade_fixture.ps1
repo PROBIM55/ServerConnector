@@ -11,13 +11,13 @@ if ($env:GITHUB_ACTIONS -ne 'true' -or $env:RUNNER_ENVIRONMENT -ne 'github-hoste
 }
 $output=Join-Path $RunDirectory 'native-upgrade-fixture'
 $previous=Join-Path $output 'previous'
-$source=gh api "repos/$env:GITHUB_REPOSITORY/actions/runs/38548514207" | ConvertFrom-Json
+$source=gh api "repos/$env:GITHUB_REPOSITORY/actions/runs/38730224217" | ConvertFrom-Json
 if ($LASTEXITCODE -ne 0 -or $source.conclusion -cne 'success' -or
-    $source.head_sha -cne '91de098ef9f50905275be25ab2955baeb3c17d74') { throw 'Previous fixture identity differs.' }
-gh run download 38548514207 --repo $env:GITHUB_REPOSITORY --name verified-unified-installer --dir $previous
+    $source.head_sha -cne '5263a5007e76ddba2210c0f795983b1c6ec656e3') { throw 'Previous fixture identity differs.' }
+gh run download 38730224217 --repo $env:GITHUB_REPOSITORY --name unified-connector-installer-1.1.2 --dir $previous
 if ($LASTEXITCODE -ne 0) { throw 'Previous verified fixture unavailable.' }
 $previousExe=Join-Path $previous 'Structura.Connector.Installer.exe'
-if ((Get-FileHash -LiteralPath $previousExe).Hash -cne '44E4F750463B6FC5B48352FFA0F4B0FE3BE5730012DCB5AE5B89A008AF325CF7') {
+if ((Get-FileHash -LiteralPath $previousExe).Hash -cne '1E6521DFF8412DE07515E94C25943A7D474D05A6618F2507EF6CD949292BDBA2') {
     throw 'Previous fixture bytes differ.'
 }
 $msi=Join-Path $RunDirectory 'unified-setup/Connector.Unified.Setup.msi'
@@ -35,6 +35,7 @@ $probeOutput = Join-Path $RunDirectory 'standalone-install-probe'
     "-p:HelperReleasePublicKeyFile=$([IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../installer/release-public-key.pem')))"
 if ($LASTEXITCODE -ne 0) { throw 'Native install probe build failed.' }
 & (Join-Path $PSScriptRoot 'invoke_pilot_native_failure_fixture.ps1') -PreviousInstaller $previousExe `
+    -PreviousProductCode '{EA2EA977-CA86-470E-9A18-B9CB7A232D9F}' `
     -CandidateInstaller (Join-Path $RunDirectory 'unified-installer/Structura.Connector.Installer.exe') `
     -CandidateProductCode $productCode -ExpectedBootstrapperDirectory (Join-Path $RunDirectory 'bootstrapper') `
     -ExpectedHelperDirectory (Join-Path $RunDirectory 'machine-helper') `

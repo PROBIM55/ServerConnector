@@ -9,6 +9,8 @@
     <UseWindowsForms>true</UseWindowsForms>
     <SatelliteResourceLanguages>ru;en</SatelliteResourceLanguages>
     <AssemblyName>Connector.Desktop</AssemblyName>
+    <Product>Платформа Коннектор</Product>
+    <AssemblyTitle>Платформа Коннектор</AssemblyTitle>
     <RootNamespace>Connector.Desktop</RootNamespace>
     <Version>1.0.31</Version>
     <ApplicationIcon>Assets\platform_connector.ico</ApplicationIcon>

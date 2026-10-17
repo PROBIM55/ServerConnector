@@ -20,29 +20,32 @@ internal static class InstalledApplicationShortcuts
                 var directory=Environment.GetFolderPath(location,Environment.SpecialFolderOption.Create);
                 if(string.IsNullOrWhiteSpace(directory)) throw new InvalidOperationException("Не удалось найти папку для ярлыков приложения.");
                 Directory.CreateDirectory(directory);
-                object shortcut=((dynamic)shell).CreateShortcut(Path.Combine(directory,"Structura Connector.lnk"));
+                object shortcut=((dynamic)shell).CreateShortcut(Path.Combine(directory,"Платформа Коннектор.lnk"));
                 try
                 {
                     ((dynamic)shortcut).TargetPath=launcher;
                     ((dynamic)shortcut).Arguments="";
                     ((dynamic)shortcut).WorkingDirectory=installRoot;
-                    ((dynamic)shortcut).Description="Structura Connector";
+                    ((dynamic)shortcut).Description="Платформа Коннектор";
                     ((dynamic)shortcut).IconLocation=executable+",0";
                     ((dynamic)shortcut).Save();
                 }
                 finally { Marshal.FinalReleaseComObject(shortcut); }
-                var previous=Path.Combine(directory,"Structura Connector (новый).lnk");
-                if(!File.Exists(previous)) continue;
-                object old=((dynamic)shell).CreateShortcut(previous);
-                bool owned;
-                try
+                foreach(var oldName in new[] {"Structura Connector.lnk","Structura Connector (новый).lnk"})
                 {
-                    var target=(string)((dynamic)old).TargetPath;
-                    owned=!string.IsNullOrWhiteSpace(target) && Path.GetFullPath(target).StartsWith(Path.TrimEndingDirectorySeparator(installRoot)+Path.DirectorySeparatorChar,
-                        StringComparison.OrdinalIgnoreCase);
+                    var previous=Path.Combine(directory,oldName);
+                    if(!File.Exists(previous)) continue;
+                    object old=((dynamic)shell).CreateShortcut(previous);
+                    bool owned;
+                    try
+                    {
+                        var target=(string)((dynamic)old).TargetPath;
+                        owned=!string.IsNullOrWhiteSpace(target) && Path.GetFullPath(target).StartsWith(Path.TrimEndingDirectorySeparator(installRoot)+Path.DirectorySeparatorChar,
+                            StringComparison.OrdinalIgnoreCase);
+                    }
+                    finally { Marshal.FinalReleaseComObject(old); }
+                    if(owned) File.Delete(previous);
                 }
-                finally { Marshal.FinalReleaseComObject(old); }
-                if(owned) File.Delete(previous);
             }
         }
         finally { Marshal.FinalReleaseComObject(shell); }

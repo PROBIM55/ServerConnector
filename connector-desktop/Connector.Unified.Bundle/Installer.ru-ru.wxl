@@ -1,18 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <WixLocalization Culture="ru-ru" Language="1049" xmlns="http://wixtoolset.org/schemas/v4/wxl">
-  <String Id="Caption" Value="Structura Connector — установка" />
-  <String Id="Title" Value="Structura Connector" />
+  <String Id="Caption" Value="Платформа Коннектор — установка" />
+  <String Id="Title" Value="Платформа Коннектор" />
   <String Id="InstallDescription" Value="Приложение и компоненты для работы." />
   <String Id="CheckingForUpdatesLabel" Value="Подготовка установщика…" />
   <String Id="UpdateButton" Value="Обновить до [WixStdBAUpdateAvailable]" />
   <String Id="InstallHeader" Value="Установить коннектор" />
-  <String Id="InstallMessage" Value="Установим Structura Connector, защищённое подключение NetBird и компоненты интерфейса." />
-  <String Id="InstallMessageOptions" Value="Установим Structura Connector, защищённое подключение NetBird и компоненты интерфейса." />
+  <String Id="InstallMessage" Value="Установим Платформа Коннектор, защищённое подключение NetBird и компоненты интерфейса." />
+  <String Id="InstallMessageOptions" Value="Установим Платформа Коннектор, защищённое подключение NetBird и компоненты интерфейса." />
   <String Id="InstallVersion" Value="Версия [WixBundleVersion]" />
-  <String Id="ConfirmCancelMessage" Value="Прервать установку Structura Connector?" />
-  <String Id="ExecuteUpgradeRelatedBundleMessage" Value="Обновление Structura Connector" />
+  <String Id="ConfirmCancelMessage" Value="Прервать установку Платформа Коннектор?" />
+  <String Id="ExecuteUpgradeRelatedBundleMessage" Value="Обновление Платформа Коннектор" />
   <String Id="HelpHeader" Value="Параметры установки" />
-  <String Id="HelpText" Value="/install — установить; /repair — восстановить; /uninstall — удалить компоненты Structura Connector.&#xA;/passive — минимальный интерфейс; /norestart — без автоматической перезагрузки; /log — файл журнала." />
+  <String Id="HelpText" Value="/install — установить; /repair — восстановить; /uninstall — удалить компоненты Платформа Коннектор.&#xA;/passive — минимальный интерфейс; /norestart — без автоматической перезагрузки; /log — файл журнала." />
   <String Id="HelpCloseButton" Value="Закрыть" />
   <String Id="InstallLicenseLinkText" Value="Условия использования" />
   <String Id="InstallAcceptCheckbox" Value="Принимаю условия использования" />
@@ -28,8 +28,8 @@
   <String Id="ProgressLabel" Value="Текущий этап:" />
   <String Id="OverallProgressPackageText" Value="Подготовка файлов…" />
   <String Id="ProgressCancelButton" Value="Отмена" />
-  <String Id="ModifyHeader" Value="Structura Connector установлен" />
-  <String Id="ModifyMessage" Value="Откройте Structura Connector в меню «Пуск» или на рабочем столе. Здесь можно восстановить установку или удалить компоненты приложения." />
+  <String Id="ModifyHeader" Value="Платформа Коннектор установлен" />
+  <String Id="ModifyMessage" Value="Откройте Платформа Коннектор в меню «Пуск» или на рабочем столе. Здесь можно восстановить установку или удалить компоненты приложения." />
   <String Id="ModifyRepairButton" Value="Восстановить" />
   <String Id="ModifyUninstallButton" Value="Удалить" />
   <String Id="ModifyCancelButton" Value="Закрыть" />

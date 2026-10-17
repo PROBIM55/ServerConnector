@@ -90,7 +90,7 @@
                                   Margin="0,10,0,8"
                                   Foreground="#D7E6FA"
                                   FontFamily="Bahnschrift"
-                                  Content="Запускать Structura Connector при входе в Windows"
+                                  Content="Запускать Платформа Коннектор при входе в Windows"
                                   Visibility="Collapsed" />
 
                         <WrapPanel Grid.Row="7" Grid.ColumnSpan="2" Margin="0,4,0,0" Visibility="Collapsed">
@@ -107,7 +107,7 @@
             <Border Grid.Row="1" Style="{StaticResource CardStyle}">
                 <StackPanel>
                 <TextBlock Text="Обновления приложения" FontSize="19" FontWeight="SemiBold" />
-                <TextBlock Text="Проверка и установка новой версии Structura Connector."
+                <TextBlock Text="Проверка и установка новой версии Платформа Коннектор."
                            Margin="0,6,0,12" Foreground="#A9BBD3" TextWrapping="Wrap" />
 
                 <Label Content="Логин SMB" Visibility="Collapsed" />

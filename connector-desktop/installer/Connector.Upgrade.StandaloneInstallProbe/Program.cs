@@ -66,7 +66,7 @@ try
     var desktop = Path.Combine(root, "current", UnifiedVelopackApplication.MainExecutable);
     Progress("application-name-icons-and-shortcuts");
     using(var registration=Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Uninstall\"+release.PackageId))
-        if(registration?.GetValue("DisplayName") as string != "Structura Connector")
+        if(registration?.GetValue("DisplayName") as string != "Платформа Коннектор")
             throw new InvalidOperationException("Installed Apps still contains the pilot application name.");
     static byte[] IconBytes(string path)
     {
@@ -83,8 +83,8 @@ try
         foreach(var location in new[] {Environment.SpecialFolder.DesktopDirectory,Environment.SpecialFolder.Programs})
         {
             var directory=Environment.GetFolderPath(location);
-            var path=Path.Combine(directory,"Structura Connector.lnk");
-            if(!File.Exists(path)||File.Exists(Path.Combine(directory,"Structura Connector (новый).lnk")))
+            var path=Path.Combine(directory,"Платформа Коннектор.lnk");
+            if(!File.Exists(path)||File.Exists(Path.Combine(directory,"Structura Connector (новый).lnk"))||File.Exists(Path.Combine(directory,"Structura Connector.lnk")))
                 throw new InvalidOperationException("A normal branded shortcut is missing or the pilot shortcut remains.");
             object shortcut=((dynamic)shell).CreateShortcut(path);
             try

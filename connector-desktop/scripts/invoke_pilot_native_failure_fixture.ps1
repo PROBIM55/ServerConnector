@@ -1,6 +1,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)][string]$PreviousInstaller,
+    [ValidatePattern('^\{[A-Fa-f0-9-]{36}\}$')][string]$PreviousProductCode = '{5490E9F5-4C12-4797-A497-28D4EB309718}',
     [Parameter(Mandatory)][string]$CandidateInstaller,
     [Parameter(Mandatory)][ValidatePattern('^\{[A-Fa-f0-9-]{36}\}$')][string]$CandidateProductCode,
     [Parameter(Mandatory)][string]$ExpectedBootstrapperDirectory,
@@ -30,7 +31,7 @@ function Invoke-FixtureBundle([string]$Path, [string]$Action, [string]$Log) {
     } finally { $process.Dispose() }
 }
 function Registration([string]$Code) { return 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\' + $Code }
-$previousProduct = '{5490E9F5-4C12-4797-A497-28D4EB309718}'
+$previousProduct = $PreviousProductCode
 try {
     $previousLog = Join-Path $Output 'previous-failure.log'
     $previousExit = Invoke-FixtureBundle $PreviousInstaller 'install' $previousLog

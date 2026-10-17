@@ -44,6 +44,11 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "8.0.x"
+      - name: Verify native application identity and upgrade compatibility
+        shell: pwsh
+        run: |
+          dotnet test connector-desktop/installer/Connector.Upgrade.Velopack.Tests/Connector.Upgrade.Velopack.Tests.csproj --configuration Release --filter FullyQualifiedName~VelopackUnifiedApplicationServiceTests -p:UseSharedCompilation=false -p:BuildInParallel=false --logger "trx;LogFileName=native-brand.trx"
+          if ($LASTEXITCODE -ne 0) { throw 'Native application identity regression failed.' }
       - name: Validate, stage, and provision protected output
         id: prepare
         env:

@@ -18,7 +18,7 @@ internal sealed class BootstrapperForm : Form, IBootstrapperStatusSink
     public BootstrapperForm(IWindowsUpgradeBootstrapperRuntimeFactory runtimeFactory)
     {
         _runtimeFactory = runtimeFactory;
-        Text = "Structura Connector — установка";
+        Text = "Платформа Коннектор — установка";
         ClientSize = new Size(640, 382);
         AutoScaleMode = AutoScaleMode.Dpi;
         AutoScaleDimensions = new SizeF(96, 96);
@@ -37,7 +37,7 @@ internal sealed class BootstrapperForm : Form, IBootstrapperStatusSink
         var brand = new Label
         {
             Left = 96, Top = 26, Width = 516, Height = 42,
-            Text = "Structura Connector", Font = new Font("Segoe UI", 23F, FontStyle.Bold)
+            Text = "Платформа Коннектор", Font = new Font("Segoe UI", 23F, FontStyle.Bold)
         };
         var introduction = new Label
         {
@@ -146,7 +146,7 @@ internal sealed class BootstrapperForm : Form, IBootstrapperStatusSink
 
         public TokenEntryDialog()
         {
-            Text = "Structura Connector — подключение";
+            Text = "Платформа Коннектор — подключение";
             ClientSize = new Size(520, 288);
             AutoScaleMode = AutoScaleMode.Dpi;
             AutoScaleDimensions = new SizeF(96, 96);
