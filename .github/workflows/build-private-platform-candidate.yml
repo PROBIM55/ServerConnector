@@ -18,7 +18,7 @@ jobs:
       run:
         shell: pwsh
     env:
-      NODE_OPTIONS: --max-old-space-size=8192
+      NODE_OPTIONS: --max-old-space-size=6144
       DOTNET_GCHeapHardLimit: '0x80000000'
       DOTNET_CLI_TELEMETRY_OPTOUT: '1'
       MSBUILDDISABLENODEREUSE: '1'
@@ -26,6 +26,8 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+      - name: Verify bounded build supervision with a locked log
+        run: ./.github/scripts/cloud-build-supervision.tests.ps1
       - uses: actions/setup-node@v4
         with:
           node-version: 24

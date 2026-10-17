@@ -10,10 +10,15 @@ $source=Join-Path $root 'source';$log=Join-Path $root 'private-build.log'
 [IO.File]::WriteAllText($log,'',[Text.UTF8Encoding]::new($false))
 $exitCode=1
 $builder=$null
+. (Join-Path $PSScriptRoot 'cloud-build-supervision.ps1')
+$coordinatorLog=Join-Path $root 'coordinator.log'
+$terminationLog=Join-Path $root 'termination.log'
+$memoryStop=Join-Path $root 'memory-reserve-stop.txt'
+$hostOut=$null;$hostError=$null
 try {
     $os=Get-CimInstance Win32_OperatingSystem
     Write-Output ('Hosted memory worker: totalMiB='+[math]::Round($os.TotalVisibleMemorySize/1024)+' freeMiB='+[math]::Round($os.FreePhysicalMemory/1024))
-    if([long]$os.FreePhysicalMemory*1KB -lt 12GB){throw 'Hosted worker requires 8 GiB Node heap plus 4 GiB free-memory reserve'}
+    if([long]$os.FreePhysicalMemory*1KB -lt 12GB){throw 'Hosted worker requires 12 GiB free, including a 4 GiB reserve'}
 
     $sdk=@(& dotnet --list-sdks|ForEach-Object {if($_ -match '^(8\.0\.\d+) '){$Matches[1]}}|Sort-Object {[version]$_}|Select-Object -Last 1)
     if($sdk.Count -ne 1){throw 'Pinned .NET 8 SDK is unavailable'}
@@ -65,16 +70,12 @@ try {
     $hostOut=Join-Path $root 'builder-host.stdout.log';$hostError=Join-Path $root 'builder-host.stderr.log'
     $builder=Start-Process -FilePath (Get-Process -Id $PID).Path -ArgumentList @('-NoProfile','-NonInteractive','-File',('"'+$builderEntry+'"')) `
         -WorkingDirectory $source -WindowStyle Hidden -RedirectStandardOutput $hostOut -RedirectStandardError $hostError -PassThru
-    $memoryStop=Join-Path $root 'memory-reserve-stop.txt'
     while(!$builder.WaitForExit(2000)){
         if([long](Get-CimInstance Win32_OperatingSystem).FreePhysicalMemory*1KB -lt 4GB){
-            [IO.File]::WriteAllText($memoryStop,'Hosted builder and its children stopped to preserve 4 GiB free RAM.')
-            & taskkill.exe /PID $builder.Id /T /F *>> $log
+            [IO.File]::WriteAllText($memoryStop,'Hosted builder stop requested to preserve 4 GiB free RAM.')
+            Stop-PlatformCloudBuilderTree -Process $builder -TerminationLog $terminationLog
             throw 'Hosted builder was stopped at the memory reserve'
         }
-    }
-    foreach($hostLog in @($hostOut,$hostError)){
-        if(Test-Path -LiteralPath $hostLog){[IO.File]::AppendAllText($log,[IO.File]::ReadAllText($hostLog))}
     }
     if($builder.ExitCode -ne 0 -or (Test-Path -LiteralPath $memoryStop)){throw 'Private builder did not complete within its memory policy'}
     $builder.Dispose();$builder=$null
@@ -92,19 +93,17 @@ try {
         $exitCode=0
     } finally {Pop-Location}
 } catch {
-    [IO.File]::AppendAllText($log,"`nPrivate build stage failed: "+$_.Exception.Message)
-    $memoryStop=Join-Path $root 'memory-reserve-stop.txt'
-    if(Test-Path -LiteralPath $memoryStop){[IO.File]::AppendAllText($log,"`n"+[IO.File]::ReadAllText($memoryStop))}
+    [IO.File]::AppendAllText($coordinatorLog,"`nPrivate build stage failed: "+$_.Exception.Message)
 } finally {
     if($builder){
-        if(!$builder.HasExited){
-            try {& taskkill.exe /PID $builder.Id /T /F *>> $log}catch{[IO.File]::AppendAllText($log,"`nBuilder termination requested.")}
-        }
+        try {Stop-PlatformCloudBuilderTree -Process $builder -TerminationLog $terminationLog}
+        catch {$exitCode=1;[IO.File]::AppendAllText($coordinatorLog,"`nBuilder stop failed: "+$_.Exception.Message)}
         $builder.Dispose()
     }
     if(Test-Path -LiteralPath $key){Remove-Item -LiteralPath $key}
     $env:GIT_SSH_COMMAND='';$env:PRIVATE_PLATFORM_READ_KEY=''
-    $diagnostics=[Text.Encoding]::UTF8.GetBytes((@{sourceSha=$env:PRIVATE_SOURCE_SHA;exitCode=$exitCode;log=[IO.File]::ReadAllText($log)}|ConvertTo-Json -Depth 4 -Compress))
+    $diagnosticLog=(@($log,$hostOut,$hostError,$coordinatorLog,$terminationLog,$memoryStop)|ForEach-Object {Read-PlatformCloudLog $_}) -join "`n"
+    $diagnostics=[Text.Encoding]::UTF8.GetBytes((@{sourceSha=$env:PRIVATE_SOURCE_SHA;exitCode=$exitCode;log=$diagnosticLog}|ConvertTo-Json -Depth 4 -Compress))
     $rsa=[Security.Cryptography.RSA]::Create();$symmetric=[Security.Cryptography.RandomNumberGenerator]::GetBytes(32)
     $nonce=[Security.Cryptography.RandomNumberGenerator]::GetBytes(12);$tag=[byte[]]::new(16);$cipher=[byte[]]::new($diagnostics.Length)
     $aes=[Security.Cryptography.AesGcm]::new($symmetric,16)
