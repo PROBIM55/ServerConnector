@@ -47,7 +47,7 @@ try {
         if($LASTEXITCODE -ne 0){throw 'Directory reconciliation checks failed.'}
         & dotnet test apps/server/tests/Platform.Server.Tests/Platform.Server.Tests.csproj --configuration Release --maxcpucount:1 `
             -p:UseSharedCompilation=false -p:BuildInParallel=false `
-            --filter 'FullyQualifiedName~StructuraSignInTests|FullyQualifiedName~ConnectorBrowserSignInEndpointTests|FullyQualifiedName~ConnectorAccessCompanyScopeTests' `
+            --filter 'FullyQualifiedName~StructuraSignInTests|FullyQualifiedName~ConnectorBrowserSignInEndpointTests|FullyQualifiedName~ConnectorAccessCompanyScopeTests|FullyQualifiedName~PlatformDeviceCertificateIssuerTests' `
             --logger 'trx;LogFileName=identity.trx' *>> $log
         $exitCode=$LASTEXITCODE
     } finally {Pop-Location}
