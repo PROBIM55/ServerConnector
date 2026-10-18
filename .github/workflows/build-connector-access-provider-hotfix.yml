@@ -56,7 +56,7 @@ jobs:
             dotnet pack $project --configuration Release --output provider-hotfix/packages -p:UseSharedCompilation=false -p:BuildInParallel=false --verbosity minimal
             if ($LASTEXITCODE -ne 0) { throw "Provider package failed: $project" }
           }
-          dotnet publish connector-access/smb-helper/Connector.Access.Smb.Helper.csproj --configuration Release --runtime win-x64 --self-contained false --output provider-hotfix/helper -p:UseSharedCompilation=false -p:BuildInParallel=false --verbosity minimal
+          dotnet publish connector-access/smb-helper/Connector.Access.Smb.Helper.csproj --configuration Release --runtime win-x64 --self-contained true --output provider-hotfix/helper -p:UseSharedCompilation=false -p:BuildInParallel=false --verbosity minimal
           if ($LASTEXITCODE -ne 0) { throw 'SMB helper publish failed' }
           $expected = @('Connector.Access.NetBird.0.2.9.nupkg','Connector.Access.Smb.0.2.9.nupkg')
           foreach ($name in $expected) {
