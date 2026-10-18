@@ -21,7 +21,8 @@ internal sealed class NetBirdManagementClient
 
     public async ValueTask<NetBirdGroup> EnsureDeviceGroupAsync(string name, CancellationToken cancellationToken)
     {
-        var matches = await GetAsync<List<NetBirdGroup>>("api/groups?name=" + Uri.EscapeDataString(name), cancellationToken);
+        // NetBird returns 404, rather than an empty array, when a name has no match.
+        var matches = await GetOptionalAsync<List<NetBirdGroup>>("api/groups?name=" + Uri.EscapeDataString(name), cancellationToken) ?? [];
         if (matches.Count > 1) throw new InvalidOperationException("NetBird returned multiple device groups with the same exact name.");
         if (matches.Count == 1)
         {
@@ -39,7 +40,7 @@ internal sealed class NetBirdManagementClient
 
     public async ValueTask<NetBirdGroup?> FindGroupByNameAsync(string name, CancellationToken cancellationToken)
     {
-        var named = (await GetAsync<List<NetBirdGroup>>("api/groups?name=" + Uri.EscapeDataString(name), cancellationToken))
+        var named = (await GetOptionalAsync<List<NetBirdGroup>>("api/groups?name=" + Uri.EscapeDataString(name), cancellationToken) ?? [])
             .Where(existing => string.Equals(existing.Name, name, StringComparison.Ordinal))
             .ToArray();
         if (named.Length > 1) throw new InvalidOperationException("NetBird returned duplicate device-owned groups.");
