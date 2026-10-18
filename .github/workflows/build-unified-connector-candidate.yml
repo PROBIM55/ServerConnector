@@ -44,6 +44,11 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "8.0.x"
+      - name: Verify first enrollment and connection guards
+        shell: pwsh
+        run: |
+          dotnet test connector-desktop/tests/Connector.Network.Tests/Connector.Network.Tests.csproj --configuration Release --filter FullyQualifiedName~CommonConnectorConnectionCoordinatorTests -p:UseSharedCompilation=false -p:BuildInParallel=false --logger "trx;LogFileName=connection-guards.trx"
+          if ($LASTEXITCODE -ne 0) { throw 'Connector connection guard regression failed.' }
       - name: Verify native application identity and upgrade compatibility
         shell: pwsh
         run: |
