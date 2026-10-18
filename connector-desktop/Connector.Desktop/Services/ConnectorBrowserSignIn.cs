@@ -13,6 +13,7 @@ public sealed class ConnectorBrowserSignIn
     private const string Origin="https://bimplatforma.ru";
     private const string Root="/api/platform/auth/connector";
     private readonly SemaphoreSlim _active=new(1,1);
+    private Uri? _activeAuthorizationUri;
     private readonly HttpClient _http;
     private readonly Action<Uri> _openBrowser;
     private static readonly HttpClient ProductionHttp=new(new HttpClientHandler
@@ -24,22 +25,36 @@ public sealed class ConnectorBrowserSignIn
     public ConnectorBrowserSignIn(HttpClient http, Action<Uri> openBrowser)
     { _http=http; _openBrowser=openBrowser; }
 
+    public bool IsInProgress => _active.CurrentCount == 0;
+
+    // A second click returns to the same pending request. It must not create a
+    // second verifier or strand the first browser tab after SSO redirects.
+    public bool TryReopenActive()
+    {
+        var uri=Volatile.Read(ref _activeAuthorizationUri);
+        if (!IsInProgress || uri is null) return false;
+        _openBrowser(uri);
+        return true;
+    }
+
     public async Task<string> SignInAsync(Action<string> progress, CancellationToken cancellationToken)
     {
         if(!await _active.WaitAsync(0,cancellationToken))
-            throw new ConnectorSignInException("Вход уже открыт. Завершите его в браузере.");
+            throw new ConnectorSignInException("Вход уже выполняется. Откройте текущую страницу подтверждения.");
         try
         {
             using var timeout=CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             timeout.CancelAfter(TimeSpan.FromMinutes(5));
             var verifier=Base64Url(RandomNumberGenerator.GetBytes(32));
             var challenge=Base64Url(SHA256.HashData(Encoding.ASCII.GetBytes(verifier)));
-            progress("Открываем вход в Structura…");
+            progress("Открываем вход в общую учётную запись…");
             var started=await PostAsync<StartResponse>("/requests",new {challenge,deviceName=Environment.MachineName},timeout.Token);
             if(!Guid.TryParseExact(started.RequestId,"N",out _) || started.ExpiresIn is <=0 or >300 ||
                 started.AuthorizationUrl!=Origin+Root+"/authorize?id="+started.RequestId)
                 throw new ConnectorSignInException("Сервис входа вернул неверный ответ. Повторите вход позже.");
-            _openBrowser(new Uri(started.AuthorizationUrl));
+            var authorizationUri=new Uri(started.AuthorizationUrl);
+            Volatile.Write(ref _activeAuthorizationUri,authorizationUri);
+            _openBrowser(authorizationUri);
             progress("Завершите вход в браузере и подтвердите подключение компьютера.");
             while(true)
             {
@@ -48,18 +63,18 @@ public sealed class ConnectorBrowserSignIn
                 if(result.Status=="pending") continue;
                 if(result.Status!="approved" || string.IsNullOrWhiteSpace(result.EnrollmentToken) ||
                     result.EnrollmentToken.Length>4096 || !result.EnrollmentToken.StartsWith("cea1.",StringComparison.Ordinal))
-                    throw new ConnectorSignInException("Вход не завершён. Нажмите «Войти через Structura» ещё раз.");
+                    throw new ConnectorSignInException("Вход не завершён. Повторите попытку в коннекторе.");
                 progress("Настраиваем защищённое подключение…");
                 return result.EnrollmentToken;
             }
         }
         catch(OperationCanceledException) when(!cancellationToken.IsCancellationRequested)
-        { throw new ConnectorSignInException("Время входа истекло. Нажмите «Войти через Structura» ещё раз."); }
+        { throw new ConnectorSignInException("Время входа истекло. Повторите попытку в коннекторе."); }
         catch(HttpRequestException)
         { throw new ConnectorSignInException("Сервис входа недоступен. Проверьте интернет и повторите вход."); }
         catch(JsonException)
         { throw new ConnectorSignInException("Не удалось завершить вход. Повторите попытку позже."); }
-        finally { _active.Release(); }
+        finally { Volatile.Write(ref _activeAuthorizationUri,null); _active.Release(); }
     }
 
     private async Task<T> PostAsync<T>(string path,object value,CancellationToken cancellationToken)

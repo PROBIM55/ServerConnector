@@ -37,6 +37,34 @@ public sealed class ConnectorBrowserSignInTests
         Assert.Equal(2,calls);
     }
 
+    [Fact]
+    public async Task RepeatedClickReopensSamePendingRequestWithoutCreatingAnotherVerifier()
+    {
+        var id=Guid.NewGuid().ToString("N");
+        var requests=0;
+        var opened=new List<Uri>();
+        var firstOpen=new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var http=new HttpClient(new Handler(request=>
+        {
+            Interlocked.Increment(ref requests);
+            return Task.FromResult(Json(new {requestId=id,
+                authorizationUrl="https://bimplatforma.ru/api/platform/auth/connector/authorize?id="+id,expiresIn=300}));
+        }));
+        var service=new ConnectorBrowserSignIn(http,uri=>{opened.Add(uri);firstOpen.TrySetResult();});
+        using var cancel=new CancellationTokenSource();
+        var pending=service.SignInAsync(_=>{},cancel.Token);
+        await firstOpen.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.True(service.IsInProgress);
+        Assert.True(service.TryReopenActive());
+        Assert.Equal(2,opened.Count);
+        Assert.Equal(opened[0],opened[1]);
+        Assert.Equal(1,requests);
+        cancel.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(()=>pending);
+        Assert.False(service.IsInProgress);
+        Assert.False(service.TryReopenActive());
+    }
+
     [Theory]
     [InlineData("https://attacker.example/authorize")]
     [InlineData("http://bimplatforma.ru/api/platform/auth/connector/authorize")]

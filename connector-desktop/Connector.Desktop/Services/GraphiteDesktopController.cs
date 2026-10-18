@@ -66,6 +66,8 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
     private SafeNotice? _notice;
     private bool _firstSnapshot = true;
     private bool _disposed;
+    private int _browserIdentityConfirmedThisSession;
+    private int _commonConnectInProgress;
     private string? _converterSubmissionMode;
     private IReadOnlyList<PlatformAutoCadSession> _cadSessions = Array.Empty<PlatformAutoCadSession>();
 
@@ -213,6 +215,11 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
             ["ifcFiles"] = ifcFiles.Select(file => SafeFile(file, CurrentFileState(file))).ToArray(),
             ["modelFolders"] = Array.Empty<string>(),
             ["commonAccessSelected"] = _commonAccess.IsSelected,
+            ["browserSignInPending"] = _browserSignIn.IsInProgress,
+            ["browserIdentityConfirmedThisSession"] = Volatile.Read(ref _browserIdentityConfirmedThisSession) != 0,
+            ["commonConnectInProgress"] = Volatile.Read(ref _commonConnectInProgress) != 0,
+            ["commonReady"] = _commonAccess.IsReady,
+            ["commonConfigured"] = _commonAccess.IsConfigured,
             ["assignedFolders"] = _commonAccess.IsSelected && _commonAccess.HasPermission(mode, "folders", ConnectorPermission.Read)
                 ? _runtimeServices.CommonFolders.Folders : Array.Empty<CommonSmbFolder>(),
             ["folderStatus"] = _runtimeServices.CommonFolderStatus,
@@ -618,18 +625,48 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
     }
 
     private void StartCommonConnect(string? token, bool reconnect, CancellationToken cancellationToken)
-        => StartOperation(async () =>
+    {
+        if (_browserSignIn.IsInProgress)
         {
-            _commonAccess.Select();
-            if (!reconnect)
-                token = await _browserSignIn.SignInAsync(message =>
+            var reopened = _browserSignIn.TryReopenActive();
+            lock (_gate) _notice = new SafeNotice("connect-common", reopened
+                ? "Открыли текущую страницу входа. Подтвердите подключение компьютера в браузере."
+                : "Подготавливаем страницу входа. Подождите несколько секунд.");
+            PublishSnapshot();
+            return;
+        }
+        if (Interlocked.CompareExchange(ref _commonConnectInProgress, 1, 0) != 0)
+        {
+            lock (_gate) _notice = new SafeNotice("connect-common", "Подключение уже выполняется. Дождитесь результата.");
+            PublishSnapshot();
+            return;
+        }
+        if (!reconnect) Volatile.Write(ref _browserIdentityConfirmedThisSession, 0);
+        try
+        {
+            StartOperation(async () =>
+            {
+                _commonAccess.Select();
+                if (!reconnect)
                 {
-                    lock (_gate) _notice = new SafeNotice("connect-common", message);
+                    token = await _browserSignIn.SignInAsync(message =>
+                    {
+                        lock (_gate) _notice = new SafeNotice("connect-common", message);
+                        PublishSnapshot();
+                    }, cancellationToken);
+                    Volatile.Write(ref _browserIdentityConfirmedThisSession, 1);
                     PublishSnapshot();
-                }, cancellationToken);
-            if (_connectorHost.IsConnected) await _connectorHost.DisconnectAsync();
-            await _runtimeServices.ConnectCommonAsync(token, reconnect, cancellationToken);
-        }, "connect-common", cancellationToken);
+                }
+                if (_connectorHost.IsConnected) await _connectorHost.DisconnectAsync();
+                await _runtimeServices.ConnectCommonAsync(token, reconnect, cancellationToken);
+            }, "connect-common", cancellationToken);
+        }
+        catch
+        {
+            Volatile.Write(ref _commonConnectInProgress, 0);
+            throw;
+        }
+    }
 
     // New enrollment cannot reuse legacy web passwords, SMB credentials or
     // direct HTTP transports. Those adapters require typed resource grants.
@@ -873,6 +910,7 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
         }
         finally
         {
+            if (name == "connect-common") Volatile.Write(ref _commonConnectInProgress, 0);
             if (name is "start" or "ifc-optimize" or "ifc-analyze") lock (_gate) _converterSubmissionMode = null;
             PublishSnapshot();
         }

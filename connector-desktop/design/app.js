@@ -102,7 +102,9 @@
       document.querySelector('[data-act="show-token"]').disabled=!input.value;
     }
     updateJobDisplay();
-    if(desktop&&connection().status)$('#connection-status').textContent=connection().status;
+    if(desktop&&connection().status)$('#connection-status').textContent=state.browserSignInPending
+      ?'Ожидаем подтверждения входа':state.browserIdentityConfirmedThisSession&&state.commonConnectInProgress&&!state.commonReady
+        ?'Вход выполнен · подключаем компьютер':connection().status;
     if(desktop&&state.job){
       document.querySelectorAll('[data-act="results"]').forEach(control=>control.disabled=!state.job.hasResult);
       document.querySelectorAll('[data-act="report"]').forEach(control=>{if(!control.dataset.target)control.disabled=!state.job.hasReport;});
@@ -253,6 +255,11 @@
     if(Array.isArray(snapshot.history))state.history=snapshot.history.filter(job=>job&&typeof job==='object').map(job=>({id:String(job.id??''),mode:job.mode==='platform'?'platform':'structura',kind:job.kind==='ifc'?'ifc':'fbx',status:String(job.status??'—'),output:String(job.output??'')}));
     const folders=snapshot.modelFolders??snapshot.lists?.modelFolders;if(Array.isArray(folders))state.modelFolders=folders.map(String);
     if(typeof snapshot.commonAccessSelected==='boolean')state.commonAccessSelected=snapshot.commonAccessSelected;
+    if(typeof snapshot.browserSignInPending==='boolean')state.browserSignInPending=snapshot.browserSignInPending;
+    if(typeof snapshot.browserIdentityConfirmedThisSession==='boolean')state.browserIdentityConfirmedThisSession=snapshot.browserIdentityConfirmedThisSession;
+    if(typeof snapshot.commonConnectInProgress==='boolean')state.commonConnectInProgress=snapshot.commonConnectInProgress;
+    if(typeof snapshot.commonReady==='boolean')state.commonReady=snapshot.commonReady;
+    if(typeof snapshot.commonConfigured==='boolean')state.commonConfigured=snapshot.commonConfigured;
     if(Array.isArray(snapshot.assignedFolders))state.assignedFolders=snapshot.assignedFolders.filter(folder=>folder&&typeof folder==='object').map(folder=>({resourceId:String(folder.resourceId??''),displayName:String(folder.displayName??''),drive:typeof folder.drive==='string'?folder.drive:null}));
     if(typeof snapshot.folderStatus==='string')state.folderStatus=snapshot.folderStatus;
     if(snapshot.status&&typeof snapshot.status==='string')state.connectionStatus=snapshot.status;
