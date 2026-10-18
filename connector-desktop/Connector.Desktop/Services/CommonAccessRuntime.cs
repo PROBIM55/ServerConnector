@@ -60,6 +60,7 @@ public sealed class CommonAccessRuntime : ICommonConnectorRequestTransport
         Volatile.Read(ref _vpnSetupRequired) != 0 ? "Требуется установка защищённого подключения" : Current?.Status switch
     {
         CommonConnectorConnectionStatus.Ready => "Подключено",
+        CommonConnectorConnectionStatus.EnrollmentRequired => "Требуется вход",
         CommonConnectorConnectionStatus.Enrolling or CommonConnectorConnectionStatus.ConnectingOverlay => "Подключение…",
         CommonConnectorConnectionStatus.AwaitingVpnAuthorization or CommonConnectorConnectionStatus.AccessPending => "Ожидает выдачи доступа",
         CommonConnectorConnectionStatus.Revoked => "Доступ отозван",

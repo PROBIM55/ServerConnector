@@ -16,18 +16,19 @@ window.CONNECTOR_REVIEW_PAGES=({state,button,escape,field,select,notice,row,fiel
     const currentStatus=state.connections?.[state.mode]?.status??state.connectionStatus??'Не подключено';
     const waiting=state.signInPending===true;
     const busy=state.connectPending===true;
+    const needsSignIn=state.commonAccessSelected===true&&state.commonAccessNeedsSignIn===true;
     const connected=(state.commonAccessSelected===true?state.commonAccessReady===true:currentStatus==='Подключено')&&!busy;
     const displayStatus=waiting?'Ожидаем подтверждения в браузере':busy?'Подключение…':
       !connected&&currentStatus==='Подключено'?'Требуется восстановить подключение':currentStatus;
     const intro=waiting?'Подтвердите подключение этого компьютера в браузере.':
       busy?'Настраиваем защищённое соединение.':
       connected?'Компьютер подключён к вашей учётной записи.':
+      needsSignIn?'Для подключения нужен новый вход через Платформу.':
       hasCredential?'Данные входа сохранены, но соединение ещё не установлено.':
       'Войдите через Платформу и подтвердите подключение этого компьютера.';
     const actions=busy?button(waiting?'Ожидаем вход в браузере':'Подключение…','primary','disabled'):
       connected?button('Отключиться','secondary','data-act="disconnect"'):
-      hasCredential?button('Восстановить подключение','primary','data-act="reconnect"')+
-        button('Войти через Платформу','secondary','data-act="connect"'):
+      hasCredential&&!needsSignIn?button('Восстановить подключение','primary','data-act="reconnect"'):
       button('Войти через Платформу','primary','data-act="connect"');
     return `<div class="page grid"><section class="panel"><h2>Подключение</h2>${help('Единая учётная запись для Structura, Платформы и коннектора.')}<form id="connection-form"><p>${intro}</p>${row('Состояние',escape(displayStatus))}<div class="actions">${actions}</div></form>${notice('connect')}</section><section class="panel"><h2>Рабочая среда</h2>${row('Доступ к модулям','Появится после подключения')}${row('Защищённое соединение','Настраивается автоматически')}${row('Работа в фоне',state.running?'Включена в сценарии':'Не проверена',button('Включить','secondary','data-act="agent-start"')+button('Приостановить','secondary','data-act="agent-stop"'))}${notice('agent')}</section><section class="panel wide"><h2>Инструменты</h2><div class="overview-links">${(state.mode==='structura'?[['tekla','Tekla','Папка фирмы, Model Sharing и выгрузки'],['converters','Конвертеры','FBX → GLB и оптимизация IFC'],['folders','Общие папки','Файлы проекта через VPN']]:[['agr','АГР','Публикация НПМ, ВПМ и FBX'],['bridge','Tekla','Связь с открытой моделью'],['autocad','AutoCAD','Связь с рабочим чертежом']]).map(([id,title,sub])=>`<button type="button" data-page="${id}"><strong>${title}</strong><small>${sub}</small><span>→</span></button>`).join('')}</div></section></div>`;
   }

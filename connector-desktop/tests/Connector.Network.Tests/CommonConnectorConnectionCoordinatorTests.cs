@@ -294,6 +294,30 @@ public sealed class CommonConnectorConnectionCoordinatorTests
         Assert.Equal(1, gate.Admissions);
     }
 
+    [Fact]
+    public async Task MissingPendingEnrollmentRequiresBrowserSignInAndAllowsNewEnrollment()
+    {
+        var events = new List<string>();
+        var access = new FakeAccess(events, State("ready"))
+        {
+            ResumeFailure = new ConnectorEnrollmentProtocolException(
+                "pending enrollment is absent",
+                (int)HttpStatusCode.NotFound,
+                "pending_enrollment_absent")
+        };
+        var coordinator = new CommonConnectorConnectionCoordinator(
+            access, new FakeOverlay(events, ReadyOverlay()), new FakeGate(events));
+
+        await Assert.ThrowsAsync<ConnectorEnrollmentProtocolException>(() =>
+            coordinator.ResumeAndConnectAsync().AsTask());
+        Assert.Equal(CommonConnectorConnectionStatus.EnrollmentRequired, coordinator.Current.Status);
+        Assert.Equal("pending_enrollment_absent", coordinator.Current.DiagnosticCode);
+
+        access.ResumeFailure = null;
+        Assert.Equal(CommonConnectorConnectionStatus.Ready,
+            (await coordinator.EnrollAndConnectAsync("new-browser-token", "Device A")).Status);
+    }
+
     [Theory]
     [InlineData("revoked", CommonConnectorConnectionStatus.Revoked, "vpn_revoked")]
     [InlineData("denied", CommonConnectorConnectionStatus.Denied, "vpn_denied")]
@@ -389,6 +413,7 @@ public sealed class CommonConnectorConnectionCoordinatorTests
         public int ReceiptCalls { get; private set; }
         public bool BlockEnrollment { get; init; }
         public Exception? StateFailure { get; set; }
+        public Exception? ResumeFailure { get; set; }
         public TaskCompletionSource EnrollmentStarted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public TaskCompletionSource ReleaseEnrollment { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
@@ -404,7 +429,9 @@ public sealed class CommonConnectorConnectionCoordinatorTests
         }
 
         public ValueTask<DeviceEnrollmentResponse> ResumeAsync(CancellationToken cancellationToken = default) =>
-            ValueTask.FromResult(Receipt());
+            ResumeFailure is null
+                ? ValueTask.FromResult(Receipt())
+                : ValueTask.FromException<DeviceEnrollmentResponse>(ResumeFailure);
 
         public ValueTask<DeviceEnrollmentResponse?> GetReceiptAsync(CancellationToken cancellationToken = default)
         {

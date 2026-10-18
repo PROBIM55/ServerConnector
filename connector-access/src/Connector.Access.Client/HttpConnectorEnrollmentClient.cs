@@ -123,7 +123,23 @@ public sealed class HttpConnectorEnrollmentClient : IConnectorEnrollmentClient, 
             state = await _store.LoadAsync(cancellationToken).ConfigureAwait(false)
                 ?? throw new ConnectorEnrollmentStateException("No connector enrollment is available to resume.");
             ValidateBinding(state);
-            return await ResumeStateAsync(state, cancellationToken).ConfigureAwait(false);
+            try
+            {
+                return await ResumeStateAsync(state, cancellationToken).ConfigureAwait(false);
+            }
+            catch (ConnectorEnrollmentProtocolException exception) when (
+                state.Status == StoredEnrollmentStatus.Pending &&
+                exception.StatusCode == (int)HttpStatusCode.NotFound &&
+                exception.ErrorCode == "enrollment_not_available")
+            {
+                // Only a pending request can be restarted with the saved CSR and a
+                // fresh browser token. A missing completed receipt is not proof
+                // that the issued device identity may be replaced.
+                throw new ConnectorEnrollmentProtocolException(
+                    "The pending enrollment is absent on the server.",
+                    exception.StatusCode,
+                    "pending_enrollment_absent");
+            }
         }
         finally
         {
