@@ -62,20 +62,7 @@ app.MapPost("/v1/smb/grants/reconcile", async (HttpContext context, SmbHelperRec
 {
     var certificate = await context.Connection.GetClientCertificateAsync(context.RequestAborted);
     if (certificate is null || !SmbBackendCertificateValidator.IsAllowed(certificate, allowedCertificates)) return Results.Unauthorized();
-    // JsonContent uses chunked transfer, so a missing Content-Length is valid. Kestrel
-    // enforces the same 128 KiB limit for both fixed-length and streamed bodies.
-    if (context.Request.ContentLength is long length && (length <= 0 || length > 128 * 1024))
-        return Results.BadRequest();
-    SmbHelperRequest? request;
-    try
-    {
-        request = await JsonSerializer.DeserializeAsync<SmbHelperRequest>(context.Request.Body,
-            new JsonSerializerOptions(JsonSerializerDefaults.Web), context.RequestAborted);
-    }
-    catch (JsonException)
-    {
-        return Results.BadRequest();
-    }
+    var request = await SmbHelperRequestReader.ReadAsync(context.Request, context.RequestAborted);
     if (request is null) return Results.BadRequest();
     try
     {
