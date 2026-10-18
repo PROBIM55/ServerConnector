@@ -248,7 +248,7 @@ static async Task VerifyInstalledShortcutsWithWindowsShellAsync(string root, str
     // Independent reader: Windows PowerShell's COM adapter, not the product's
     // IShellLinkW declaration or the C# dynamic binder that caused the failure.
     var payload = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(JsonSerializer.Serialize(records)));
-    var script = "$items=@([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('" + payload + "'))|ConvertFrom-Json)\n" + """
+    var script = "$items=([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('" + payload + "'))|ConvertFrom-Json)\n" + """
         $ErrorActionPreference='Stop'
         $shell=New-Object -ComObject WScript.Shell
         $count=0
