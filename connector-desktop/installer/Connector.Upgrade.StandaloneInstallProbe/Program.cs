@@ -123,7 +123,7 @@ try
     var expectedIcon=IconBytes(caller);
     foreach(var file in new[] {desktop,Path.Combine(root,UnifiedVelopackApplication.RootLauncher),Path.Combine(root,"Update.exe")})
         if(!expectedIcon.SequenceEqual(IconBytes(file))) throw new InvalidOperationException("Installed executable icon differs from the branded installer icon.");
-    await VerifyInstalledShortcutsWithWindowsShellAsync(root, desktop);
+    await VerifyInstalledShortcutsWithWindowsShellAsync(root, desktop, output + ".shortcuts.json");
     Progress("desktop-start");
     using var app = Process.Start(new ProcessStartInfo(desktop) { UseShellExecute = false })!;
     var ready = false;
@@ -229,7 +229,7 @@ static object ReadOnlyInstallationSnapshot(SystemVelopackInstallProbe probe,
             }) }).ToArray() };
 }
 
-static async Task VerifyInstalledShortcutsWithWindowsShellAsync(string root, string desktop)
+static async Task VerifyInstalledShortcutsWithWindowsShellAsync(string root, string desktop, string diagnosticPath)
 {
     var records = new[] { Environment.SpecialFolder.DesktopDirectory, Environment.SpecialFolder.Programs }
         .Select(location => new
@@ -248,31 +248,78 @@ static async Task VerifyInstalledShortcutsWithWindowsShellAsync(string root, str
     // Independent reader: Windows PowerShell's COM adapter, not the product's
     // IShellLinkW declaration or the C# dynamic binder that caused the failure.
     var payload = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(JsonSerializer.Serialize(records)));
-    var script = "$items=([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('" + payload + "'))|ConvertFrom-Json)\n" + """
+    var script = """
         $ErrorActionPreference='Stop'
-        $shell=New-Object -ComObject WScript.Shell
-        $count=0
+        [Console]::OutputEncoding=[Text.UTF8Encoding]::new($false)
+        $report=[ordered]@{valid=$false;count=0;stage='decode';items=@();cleanupFailures=@()}
+        function Release-ObservedCom($value,[string]$kind) {
+            if($null -eq $value){return}
+            try {[void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($value)}
+            catch {
+                $failure=$_.Exception
+                for($depth=0;$depth -lt 4 -and $null -ne $failure.InnerException;$depth++){$failure=$failure.InnerException}
+                $report.cleanupFailures+=@{kind=$kind;type=$failure.GetType().FullName;hResult=$failure.HResult.ToString('X8')}
+            }
+        }
+        $shell=$null
         try {
+            $items=([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('PAYLOAD'))|ConvertFrom-Json)
+            $report.stage='shell'
+            $shell=New-Object -ComObject WScript.Shell
             foreach($item in $items) {
-                $link=$shell.CreateShortcut([string]$item.path)
+                $report.stage='read-shortcut'
+                $link=$null
                 try {
+                    $link=$shell.CreateShortcut([string]$item.path)
+                    $report.stage='read-properties'
+                    $target=[string]$link.TargetPath
                     $icon=[string]$link.IconLocation
+                    $workingDirectory=[string]$link.WorkingDirectory
+                    $arguments=[string]$link.Arguments
+                    $description=[string]$link.Description
+                    $observation=@{target=$target.Substring(0,[Math]::Min(1024,$target.Length));
+                        icon=$icon.Substring(0,[Math]::Min(1024,$icon.Length));
+                        workingDirectory=$workingDirectory.Substring(0,[Math]::Min(1024,$workingDirectory.Length));
+                        argumentsLength=$arguments.Length}
+                    $report.items+=$observation
+                    $report.stage='parse-icon'
                     $separator=$icon.LastIndexOf(',')
                     if($separator -lt 1){throw 'Shortcut icon metadata is incomplete'}
                     $iconPath=$icon.Substring(0,$separator).Trim().Trim('"')
                     $index=[int]::Parse($icon.Substring($separator+1),[Globalization.CultureInfo]::InvariantCulture)
-                    if(![string]::Equals([string]$link.TargetPath,[string]$item.target,[StringComparison]::OrdinalIgnoreCase) -or
-                       ![string]::Equals($iconPath,[string]$item.icon,[StringComparison]::OrdinalIgnoreCase) -or $index -ne 0 -or
-                       ![string]::Equals([string]$link.WorkingDirectory,[string]$item.workingDirectory,[StringComparison]::OrdinalIgnoreCase) -or
-                       [string]$link.Arguments -cne '' -or [string]$link.Description -cne 'Платформа Коннектор') {
-                        throw 'Shortcut target, icon or application metadata differs'
+                    $matches=[ordered]@{
+                        target=[string]::Equals($target,[string]$item.target,[StringComparison]::OrdinalIgnoreCase)
+                        icon=[string]::Equals($iconPath,[string]$item.icon,[StringComparison]::OrdinalIgnoreCase)
+                        iconIndex=($index -eq 0)
+                        workingDirectory=[string]::Equals($workingDirectory,[string]$item.workingDirectory,[StringComparison]::OrdinalIgnoreCase)
+                        arguments=($arguments -ceq '')
+                        description=($description -ceq 'Платформа Коннектор')
                     }
-                    $count++
-                } finally { [void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($link) }
+                    # Only metadata of these two fixture-owned shortcuts; no environment,
+                    # credentials, arbitrary stderr, command arguments or exception messages.
+                    $observation.matches=$matches
+                    $report.stage='compare'
+                    if($matches.Values -contains $false){throw 'Shortcut metadata differs'}
+                    $report.count++
+                } finally {
+                    Release-ObservedCom $link 'shortcut'
+                }
             }
-        } finally { [void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($shell) }
-        @{valid=$true;count=$count}|ConvertTo-Json -Compress
-        """;
+            $report.stage='complete'
+            $report.valid=$true
+        } catch {
+            $failure=$_.Exception
+            for($depth=0;$depth -lt 4 -and $null -ne $failure.InnerException;$depth++){$failure=$failure.InnerException}
+            $report['errorType']=$failure.GetType().FullName
+            $report['hResult']=$failure.HResult.ToString('X8')
+            $report['errorId']=($_.FullyQualifiedErrorId -split ',')[0].Substring(0,[Math]::Min(128,($_.FullyQualifiedErrorId -split ',')[0].Length))
+        } finally {
+            Release-ObservedCom $shell 'shell'
+        }
+        if($report.cleanupFailures.Count -gt 0){$report.valid=$false}
+        $report|ConvertTo-Json -Depth 6 -Compress
+        if(!$report.valid){exit 1}
+        """.Replace("PAYLOAD", payload, StringComparison.Ordinal);
     var start = new ProcessStartInfo(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System),
         "WindowsPowerShell", "v1.0", "powershell.exe"))
         { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
@@ -290,8 +337,12 @@ static async Task VerifyInstalledShortcutsWithWindowsShellAsync(string root, str
     }
     var result = await stdout;
     _ = await stderr; // Do not emit arbitrary native output.
-    if (process.ExitCode != 0 || result.Length > 4096)
-        throw new InvalidOperationException("Windows rejected the installed shortcut metadata.");
+    if (result.Length > 16384)
+        throw new InvalidOperationException("Windows shortcut diagnostic exceeds its bound.");
+    using (var boundedReport = JsonDocument.Parse(result))
+        File.WriteAllText(diagnosticPath, boundedReport.RootElement.GetRawText());
+    if (process.ExitCode != 0)
+        throw new InvalidOperationException("Windows rejected the installed shortcut metadata; see the bounded shortcut report.");
     using var report = JsonDocument.Parse(result);
     if (!report.RootElement.GetProperty("valid").GetBoolean() || report.RootElement.GetProperty("count").GetInt32() != 2)
         throw new InvalidOperationException("Both native shortcuts were not independently confirmed.");

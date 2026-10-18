@@ -17,9 +17,9 @@ jobs:
         shell: pwsh
     env:
       GH_TOKEN: ${{ github.token }}
-      PRODUCER_RUN: '39070880102'
-      PRODUCER_SHA: '898edbee94060eabbeb19c701d60683167109a28'
-      PRODUCER_DIGEST: 'd81acb864ad006c828df16d01a6393646a3850c5185ef77fb7d3a0e5708a1656'
+      PRODUCER_RUN: '39087792108'
+      PRODUCER_SHA: 'ba9077b52e67bac9bcc16a58105c9d64da12e7b9'
+      PRODUCER_DIGEST: '551eeb9f410b0f13ffe7070559a6b79e624845c71b8931a1dda5e1009b95b633'
     steps:
       - uses: actions/checkout@v4
         with:
