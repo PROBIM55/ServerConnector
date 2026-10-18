@@ -254,6 +254,7 @@
     const folders=snapshot.modelFolders??snapshot.lists?.modelFolders;if(Array.isArray(folders))state.modelFolders=folders.map(String);
     if(typeof snapshot.commonAccessSelected==='boolean')state.commonAccessSelected=snapshot.commonAccessSelected;
     if(typeof snapshot.commonAccessReady==='boolean')state.commonAccessReady=snapshot.commonAccessReady;
+    if(typeof snapshot.commonAccessNeedsSignIn==='boolean')state.commonAccessNeedsSignIn=snapshot.commonAccessNeedsSignIn;
     if(typeof snapshot.signInPending==='boolean')state.signInPending=snapshot.signInPending;
     if(typeof snapshot.connectPending==='boolean')state.connectPending=snapshot.connectPending;
     if(Array.isArray(snapshot.assignedFolders))state.assignedFolders=snapshot.assignedFolders.filter(folder=>folder&&typeof folder==='object').map(folder=>({resourceId:String(folder.resourceId??''),displayName:String(folder.displayName??''),drive:typeof folder.drive==='string'?folder.drive:null}));

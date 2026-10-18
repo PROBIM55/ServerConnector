@@ -313,14 +313,16 @@ public sealed class CommonConnectorConnectionCoordinator
             Set(CommonConnectorConnectionStatus.Canceled, Current.DeviceId, Current.Revision, "canceled");
             throw;
         }
-        catch (ConnectorEnrollmentProtocolException exception) when (IssuedCredentialRequiresEnrollment(exception))
+        catch (ConnectorEnrollmentProtocolException exception) when (RequiresBrowserSignIn(exception))
         {
             CloseAuthorizationForNewAdmissions();
             Set(
                 CommonConnectorConnectionStatus.EnrollmentRequired,
                 Current.DeviceId,
                 Current.Revision,
-                "issued_credential_rejected");
+                exception.ErrorCode == "pending_enrollment_absent"
+                    ? "pending_enrollment_absent"
+                    : "issued_credential_rejected");
             throw;
         }
         catch (NetworkGateException exception) when (
@@ -346,9 +348,11 @@ public sealed class CommonConnectorConnectionCoordinator
         }
     }
 
-    private static bool IssuedCredentialRequiresEnrollment(ConnectorEnrollmentProtocolException exception) =>
-        exception.StatusCode == (int)HttpStatusCode.Unauthorized &&
-        string.Equals(exception.ErrorCode, "device_unauthorized", StringComparison.Ordinal);
+    private static bool RequiresBrowserSignIn(ConnectorEnrollmentProtocolException exception) =>
+        (exception.StatusCode == (int)HttpStatusCode.Unauthorized &&
+         string.Equals(exception.ErrorCode, "device_unauthorized", StringComparison.Ordinal)) ||
+        (exception.StatusCode == (int)HttpStatusCode.NotFound &&
+         string.Equals(exception.ErrorCode, "pending_enrollment_absent", StringComparison.Ordinal));
 
     private CommonConnectorConnectionSnapshot Set(
         CommonConnectorConnectionStatus status,

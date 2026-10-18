@@ -15,6 +15,7 @@ using Connector.Desktop.Features.Tekla.Patching;
 using Connector.Desktop.Features.Vpn;
 using Connector.Desktop.Mvvm;
 using Connector.Desktop.Shell;
+using Connector.Network;
 using Connector.Platform;
 using Connector.SmbAccess;
 using Platform.Connector.Core;
@@ -216,6 +217,8 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
             ["modelFolders"] = Array.Empty<string>(),
             ["commonAccessSelected"] = _commonAccess.IsSelected,
             ["commonAccessReady"] = _commonAccess.IsReady,
+            ["commonAccessNeedsSignIn"] = _commonAccess.Current?.Status is
+                CommonConnectorConnectionStatus.EnrollmentRequired or CommonConnectorConnectionStatus.Revoked,
             ["signInPending"] = Volatile.Read(ref _browserSignInPending) != 0,
             ["connectPending"] = Volatile.Read(ref _commonConnectPending) != 0,
             ["assignedFolders"] = _commonAccess.IsSelected && _commonAccess.HasPermission(mode, "folders", ConnectorPermission.Read)

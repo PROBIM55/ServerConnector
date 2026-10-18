@@ -211,6 +211,65 @@ public sealed class HttpConnectorEnrollmentClientTests
     }
 
     [Fact]
+    public async Task PendingResumeNotFoundRequiresNewBrowserSignInWithoutDiscardingSavedRequest()
+    {
+        using var directory = new TemporaryDirectory();
+        using var authority = new TestCertificateAuthority();
+        var store = new FileConnectorEnrollmentStateStore(directory.Path);
+        var initialOffline = new DelegateHttpInvokerFactory((_, _, _) =>
+            throw new HttpRequestException("first POST did not reach server"));
+        await Assert.ThrowsAsync<HttpRequestException>(() =>
+            CreateClient(store, authority.Pin, initialOffline).EnrollAsync("first-token", "Device A").AsTask());
+        var stateBefore = await File.ReadAllBytesAsync(store.StateFilePath);
+
+        var absent = new DelegateHttpInvokerFactory((certificate, request, _) =>
+        {
+            Assert.NotNull(certificate);
+            Assert.EndsWith("/resume", request.RequestUri!.AbsolutePath, StringComparison.Ordinal);
+            return Task.FromResult(TestCertificateAuthority.Failure(
+                HttpStatusCode.NotFound, "enrollment_not_available"));
+        });
+        var error = await Assert.ThrowsAsync<ConnectorEnrollmentProtocolException>(() =>
+            CreateClient(store, authority.Pin, absent).ResumeAsync().AsTask());
+
+        Assert.Equal((int)HttpStatusCode.NotFound, error.StatusCode);
+        Assert.Equal("pending_enrollment_absent", error.ErrorCode);
+        Assert.Equal(1, absent.CreateCount);
+        Assert.Equal(stateBefore, await File.ReadAllBytesAsync(store.StateFilePath));
+    }
+
+    [Fact]
+    public async Task CompletedResumeNotFoundPreservesOriginalErrorAndIssuedIdentity()
+    {
+        using var directory = new TemporaryDirectory();
+        using var authority = new TestCertificateAuthority();
+        var store = new FileConnectorEnrollmentStateStore(directory.Path);
+        var first = new DelegateHttpInvokerFactory(async (_, request, cancellationToken) =>
+        {
+            var enrollment = await request.Content!.ReadFromJsonAsync<DeviceEnrollmentRequest>(
+                cancellationToken: cancellationToken);
+            return TestCertificateAuthority.JsonResponse(authority.Issue(enrollment!));
+        });
+        await CreateClient(store, authority.Pin, first).EnrollAsync("first-token", "Device A");
+        var stateBefore = await File.ReadAllBytesAsync(store.StateFilePath);
+
+        var absent = new DelegateHttpInvokerFactory((certificate, request, _) =>
+        {
+            Assert.NotNull(certificate);
+            Assert.Equal(HttpMethod.Get, request.Method);
+            return Task.FromResult(TestCertificateAuthority.Failure(
+                HttpStatusCode.NotFound, "enrollment_not_available"));
+        });
+        var error = await Assert.ThrowsAsync<ConnectorEnrollmentProtocolException>(() =>
+            CreateClient(store, authority.Pin, absent).ResumeAsync().AsTask());
+
+        Assert.Equal((int)HttpStatusCode.NotFound, error.StatusCode);
+        Assert.Equal("enrollment_not_available", error.ErrorCode);
+        Assert.Equal(1, absent.CreateCount);
+        Assert.Equal(stateBefore, await File.ReadAllBytesAsync(store.StateFilePath));
+    }
+
+    [Fact]
     public async Task CompletedStateUsesIssuedCertificateForReceiptGet()
     {
         using var directory = new TemporaryDirectory();
@@ -319,6 +378,9 @@ public sealed class HttpConnectorEnrollmentClientTests
             Assert.IsType<HttpRequestException>(error);
         else
             Assert.IsType<ConnectorEnrollmentProtocolException>(error);
+        if (failureKind == "missing_receipt")
+            Assert.Equal("enrollment_not_available",
+                Assert.IsType<ConnectorEnrollmentProtocolException>(error).ErrorCode);
         Assert.Equal(1, failingTransport.CreateCount);
         Assert.Equal(durableStateBefore, await File.ReadAllBytesAsync(store.StateFilePath));
     }
