@@ -96,6 +96,89 @@ public sealed class CommonConnectorConnectionCoordinatorTests
     }
 
     [Fact]
+    public async Task FirstIssuedCertificate_RequestsProfileToStartProviderReconciliation_WithoutOpeningAccess()
+    {
+        var events = new List<string>();
+        var access = new FakeAccess(events, State("ready"));
+        access.StateFailures.Enqueue(new ConnectorEnrollmentProtocolException(
+            "VPN state is not yet available", (int)HttpStatusCode.Forbidden, "vpn_state_unavailable"));
+        access.ProfileFailure = new ConnectorEnrollmentProtocolException(
+            "Access has not yet been applied", (int)HttpStatusCode.Forbidden, "access_pending_or_denied");
+        var gate = new FakeGate(events);
+        var coordinator = new CommonConnectorConnectionCoordinator(
+            access, new FakeOverlay(events, ReadyOverlay()), gate);
+
+        var pending = await coordinator.ReconnectAsync();
+
+        Assert.Equal(CommonConnectorConnectionStatus.AccessPending, pending.Status);
+        Assert.Null(pending.AccessProfile);
+        Assert.Null(pending.Overlay);
+        Assert.Equal(new[] { "state", "profile" }, events);
+        await Assert.ThrowsAsync<NetworkGateException>(() =>
+            coordinator.OpenProtectedServiceAsync("platform", "jobs").AsTask());
+        Assert.Empty(gate.Services);
+
+        access.ProfileFailure = null;
+        var ready = await coordinator.ReconnectAsync();
+        Assert.Equal(CommonConnectorConnectionStatus.Ready, ready.Status);
+        Assert.Equal(new[] { "state", "profile", "state", "profile" }, events);
+    }
+
+    [Fact]
+    public async Task MissingVpnState_DoesNotHideRejectedDeviceCredential()
+    {
+        var events = new List<string>();
+        var access = new FakeAccess(events);
+        access.StateFailures.Enqueue(new ConnectorEnrollmentProtocolException(
+            "VPN state is not yet available", (int)HttpStatusCode.Forbidden, "vpn_state_unavailable"));
+        access.ProfileFailure = new ConnectorEnrollmentProtocolException(
+            "Device credential rejected", (int)HttpStatusCode.Unauthorized, "device_unauthorized");
+        var coordinator = new CommonConnectorConnectionCoordinator(
+            access, new FakeOverlay(events, ReadyOverlay()), new FakeGate(events));
+
+        var error = await Assert.ThrowsAsync<ConnectorEnrollmentProtocolException>(() => coordinator.ReconnectAsync().AsTask());
+
+        Assert.Equal("device_unauthorized", error.ErrorCode);
+        Assert.Equal(CommonConnectorConnectionStatus.EnrollmentRequired, coordinator.Current.Status);
+        Assert.Equal(new[] { "state", "profile" }, events);
+    }
+
+    [Fact]
+    public async Task MissingVpnState_WithAvailableProfile_StillRequiresVerifiedTransport()
+    {
+        var events = new List<string>();
+        var access = new FakeAccess(events);
+        access.StateFailures.Enqueue(new ConnectorEnrollmentProtocolException(
+            "VPN state is not yet available", (int)HttpStatusCode.Forbidden, "vpn_state_unavailable"));
+        var coordinator = new CommonConnectorConnectionCoordinator(
+            access, new FakeOverlay(events, ReadyOverlay()), new FakeGate(events));
+
+        var result = await coordinator.ReconnectAsync();
+
+        Assert.Equal(CommonConnectorConnectionStatus.AccessPending, result.Status);
+        Assert.Null(result.AccessProfile);
+        Assert.Null(result.Overlay);
+        Assert.Equal(new[] { "state", "profile" }, events);
+    }
+
+    [Fact]
+    public async Task OtherVpnStateFailure_DoesNotTriggerProfileReconciliation()
+    {
+        var events = new List<string>();
+        var access = new FakeAccess(events);
+        access.StateFailures.Enqueue(new ConnectorEnrollmentProtocolException(
+            "VPN state denied", (int)HttpStatusCode.Forbidden, "vpn_state_denied"));
+        var coordinator = new CommonConnectorConnectionCoordinator(
+            access, new FakeOverlay(events, ReadyOverlay()), new FakeGate(events));
+
+        var error = await Assert.ThrowsAsync<ConnectorEnrollmentProtocolException>(() => coordinator.ReconnectAsync().AsTask());
+
+        Assert.Equal("vpn_state_denied", error.ErrorCode);
+        Assert.Equal(0, access.ProfileCalls);
+        Assert.Equal(new[] { "state" }, events);
+    }
+
+    [Fact]
     public async Task ExistingReadyFromAnotherManagementPlane_IsRejectedWithoutProfileOrRoute()
     {
         var events = new List<string>();
@@ -389,6 +472,8 @@ public sealed class CommonConnectorConnectionCoordinatorTests
         public int ReceiptCalls { get; private set; }
         public bool BlockEnrollment { get; init; }
         public Exception? StateFailure { get; set; }
+        public Queue<Exception> StateFailures { get; } = new();
+        public Exception? ProfileFailure { get; set; }
         public TaskCompletionSource EnrollmentStarted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public TaskCompletionSource ReleaseEnrollment { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
@@ -416,6 +501,8 @@ public sealed class CommonConnectorConnectionCoordinatorTests
         {
             events.Add("profile");
             ProfileCalls++;
+            if (ProfileFailure is not null)
+                return ValueTask.FromException<DeviceAccessProfile>(ProfileFailure);
             return ValueTask.FromResult(new DeviceAccessProfile(
                 DeviceAccessProtocol.Version, "device-1", "user-1", "company-1", 1, 1,
                 DateTimeOffset.UtcNow.AddHours(1),
@@ -434,6 +521,8 @@ public sealed class CommonConnectorConnectionCoordinatorTests
         {
             events.Add("state");
             StateCalls++;
+            if (StateFailures.TryDequeue(out var nextFailure))
+                return ValueTask.FromException<ConnectorVpnTransportState>(nextFailure);
             if (StateFailure is not null)
                 return ValueTask.FromException<ConnectorVpnTransportState>(StateFailure);
             return ValueTask.FromResult(_states.Dequeue());

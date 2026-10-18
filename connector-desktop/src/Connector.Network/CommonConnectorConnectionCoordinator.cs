@@ -189,7 +189,31 @@ public sealed class CommonConnectorConnectionCoordinator
         CancellationToken cancellationToken)
     {
         RevokeAuthorization();
-        var state = await _access.GetVpnStateAsync(cancellationToken).ConfigureAwait(false);
+        ConnectorVpnTransportState state;
+        try
+        {
+            state = await _access.GetVpnStateAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (ConnectorEnrollmentProtocolException exception) when (
+            exception.StatusCode == (int)HttpStatusCode.Forbidden &&
+            string.Equals(exception.ErrorCode, "vpn_state_unavailable", StringComparison.Ordinal))
+        {
+            // The first issued certificate has no provider state until the profile
+            // request enqueues the desired grants. Never treat that request as authorization.
+            try
+            {
+                await _access.GetAccessProfileAsync(cancellationToken).ConfigureAwait(false);
+            }
+            catch (ConnectorEnrollmentProtocolException profileException) when (
+                profileException.StatusCode == (int)HttpStatusCode.Forbidden &&
+                string.Equals(profileException.ErrorCode, "access_pending_or_denied", StringComparison.Ordinal))
+            {
+                // The server intentionally does not disclose pending versus denied
+                // through this endpoint. A later reconnect must verify both states.
+            }
+            return Set(CommonConnectorConnectionStatus.AccessPending, receipt.DeviceId,
+                receipt.AccessRevision, "access_profile_pending_or_denied");
+        }
         ValidateStateEnvelope(state, receipt);
 
         if (IsStatus(state, "revoked"))
