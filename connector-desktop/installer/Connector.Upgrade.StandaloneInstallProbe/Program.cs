@@ -123,7 +123,7 @@ try
     var expectedIcon=IconBytes(caller);
     foreach(var file in new[] {desktop,Path.Combine(root,UnifiedVelopackApplication.RootLauncher),Path.Combine(root,"Update.exe")})
         if(!expectedIcon.SequenceEqual(IconBytes(file))) throw new InvalidOperationException("Installed executable icon differs from the branded installer icon.");
-    await VerifyInstalledShortcutsWithWindowsShellAsync(root, desktop);
+    await VerifyInstalledShortcutsWithWindowsShellAsync(root, desktop, output + ".shortcuts.json");
     Progress("desktop-start");
     using var app = Process.Start(new ProcessStartInfo(desktop) { UseShellExecute = false })!;
     var ready = false;
@@ -229,71 +229,5 @@ static object ReadOnlyInstallationSnapshot(SystemVelopackInstallProbe probe,
             }) }).ToArray() };
 }
 
-static async Task VerifyInstalledShortcutsWithWindowsShellAsync(string root, string desktop)
-{
-    var records = new[] { Environment.SpecialFolder.DesktopDirectory, Environment.SpecialFolder.Programs }
-        .Select(location => new
-        {
-            path = Path.Combine(Environment.GetFolderPath(location), "Платформа Коннектор.lnk"),
-            target = Path.Combine(root, UnifiedVelopackApplication.RootLauncher),
-            icon = desktop, workingDirectory = root
-        }).ToArray();
-    foreach (var item in records)
-    {
-        var directory = Path.GetDirectoryName(item.path)!;
-        if (!File.Exists(item.path) || File.Exists(Path.Combine(directory, "Structura Connector (новый).lnk")) ||
-            File.Exists(Path.Combine(directory, "Structura Connector.lnk")))
-            throw new InvalidOperationException("A branded shortcut is missing or an owned pilot shortcut remains.");
-    }
-    // Independent reader: Windows PowerShell's COM adapter, not the product's
-    // IShellLinkW declaration or the C# dynamic binder that caused the failure.
-    var payload = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(JsonSerializer.Serialize(records)));
-    var script = "$items=([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('" + payload + "'))|ConvertFrom-Json)\n" + """
-        $ErrorActionPreference='Stop'
-        $shell=New-Object -ComObject WScript.Shell
-        $count=0
-        try {
-            foreach($item in $items) {
-                $link=$shell.CreateShortcut([string]$item.path)
-                try {
-                    $icon=[string]$link.IconLocation
-                    $separator=$icon.LastIndexOf(',')
-                    if($separator -lt 1){throw 'Shortcut icon metadata is incomplete'}
-                    $iconPath=$icon.Substring(0,$separator).Trim().Trim('"')
-                    $index=[int]::Parse($icon.Substring($separator+1),[Globalization.CultureInfo]::InvariantCulture)
-                    if(![string]::Equals([string]$link.TargetPath,[string]$item.target,[StringComparison]::OrdinalIgnoreCase) -or
-                       ![string]::Equals($iconPath,[string]$item.icon,[StringComparison]::OrdinalIgnoreCase) -or $index -ne 0 -or
-                       ![string]::Equals([string]$link.WorkingDirectory,[string]$item.workingDirectory,[StringComparison]::OrdinalIgnoreCase) -or
-                       [string]$link.Arguments -cne '' -or [string]$link.Description -cne 'Платформа Коннектор') {
-                        throw 'Shortcut target, icon or application metadata differs'
-                    }
-                    $count++
-                } finally { [void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($link) }
-            }
-        } finally { [void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($shell) }
-        @{valid=$true;count=$count}|ConvertTo-Json -Compress
-        """;
-    var start = new ProcessStartInfo(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System),
-        "WindowsPowerShell", "v1.0", "powershell.exe"))
-        { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
-    foreach (var argument in new[] { "-NoLogo", "-NoProfile", "-NonInteractive", "-EncodedCommand",
-                 Convert.ToBase64String(System.Text.Encoding.Unicode.GetBytes(script)) })
-        start.ArgumentList.Add(argument);
-    using var process = Process.Start(start) ?? throw new InvalidOperationException("Windows shortcut verification did not start.");
-    var stdout = process.StandardOutput.ReadToEndAsync();
-    var stderr = process.StandardError.ReadToEndAsync();
-    try { await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(30)); }
-    catch (TimeoutException)
-    {
-        process.Kill(entireProcessTree: true);
-        throw new InvalidOperationException("Windows shortcut verification exceeded its bound.");
-    }
-    var result = await stdout;
-    _ = await stderr; // Do not emit arbitrary native output.
-    if (process.ExitCode != 0 || result.Length > 4096)
-        throw new InvalidOperationException("Windows rejected the installed shortcut metadata.");
-    using var report = JsonDocument.Parse(result);
-    if (!report.RootElement.GetProperty("valid").GetBoolean() || report.RootElement.GetProperty("count").GetInt32() != 2)
-        throw new InvalidOperationException("Both native shortcuts were not independently confirmed.");
-}
-
+static Task VerifyInstalledShortcutsWithWindowsShellAsync(string root, string desktop, string diagnosticPath)
+    => NativeShortcutVerifier.VerifyAsync(root, desktop, diagnosticPath);
