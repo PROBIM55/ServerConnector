@@ -245,6 +245,20 @@ static async Task VerifyInstalledShortcutsWithWindowsShellAsync(string root, str
             File.Exists(Path.Combine(directory, "Structura Connector.lnk")))
             throw new InvalidOperationException("A branded shortcut is missing or an owned pilot shortcut remains.");
     }
+    // Diagnostic only: the two shortcuts just checked above belong to this
+    // disposable fixture profile; never read credentials, arbitrary files or targets.
+    var nativeLinks = records.Select(item =>
+    {
+        using var file = File.OpenRead(item.path);
+        var length = file.Length;
+        if (length is <= 0 or > 65536) throw new InvalidOperationException("Fixture shortcut exceeds diagnostic bound.");
+        var bytes = new byte[checked((int)length)];
+        file.ReadExactly(bytes);
+        if (file.ReadByte() != -1) throw new InvalidOperationException("Fixture shortcut changed while reading.");
+        return new { item.path, item.target, item.icon, item.workingDirectory, length,
+            sha256 = Convert.ToHexString(SHA256.HashData(bytes)), data = Convert.ToBase64String(bytes) };
+    }).ToArray();
+    File.WriteAllText(diagnosticPath + ".native-links.json", JsonSerializer.Serialize(nativeLinks));
     // Independent reader: Windows PowerShell's COM adapter, not the product's
     // IShellLinkW declaration or the C# dynamic binder that caused the failure.
     var payload = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(JsonSerializer.Serialize(records)));
@@ -261,27 +275,58 @@ static async Task VerifyInstalledShortcutsWithWindowsShellAsync(string root, str
                 $report.cleanupFailures+=@{kind=$kind;type=$failure.GetType().FullName;hResult=$failure.HResult.ToString('X8')}
             }
         }
+        function Observe-AsciiCopy([string]$path) {
+            $copy=[IO.Path]::Combine([IO.Path]::GetTempPath(),('platform-link-'+[Guid]::NewGuid().ToString('N')+'.lnk'))
+            $copiedLink=$null
+            $observed=@{}
+            try {
+                [IO.File]::Copy($path,$copy,$false)
+                $copiedLink=$shell.CreateShortcut($copy)
+                $value=[string]$copiedLink.TargetPath
+                $observed['target']=$value.Substring(0,[Math]::Min(1024,$value.Length))
+                $value=[string]$copiedLink.IconLocation
+                $observed['icon']=$value.Substring(0,[Math]::Min(1024,$value.Length))
+                $value=[string]$copiedLink.WorkingDirectory
+                $observed['workingDirectory']=$value.Substring(0,[Math]::Min(1024,$value.Length))
+                $observed['argumentsLength']=([string]$copiedLink.Arguments).Length
+                $observed['descriptionMatches']=([string]$copiedLink.Description -ceq 'Платформа Коннектор')
+            } catch {
+                $failure=$_.Exception
+                for($depth=0;$depth -lt 4 -and $null -ne $failure.InnerException;$depth++){$failure=$failure.InnerException}
+                $observed['errorType']=$failure.GetType().FullName
+                $observed['hResult']=$failure.HResult.ToString('X8')
+            } finally {
+                Release-ObservedCom $copiedLink 'ascii-copy'
+                try {[IO.File]::Delete($copy)} catch {$report.cleanupFailures+=@{kind='ascii-copy-file';type=$_.Exception.GetType().FullName;hResult=$_.Exception.HResult.ToString('X8')}}
+            }
+            return $observed
+        }
         $shell=$null
         try {
             $items=([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('PAYLOAD'))|ConvertFrom-Json)
+            $report['decodedCount']=@($items).Count
+            $report['decodedType']=$items.GetType().FullName
             $report.stage='shell'
             $shell=New-Object -ComObject WScript.Shell
             foreach($item in $items) {
                 $report.stage='read-shortcut'
                 $link=$null
                 try {
-                    $link=$shell.CreateShortcut([string]$item.path)
+                    $path=[string]$item.path
+                    $observation=@{inputType=$item.GetType().FullName;path=$path.Substring(0,[Math]::Min(1024,$path.Length));fileExists=[IO.File]::Exists($path)}
+                    $report.items+=$observation
+                    $link=$shell.CreateShortcut($path)
                     $report.stage='read-properties'
                     $target=[string]$link.TargetPath
                     $icon=[string]$link.IconLocation
                     $workingDirectory=[string]$link.WorkingDirectory
                     $arguments=[string]$link.Arguments
                     $description=[string]$link.Description
-                    $observation=@{target=$target.Substring(0,[Math]::Min(1024,$target.Length));
-                        icon=$icon.Substring(0,[Math]::Min(1024,$icon.Length));
-                        workingDirectory=$workingDirectory.Substring(0,[Math]::Min(1024,$workingDirectory.Length));
-                        argumentsLength=$arguments.Length}
-                    $report.items+=$observation
+                    $observation['target']=$target.Substring(0,[Math]::Min(1024,$target.Length))
+                    $observation['icon']=$icon.Substring(0,[Math]::Min(1024,$icon.Length))
+                    $observation['workingDirectory']=$workingDirectory.Substring(0,[Math]::Min(1024,$workingDirectory.Length))
+                    $observation['argumentsLength']=$arguments.Length
+                    if(!$target -or $icon -ceq ',0'){$observation['asciiCopy']=Observe-AsciiCopy $path}
                     $report.stage='parse-icon'
                     $separator=$icon.LastIndexOf(',')
                     if($separator -lt 1){throw 'Shortcut icon metadata is incomplete'}
