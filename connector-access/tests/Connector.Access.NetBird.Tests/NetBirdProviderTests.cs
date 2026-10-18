@@ -32,6 +32,18 @@ public sealed class NetBirdProviderTests : IDisposable
     }
 
     [Fact]
+    public async Task MissingNamedGroupHttp404_CreatesDeviceGroupBeforeWaitingForPeer()
+    {
+        var fixture = new NetBirdFixtureHandler { MissingNamedGroupReturnsNotFound = true };
+        var provider = CreateProvider(fixture);
+
+        await Assert.ThrowsAsync<NetBirdPeerNotReadyException>(() => provider.ApplyAsync(Apply(1), default).AsTask());
+
+        Assert.True(fixture.GroupExists);
+        Assert.Equal(1, fixture.SetupKeyCreateCount);
+    }
+
+    [Fact]
     public async Task Receipt_IsReturnedOnlyAfterConnectedPeerIpAndPolicyAreConfirmed()
     {
         var fixture = new NetBirdFixtureHandler();
@@ -318,6 +330,7 @@ public sealed class NetBirdProviderTests : IDisposable
         private string? _keyName;
         private string? _policyJson;
         public bool GroupExists { get; private set; }
+        public bool MissingNamedGroupReturnsNotFound { get; set; }
         public bool PeerExists { get; set; }
         public bool PeerConnected { get; set; }
         public string PeerIpv4 { get; set; } = "100.90.0.22";
@@ -374,7 +387,8 @@ public sealed class NetBirdProviderTests : IDisposable
                 if (request.RequestUri.Query.Contains("name=All", StringComparison.Ordinal))
                     return Json(new[] { new { id = "all", name = "All", peers = Array.Empty<object>(), resources = Array.Empty<object>() } });
                 if (request.RequestUri.Query.Length > 0)
-                    return Json(GroupExists ? new[] { Group() } : Array.Empty<object>());
+                    return GroupExists ? Json(new[] { Group() }) :
+                        MissingNamedGroupReturnsNotFound ? Missing() : Json(Array.Empty<object>());
                 var groups = new List<object>();
                 if (GroupExists) groups.Add(Group());
                 if (DnsGroupId is not null && DnsGroupAvailable)

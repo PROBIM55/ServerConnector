@@ -62,17 +62,7 @@ app.MapPost("/v1/smb/grants/reconcile", async (HttpContext context, SmbHelperRec
 {
     var certificate = await context.Connection.GetClientCertificateAsync(context.RequestAborted);
     if (certificate is null || !SmbBackendCertificateValidator.IsAllowed(certificate, allowedCertificates)) return Results.Unauthorized();
-    if (context.Request.ContentLength is null or <= 0 or > 128 * 1024) return Results.BadRequest();
-    SmbHelperRequest? request;
-    try
-    {
-        request = await JsonSerializer.DeserializeAsync<SmbHelperRequest>(context.Request.Body,
-            new JsonSerializerOptions(JsonSerializerDefaults.Web), context.RequestAborted);
-    }
-    catch (JsonException)
-    {
-        return Results.BadRequest();
-    }
+    var request = await SmbHelperRequestReader.ReadAsync(context.Request, context.RequestAborted);
     if (request is null) return Results.BadRequest();
     try
     {
