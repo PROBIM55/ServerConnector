@@ -66,6 +66,8 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
     private SafeNotice? _notice;
     private bool _firstSnapshot = true;
     private bool _disposed;
+    private int _browserSignInPending;
+    private int _commonConnectPending;
     private string? _converterSubmissionMode;
     private IReadOnlyList<PlatformAutoCadSession> _cadSessions = Array.Empty<PlatformAutoCadSession>();
 
@@ -213,6 +215,9 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
             ["ifcFiles"] = ifcFiles.Select(file => SafeFile(file, CurrentFileState(file))).ToArray(),
             ["modelFolders"] = Array.Empty<string>(),
             ["commonAccessSelected"] = _commonAccess.IsSelected,
+            ["commonAccessReady"] = _commonAccess.IsReady,
+            ["signInPending"] = Volatile.Read(ref _browserSignInPending) != 0,
+            ["connectPending"] = Volatile.Read(ref _commonConnectPending) != 0,
             ["assignedFolders"] = _commonAccess.IsSelected && _commonAccess.HasPermission(mode, "folders", ConnectorPermission.Read)
                 ? _runtimeServices.CommonFolders.Folders : Array.Empty<CommonSmbFolder>(),
             ["folderStatus"] = _runtimeServices.CommonFolderStatus,
@@ -620,15 +625,38 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
     private void StartCommonConnect(string? token, bool reconnect, CancellationToken cancellationToken)
         => StartOperation(async () =>
         {
-            _commonAccess.Select();
-            if (!reconnect)
-                token = await _browserSignIn.SignInAsync(message =>
+            if (Interlocked.CompareExchange(ref _commonConnectPending, 1, 0) != 0)
+                throw new ConnectorSignInException("Подключение уже выполняется.");
+            PublishSnapshot();
+            try
+            {
+                _commonAccess.Select();
+                if (!reconnect)
                 {
-                    lock (_gate) _notice = new SafeNotice("connect-common", message);
+                    Volatile.Write(ref _browserSignInPending, 1);
                     PublishSnapshot();
-                }, cancellationToken);
-            if (_connectorHost.IsConnected) await _connectorHost.DisconnectAsync();
-            await _runtimeServices.ConnectCommonAsync(token, reconnect, cancellationToken);
+                    try
+                    {
+                        token = await _browserSignIn.SignInAsync(message =>
+                        {
+                            lock (_gate) _notice = new SafeNotice("connect-common", message);
+                            PublishSnapshot();
+                        }, cancellationToken);
+                    }
+                    finally
+                    {
+                        Volatile.Write(ref _browserSignInPending, 0);
+                        PublishSnapshot();
+                    }
+                }
+                if (_connectorHost.IsConnected) await _connectorHost.DisconnectAsync();
+                await _runtimeServices.ConnectCommonAsync(token, reconnect, cancellationToken);
+            }
+            finally
+            {
+                Volatile.Write(ref _commonConnectPending, 0);
+                PublishSnapshot();
+            }
         }, "connect-common", cancellationToken);
 
     // New enrollment cannot reuse legacy web passwords, SMB credentials or
