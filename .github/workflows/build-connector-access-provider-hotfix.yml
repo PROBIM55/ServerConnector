@@ -58,7 +58,7 @@ jobs:
           }
           dotnet publish connector-access/smb-helper/Connector.Access.Smb.Helper.csproj --configuration Release --runtime win-x64 --self-contained true --output provider-hotfix/helper -p:UseSharedCompilation=false -p:BuildInParallel=false --verbosity minimal
           if ($LASTEXITCODE -ne 0) { throw 'SMB helper publish failed' }
-          $expected = @('Connector.Access.NetBird.0.2.9.nupkg','Connector.Access.Smb.0.2.9.nupkg')
+          $expected = @('Connector.Access.NetBird.0.2.10.nupkg','Connector.Access.Smb.0.2.9.nupkg')
           foreach ($name in $expected) {
             if (-not (Test-Path -LiteralPath (Join-Path 'provider-hotfix/packages' $name) -PathType Leaf)) {
               throw "Missing expected package: $name"

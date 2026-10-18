@@ -108,7 +108,7 @@ public sealed class NetBirdDeviceAccessGrantProvider : IDeviceAccessGrantProvide
         var group = await _management.GetGroupAsync(state.BootstrapGroupId, cancellationToken);
         var policy = await _management.GetPolicyAsync(state.PolicyId, cancellationToken);
         var peer = await _management.GetPeerAsync(state.PeerId, cancellationToken);
-        if (!IsOwnedReadyState(state, group, policy, peer, now))
+        if (!IsOwnedReadyState(state, group, policy, peer))
             return State("unknown", null, [], now);
 
         var addresses = new[] { NormalizeAssignedAddress(peer!.Ip), NormalizeAssignedAddress(peer.Ipv6) }
@@ -312,7 +312,7 @@ public sealed class NetBirdDeviceAccessGrantProvider : IDeviceAccessGrantProvide
     {
         var peer = await _management.GetPeerAsync(peerId, cancellationToken)
             ?? throw new NetBirdPeerNotReadyException("The expected NetBird peer does not exist.");
-        if (!peer.Connected || peer.LastSeen < _timeProvider.GetUtcNow().Subtract(_options.MaximumPeerLastSeenAge) ||
+        if (!IsConnectedPeer(peer) ||
             NormalizeAssignedAddress(peer.Ip) is null && NormalizeAssignedAddress(peer.Ipv6) is null)
             throw new NetBirdPeerNotReadyException("The expected NetBird peer is not connected with a fresh assigned overlay address.");
         return peer;
@@ -368,8 +368,7 @@ public sealed class NetBirdDeviceAccessGrantProvider : IDeviceAccessGrantProvide
         NetBirdProviderState state,
         NetBirdGroup? group,
         NetBirdPolicy? policy,
-        NetBirdPeer? peer,
-        DateTimeOffset now)
+        NetBirdPeer? peer)
     {
         var currentIpv4 = peer is null ? null : NormalizeAssignedAddress(peer.Ip);
         var currentIpv6 = peer is null ? null : NormalizeAssignedAddress(peer.Ipv6);
@@ -379,7 +378,7 @@ public sealed class NetBirdDeviceAccessGrantProvider : IDeviceAccessGrantProvide
             !string.Equals(group.Peers[0].Id, state.PeerId, StringComparison.Ordinal) ||
             !string.Equals(peer.Id, state.PeerId, StringComparison.Ordinal) ||
             state.AppliedPolicy is null || !PolicyMatches(policy, state.AppliedPolicy) ||
-            !peer.Connected || peer.LastSeen < now.Subtract(_options.MaximumPeerLastSeenAge) ||
+            !IsConnectedPeer(peer) ||
             (currentIpv4 is null && currentIpv6 is null) ||
             !string.Equals(currentIpv4, state.PeerIpv4, StringComparison.Ordinal) ||
             !string.Equals(currentIpv6, state.PeerIpv6, StringComparison.Ordinal))
@@ -389,6 +388,15 @@ public sealed class NetBirdDeviceAccessGrantProvider : IDeviceAccessGrantProvide
             rule.Enabled && string.Equals(rule.Action, "accept", StringComparison.Ordinal) &&
             rule.Sources.Count == 1 && string.Equals(rule.Sources[0], group.Id, StringComparison.Ordinal) &&
             rule.Destinations.Count > 0);
+    }
+
+    private static bool IsConnectedPeer(NetBirdPeer peer)
+    {
+        // NetBird reports last_seen as the start of the current connection on
+        // some supported versions. It does not advance during a live session.
+        // The management API's connected flag is the live-state signal; still
+        // require a real observation timestamp, exact peer/group and address.
+        return peer.Connected && peer.LastSeen > DateTimeOffset.UnixEpoch;
     }
 
     private static bool PolicyMatches(NetBirdPolicy actual, NetBirdPolicyWrite expected)

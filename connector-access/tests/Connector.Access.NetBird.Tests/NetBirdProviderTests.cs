@@ -64,7 +64,7 @@ public sealed class NetBirdProviderTests : IDisposable
     }
 
     [Fact]
-    public async Task State_IsReadyOnlyForFreshOwnedPeerGroupAndPolicy()
+    public async Task State_IsReadyOnlyForConnectedOwnedPeerGroupAndPolicy()
     {
         var fixture = new NetBirdFixtureHandler();
         var provider = CreateProvider(fixture);
@@ -86,6 +86,42 @@ public sealed class NetBirdProviderTests : IDisposable
         Assert.Equal("unknown", unknown.Value!.Status);
         Assert.Null(unknown.Value.PeerId);
         Assert.Empty(unknown.Value.ExpectedAssignedAddresses);
+    }
+
+    [Fact]
+    public async Task ConnectedPeer_RemainsReadyWhenLastSeenIsConnectionStart()
+    {
+        var fixture = new NetBirdFixtureHandler
+        {
+            PeerExists = true,
+            PeerConnected = true,
+            PeerLastSeen = DateTimeOffset.UtcNow.AddHours(-6),
+        };
+        var provider = CreateProvider(fixture);
+
+        var receipt = await provider.ApplyAsync(Apply(1), default);
+        var state = await provider.GetStateAsync(Device(1), default);
+
+        Assert.Equal(1, receipt.AppliedRevision);
+        Assert.Equal("ready", state.Value!.Status);
+
+        fixture.PeerConnected = false;
+        Assert.Equal("unknown", (await provider.GetStateAsync(Device(1), default)).Value!.Status);
+    }
+
+    [Fact]
+    public async Task ConnectedPeerWithoutObservation_IsNotAuthorized()
+    {
+        var fixture = new NetBirdFixtureHandler
+        {
+            PeerExists = true,
+            PeerConnected = true,
+            PeerLastSeen = DateTimeOffset.MinValue,
+        };
+        var provider = CreateProvider(fixture);
+
+        await Assert.ThrowsAsync<NetBirdPeerNotReadyException>(() => provider.ApplyAsync(Apply(1), default).AsTask());
+        Assert.False(fixture.PolicyExists);
     }
 
     [Fact]
@@ -333,6 +369,7 @@ public sealed class NetBirdProviderTests : IDisposable
         public bool MissingNamedGroupReturnsNotFound { get; set; }
         public bool PeerExists { get; set; }
         public bool PeerConnected { get; set; }
+        public DateTimeOffset PeerLastSeen { get; set; } = DateTimeOffset.UtcNow;
         public string PeerIpv4 { get; set; } = "100.90.0.22";
         public string? PeerIpv6 { get; set; }
         public string ResponsePeerId { get; set; } = "peer-1";
@@ -522,7 +559,7 @@ public sealed class NetBirdProviderTests : IDisposable
             ip = PeerIpv4,
             ipv6 = PeerIpv6,
             connected = PeerConnected,
-            last_seen = DateTimeOffset.UtcNow,
+            last_seen = PeerLastSeen,
         };
 
         private static HttpResponseMessage Json(object? value) => new(HttpStatusCode.OK)

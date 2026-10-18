@@ -1,7 +1,7 @@
 (() => {
   const $=s=>document.querySelector(s), q=new URLSearchParams(location.search);
   const desktop=window.CONNECTOR_DESKTOP===true;
-  const state={mode:q.get('mode')==='platform'?'platform':'structura',page:q.get('page')||'overview',last:{structura:'overview',platform:'overview'},tekla:q.get('sub')||'standard',conv:q.get('sub')||'catalog',job:null,progress:0,notices:{},fields:{},files:[],ifcFiles:[],brand:window.CONNECTOR_BRAND_CONCEPTS.some(concept=>concept.key===q.get("logo"))?q.get("logo"):window.CONNECTOR_BRAND_CONCEPTS[0].key,running:false,installingBlender:false,updateChecked:false,exports:[],exportEditor:false,editingExport:null,modelFolders:[],history:[]};
+  const state={mode:q.get('mode')==='platform'?'platform':'structura',page:q.get('page')||'overview',last:{structura:'overview',platform:'overview'},tekla:q.get('sub')||'standard',conv:q.get('sub')||'catalog',job:null,progress:0,notices:{},fields:{},files:[],ifcFiles:[],brand:window.CONNECTOR_BRAND_CONCEPTS.some(concept=>concept.key===q.get("logo"))?q.get("logo"):window.CONNECTOR_BRAND_CONCEPTS[0].key,running:false,signInPending:false,connectPending:false,commonAccessReady:false,installingBlender:false,updateChecked:false,exports:[],exportEditor:false,editingExport:null,modelFolders:[],history:[]};
   const tokens=window.CONNECTOR_KIT.graphite;
   Object.entries(tokens).forEach(([key,value])=>{if(key!=='name')document.body.style.setProperty('--'+key.replace(/[A-Z]/g,letter=>'-'+letter.toLowerCase()),typeof value==='number'?value+'px':value);});
   const iconNames={overview:'layout-dashboard',services:'network',tekla:'boxes',attributes:'tags',folders:'folder-open',converters:'arrow-right-left',agr:'cpu',bridge:'plug',autocad:'drafting-compass'};
@@ -253,6 +253,9 @@
     if(Array.isArray(snapshot.history))state.history=snapshot.history.filter(job=>job&&typeof job==='object').map(job=>({id:String(job.id??''),mode:job.mode==='platform'?'platform':'structura',kind:job.kind==='ifc'?'ifc':'fbx',status:String(job.status??'—'),output:String(job.output??'')}));
     const folders=snapshot.modelFolders??snapshot.lists?.modelFolders;if(Array.isArray(folders))state.modelFolders=folders.map(String);
     if(typeof snapshot.commonAccessSelected==='boolean')state.commonAccessSelected=snapshot.commonAccessSelected;
+    if(typeof snapshot.commonAccessReady==='boolean')state.commonAccessReady=snapshot.commonAccessReady;
+    if(typeof snapshot.signInPending==='boolean')state.signInPending=snapshot.signInPending;
+    if(typeof snapshot.connectPending==='boolean')state.connectPending=snapshot.connectPending;
     if(Array.isArray(snapshot.assignedFolders))state.assignedFolders=snapshot.assignedFolders.filter(folder=>folder&&typeof folder==='object').map(folder=>({resourceId:String(folder.resourceId??''),displayName:String(folder.displayName??''),drive:typeof folder.drive==='string'?folder.drive:null}));
     if(typeof snapshot.folderStatus==='string')state.folderStatus=snapshot.folderStatus;
     if(snapshot.status&&typeof snapshot.status==='string')state.connectionStatus=snapshot.status;

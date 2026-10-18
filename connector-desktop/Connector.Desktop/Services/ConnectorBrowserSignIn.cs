@@ -34,7 +34,7 @@ public sealed class ConnectorBrowserSignIn
             timeout.CancelAfter(TimeSpan.FromMinutes(5));
             var verifier=Base64Url(RandomNumberGenerator.GetBytes(32));
             var challenge=Base64Url(SHA256.HashData(Encoding.ASCII.GetBytes(verifier)));
-            progress("Открываем вход в Structura…");
+            progress("Открываем вход через Платформу…");
             var started=await PostAsync<StartResponse>("/requests",new {challenge,deviceName=Environment.MachineName},timeout.Token);
             if(!Guid.TryParseExact(started.RequestId,"N",out _) || started.ExpiresIn is <=0 or >300 ||
                 started.AuthorizationUrl!=Origin+Root+"/authorize?id="+started.RequestId)
@@ -48,13 +48,13 @@ public sealed class ConnectorBrowserSignIn
                 if(result.Status=="pending") continue;
                 if(result.Status!="approved" || string.IsNullOrWhiteSpace(result.EnrollmentToken) ||
                     result.EnrollmentToken.Length>4096 || !result.EnrollmentToken.StartsWith("cea1.",StringComparison.Ordinal))
-                    throw new ConnectorSignInException("Вход не завершён. Нажмите «Войти через Structura» ещё раз.");
+                    throw new ConnectorSignInException("Вход не завершён. Нажмите «Войти через Платформу» ещё раз.");
                 progress("Настраиваем защищённое подключение…");
                 return result.EnrollmentToken;
             }
         }
         catch(OperationCanceledException) when(!cancellationToken.IsCancellationRequested)
-        { throw new ConnectorSignInException("Время входа истекло. Нажмите «Войти через Structura» ещё раз."); }
+        { throw new ConnectorSignInException("Время входа истекло. Нажмите «Войти через Платформу» ещё раз."); }
         catch(HttpRequestException)
         { throw new ConnectorSignInException("Сервис входа недоступен. Проверьте интернет и повторите вход."); }
         catch(JsonException)
