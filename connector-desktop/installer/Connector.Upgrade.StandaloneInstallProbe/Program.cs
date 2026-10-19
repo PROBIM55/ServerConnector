@@ -5,6 +5,8 @@ using System.Text.Json;
 using System.Windows.Automation;
 using System.Security.Cryptography;
 using System.Runtime.InteropServices;
+using System.Runtime.InteropServices.ComTypes;
+using System.Text;
 using Connector.CommonAccess.Runtime;
 using Connector.Network;
 using Connector.Upgrade.HelperReleaseTrust;
@@ -43,7 +45,19 @@ try
         // Exercise the actual default GUI entrypoint, including its automatic Shown handler.
         // A token prompt, extra Finish click or network preflight makes this bounded test fail.
         using var installation = Process.Start(new ProcessStartInfo(caller) { UseShellExecute = false })!;
-        if (!installation.WaitForExit(180000)) { installation.Kill(true); throw new InvalidOperationException("Default installation waited for user input or network."); }
+        var installTimer = Stopwatch.StartNew();
+        while (!installation.WaitForExit(2000))
+        {
+            var failure = ReadInstallerFailure(installation);
+            if (failure is not null)
+            {
+                installation.Kill(true);
+                throw new InvalidOperationException("Default installer reported: " + failure);
+            }
+            if (installTimer.Elapsed < TimeSpan.FromSeconds(180)) continue;
+            installation.Kill(true);
+            throw new InvalidOperationException("Default installation waited for user input or network.");
+        }
         if (installation.ExitCode is not (0 or 3010) || probe.Inspect(pin, sid).Presence != VelopackInstallPresence.ExactInstalled)
             throw new InvalidOperationException("Default installation did not complete and verify its desktop package.");
     }
@@ -66,7 +80,7 @@ try
     var desktop = Path.Combine(root, "current", UnifiedVelopackApplication.MainExecutable);
     Progress("application-name-icons-and-shortcuts");
     using(var registration=Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Uninstall\"+release.PackageId))
-        if(registration?.GetValue("DisplayName") as string != "Structura Connector")
+        if(registration?.GetValue("DisplayName") as string != "Платформа Коннектор")
             throw new InvalidOperationException("Installed Apps still contains the pilot application name.");
     static byte[] IconBytes(string path)
     {
@@ -77,26 +91,31 @@ try
     var expectedIcon=IconBytes(caller);
     foreach(var file in new[] {desktop,Path.Combine(root,UnifiedVelopackApplication.RootLauncher),Path.Combine(root,"Update.exe")})
         if(!expectedIcon.SequenceEqual(IconBytes(file))) throw new InvalidOperationException("Installed executable icon differs from the branded installer icon.");
-    object shell=Activator.CreateInstance(Type.GetTypeFromProgID("WScript.Shell")!)!;
-    try
+    foreach(var location in new[] {Environment.SpecialFolder.DesktopDirectory,Environment.SpecialFolder.Programs})
     {
-        foreach(var location in new[] {Environment.SpecialFolder.DesktopDirectory,Environment.SpecialFolder.Programs})
+        var directory=Environment.GetFolderPath(location);
+        var path=Path.Combine(directory,"Платформа Коннектор.lnk");
+        if(!File.Exists(path))
+            throw new InvalidOperationException("A branded application shortcut is missing.");
+        var shortcut=NativeShortcutProbe.Read(path);
+        if(!string.Equals(shortcut.Target,Path.Combine(root,UnifiedVelopackApplication.RootLauncher),StringComparison.OrdinalIgnoreCase) ||
+            !string.Equals(shortcut.Icon,desktop,StringComparison.OrdinalIgnoreCase) || shortcut.IconIndex != 0)
+            throw new InvalidOperationException("Shortcut target or application icon differs.");
+        foreach (var legacyName in new[] { "Structura Connector.lnk", "Structura Connector (новый).lnk" })
         {
-            var directory=Environment.GetFolderPath(location);
-            var path=Path.Combine(directory,"Structura Connector.lnk");
-            if(!File.Exists(path)||File.Exists(Path.Combine(directory,"Structura Connector (новый).lnk")))
-                throw new InvalidOperationException("A normal branded shortcut is missing or the pilot shortcut remains.");
-            object shortcut=((dynamic)shell).CreateShortcut(path);
+            var legacyPath=Path.Combine(directory,legacyName);
+            if(!File.Exists(legacyPath)) continue;
             try
             {
-                if((string)((dynamic)shortcut).TargetPath != Path.Combine(root,UnifiedVelopackApplication.RootLauncher) ||
-                    (string)((dynamic)shortcut).IconLocation != desktop+",0")
-                    throw new InvalidOperationException("Shortcut target or application icon differs.");
+                var legacy=NativeShortcutProbe.Read(legacyPath);
+                if(!string.IsNullOrWhiteSpace(legacy.Target) && Path.IsPathFullyQualified(legacy.Target) &&
+                   Path.GetFullPath(legacy.Target).StartsWith(Path.TrimEndingDirectorySeparator(root)+Path.DirectorySeparatorChar,StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException("An owned pilot shortcut remains.");
             }
-            finally { Marshal.FinalReleaseComObject(shortcut); }
+            catch(Exception error) when (error is COMException or IOException or UnauthorizedAccessException or ArgumentException)
+            { /* Unreadable legacy shortcut is not owned proof. */ }
         }
     }
-    finally { Marshal.FinalReleaseComObject(shell); }
     Progress("desktop-start");
     using var app = Process.Start(new ProcessStartInfo(desktop) { UseShellExecute = false })!;
     var ready = false;
@@ -158,4 +177,73 @@ catch (Exception error)
     File.WriteAllText(output, JsonSerializer.Serialize(new { success = false, failure = error.Message, type = error.GetType().Name,
         diagnosticCode = error is NetworkGateException networkError ? networkError.Code : null, preflightDiagnostic }));
     Environment.ExitCode = 1;
+}
+
+static string? ReadInstallerFailure(Process process)
+{
+    try
+    {
+        process.Refresh();
+        if (process.MainWindowHandle == IntPtr.Zero) return null;
+        var window = AutomationElement.FromHandle(process.MainWindowHandle);
+        var close = window.FindFirst(TreeScope.Children, new AndCondition(
+            new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Button),
+            new PropertyCondition(AutomationElement.NameProperty, "Закрыть")));
+        if (close is null || !close.Current.IsEnabled) return null;
+        var labels = window.FindAll(TreeScope.Descendants,
+            new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Text));
+        var details = string.Join(" | ", labels.Cast<AutomationElement>()
+            .Select(label => label.Current.Name)
+            .Where(name => !string.IsNullOrWhiteSpace(name)));
+        return details.Length > 0 ? details[..Math.Min(details.Length, 500)] : "окно установки ожидает закрытия";
+    }
+    catch (ElementNotAvailableException) { return null; }
+    catch (InvalidOperationException) { return null; }
+}
+
+internal static class NativeShortcutProbe
+{
+    internal sealed record Shortcut(string Target, string Icon, int IconIndex);
+
+    internal static Shortcut Read(string path)
+    {
+        object native = new ShellLink();
+        try
+        {
+            ((IPersistFile)native).Load(path, 0);
+            var link = (IShellLinkW)native;
+            var target = new StringBuilder(32768);
+            var icon = new StringBuilder(32768);
+            link.GetPath(target, target.Capacity, IntPtr.Zero, 4);
+            link.GetIconLocation(icon, icon.Capacity, out var iconIndex);
+            return new Shortcut(target.ToString(), icon.ToString(), iconIndex);
+        }
+        finally { Marshal.FinalReleaseComObject(native); }
+    }
+
+    [ComImport, Guid("00021401-0000-0000-C000-000000000046")]
+    private sealed class ShellLink { }
+
+    [ComImport, Guid("000214F9-0000-0000-C000-000000000046"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    private interface IShellLinkW
+    {
+        void GetPath([Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder path, int capacity, IntPtr findData, uint flags);
+        void GetIDList(out IntPtr itemIdList);
+        void SetIDList(IntPtr itemIdList);
+        void GetDescription([Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder text, int capacity);
+        void SetDescription([MarshalAs(UnmanagedType.LPWStr)] string text);
+        void GetWorkingDirectory([Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder directory, int capacity);
+        void SetWorkingDirectory([MarshalAs(UnmanagedType.LPWStr)] string directory);
+        void GetArguments([Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder arguments, int capacity);
+        void SetArguments([MarshalAs(UnmanagedType.LPWStr)] string arguments);
+        void GetHotkey(out ushort hotkey);
+        void SetHotkey(ushort hotkey);
+        void GetShowCmd(out int show);
+        void SetShowCmd(int show);
+        void GetIconLocation([Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder path, int capacity, out int index);
+        void SetIconLocation([MarshalAs(UnmanagedType.LPWStr)] string path, int index);
+        void SetRelativePath([MarshalAs(UnmanagedType.LPWStr)] string path, uint reserved);
+        void Resolve(IntPtr window, uint flags);
+        void SetPath([MarshalAs(UnmanagedType.LPWStr)] string path);
+    }
 }

@@ -114,6 +114,13 @@ internal sealed class WindowsNetBirdInstallationOwnershipGate : INetBirdInstalla
             var powerShell = GetSystemPowerShellPath();
             if (!File.Exists(powerShell))
                 return Deny("netbird_preflight_powershell_missing");
+            // The desktop can inherit PSModulePath from PowerShell 7 (or another
+            // launcher). Windows PowerShell 5.1 then finds incompatible modules
+            // first and the signed read-only preflight fails as "not owned".
+            // Load modules only from this trusted system PowerShell installation.
+            var systemModules = Path.Combine(Path.GetDirectoryName(powerShell)!, "Modules");
+            if (!Directory.Exists(systemModules))
+                return Deny("netbird_preflight_powershell_missing");
 
             var result = await _runner.RunAsync(
                 powerShell,
@@ -125,7 +132,7 @@ internal sealed class WindowsNetBirdInstallationOwnershipGate : INetBirdInstalla
                     "-File", _options.PreflightScriptPath,
                     "-MsiPath", _options.PinnedMsiPath,
                 ],
-                null,
+                new Dictionary<string, string?> { ["PSModulePath"] = systemModules },
                 _options.Timeout,
                 cancellationToken).ConfigureAwait(false);
             if (result.ExitCode != 0 || string.IsNullOrWhiteSpace(result.StandardOutput))

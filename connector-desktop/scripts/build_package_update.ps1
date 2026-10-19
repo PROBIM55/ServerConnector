@@ -122,7 +122,7 @@ if ($PreviousReleasesDir) {
         Copy-Item -Destination $outputDir -Force
 }
 
-$packTitle = if ($TestAppId) { 'Structura Connector Update Smoke' } else { 'Structura Connector' }
+$packTitle = if ($TestAppId) { 'Structura Connector Update Smoke' } else { 'Платформа Коннектор' }
 $shortcutLocations = if ($TestAppId) { 'None' } else { 'Desktop,StartMenuRoot' }
 Write-Host 'BUILD_STEP: Velopack package'
 & $vpk pack --packId $appId --packTitle $packTitle --packVersion $PackVersion `

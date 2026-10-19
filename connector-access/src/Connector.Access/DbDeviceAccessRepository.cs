@@ -228,11 +228,16 @@ internal sealed class DbDeviceAccessRepository
         DateTimeOffset certificateExpiresAtUtc,
         long accessRevision,
         DateTimeOffset now,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool renewal = false,
+        DateTimeOffset? renewalBefore = null)
     {
         await using var connection = await _connections.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
-        command.CommandText = """
+        var eligibility = renewal
+            ? "enrollment_status = 'active' AND certificate_sha256 IS NOT NULL AND certificate_expires_at_utc <= @renewal_before"
+            : "enrollment_status = 'pending_certificate' AND certificate_sha256 IS NULL";
+        command.CommandText = $"""
             UPDATE connector_access_devices
             SET certificate_sha256 = @certificate_sha256,
                 certificate_pem = @certificate_pem,
@@ -242,11 +247,11 @@ internal sealed class DbDeviceAccessRepository
                 issuance_attempt_id = NULL,
                 issuance_lease_until_utc = NULL,
                 issuance_last_error = NULL,
-                desired_revision = @access_revision,
+                desired_revision = CASE WHEN desired_revision > @access_revision THEN desired_revision ELSE @access_revision END,
                 updated_at_utc = @now
             WHERE device_id = @device_id
-              AND enrollment_status = 'pending_certificate'
-              AND certificate_sha256 IS NULL
+              AND {eligibility}
+              AND revoked_at_utc IS NULL
               AND issuance_attempt_id = @issuance_attempt_id
             """;
         Add(command, "@certificate_sha256", certificateSha256);
@@ -257,6 +262,7 @@ internal sealed class DbDeviceAccessRepository
         Add(command, "@now", now, DbType.DateTimeOffset);
         Add(command, "@device_id", deviceId);
         Add(command, "@issuance_attempt_id", issuanceAttemptId);
+        if (renewal) Add(command, "@renewal_before", renewalBefore ?? now, DbType.DateTimeOffset);
         return await command.ExecuteNonQueryAsync(cancellationToken) == 1;
     }
 
@@ -271,11 +277,16 @@ internal sealed class DbDeviceAccessRepository
         string attemptId,
         DateTimeOffset now,
         DateTimeOffset leaseUntil,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool renewal = false,
+        DateTimeOffset? renewalBefore = null)
     {
         await using var connection = await _connections.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
-        command.CommandText = """
+        var eligibility = renewal
+            ? "enrollment_status = 'active' AND certificate_sha256 IS NOT NULL AND certificate_expires_at_utc <= @renewal_before"
+            : "enrollment_status = 'pending_certificate' AND certificate_sha256 IS NULL";
+        command.CommandText = $"""
             UPDATE connector_access_devices
             SET issuance_attempt_id = @attempt_id,
                 issuance_lease_until_utc = @lease_until,
@@ -283,8 +294,8 @@ internal sealed class DbDeviceAccessRepository
                 updated_at_utc = @now
             WHERE device_id = @device_id
               AND enrollment_request_id = @request_id
-              AND enrollment_status = 'pending_certificate'
-              AND certificate_sha256 IS NULL
+              AND {eligibility}
+              AND revoked_at_utc IS NULL
               AND (issuance_lease_until_utc IS NULL OR issuance_lease_until_utc <= @now)
             """;
         Add(command, "@attempt_id", attemptId);
@@ -292,6 +303,7 @@ internal sealed class DbDeviceAccessRepository
         Add(command, "@now", now, DbType.DateTimeOffset);
         Add(command, "@device_id", deviceId);
         Add(command, "@request_id", enrollmentRequestId.ToString("D"));
+        if (renewal) Add(command, "@renewal_before", renewalBefore ?? now, DbType.DateTimeOffset);
         if (await command.ExecuteNonQueryAsync(cancellationToken) != 1)
         {
             return null;
@@ -305,18 +317,20 @@ internal sealed class DbDeviceAccessRepository
         string attemptId,
         string error,
         DateTimeOffset now,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool renewal = false)
     {
         await using var connection = await _connections.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
-        command.CommandText = """
+        var status = renewal ? "active" : "pending_certificate";
+        command.CommandText = $"""
             UPDATE connector_access_devices
             SET issuance_attempt_id = NULL,
                 issuance_lease_until_utc = NULL,
                 issuance_last_error = @error,
                 updated_at_utc = @now
             WHERE device_id = @device_id
-              AND enrollment_status = 'pending_certificate'
+              AND enrollment_status = '{status}'
               AND issuance_attempt_id = @attempt_id
             """;
         Add(command, "@error", error.Length <= 512 ? error : error[..512]);

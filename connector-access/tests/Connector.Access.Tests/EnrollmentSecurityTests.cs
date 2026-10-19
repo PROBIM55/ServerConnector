@@ -194,6 +194,84 @@ public sealed class EnrollmentSecurityTests
     }
 
     [Fact]
+    public async Task Expired_certificate_renews_same_device_from_key_proof_without_new_token()
+    {
+        await using var fixture = await AccessFixture.CreateAsync();
+        var issue = await fixture.IssueAsync();
+        using var deviceKey = RSA.Create(2048);
+        var csr = new CertificateRequest("CN=ignored", deviceKey, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1)
+            .CreateSigningRequestPem();
+        var requestId = Guid.NewGuid();
+        var initial = await fixture.Enrollment.EnrollAsync(new DeviceEnrollmentRequest(
+            DeviceAccessProtocol.Version, requestId, issue.Token, csr, "Persistent device"));
+        Assert.True(initial.IsSuccess, Describe(initial));
+
+        fixture.Clock.Advance(TimeSpan.FromHours(25));
+        using var proofCertificate = CreateEnrollmentProof(deviceKey, fixture.Clock.GetUtcNow());
+        var proof = await fixture.Enrollment.AuthenticateEnrollmentKeyAsync(proofCertificate, requestId);
+        Assert.True(proof.IsSuccess, Describe(proof));
+        var renewed = await fixture.Enrollment.RecoverOrResumeAsync(proof.Value!);
+        var repeated = await fixture.Enrollment.RecoverOrResumeAsync(proof.Value!);
+
+        Assert.True(renewed.IsSuccess, Describe(renewed));
+        Assert.True(repeated.IsSuccess, Describe(repeated));
+        Assert.Equal(initial.Value!.DeviceId, renewed.Value!.DeviceId);
+        Assert.NotEqual(initial.Value.ClientCertificatePem, renewed.Value.ClientCertificatePem);
+        Assert.Equal(renewed.Value.ClientCertificatePem, repeated.Value!.ClientCertificatePem);
+        Assert.Equal(2, fixture.Issuer.IssueCount);
+        Assert.Equal(1, await fixture.CountDevicesAsync());
+    }
+
+    [Fact]
+    public async Task Renewal_does_not_rollback_a_newer_access_revision_written_during_issuance()
+    {
+        await using var fixture = await AccessFixture.CreateAsync();
+        var issue = await fixture.IssueAsync();
+        using var deviceKey = RSA.Create(2048);
+        var csr = new CertificateRequest("CN=ignored", deviceKey, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1)
+            .CreateSigningRequestPem();
+        var requestId = Guid.NewGuid();
+        var initial = await fixture.Enrollment.EnrollAsync(new DeviceEnrollmentRequest(
+            DeviceAccessProtocol.Version, requestId, issue.Token, csr, "Revision race device"));
+        Assert.True(initial.IsSuccess, Describe(initial));
+
+        fixture.Clock.Advance(TimeSpan.FromHours(25));
+        fixture.Issuer.BeforeIssueAsync = () => fixture.SetDeviceRevisionsAsync(initial.Value!.DeviceId, 99, 99);
+        using var proofCertificate = CreateEnrollmentProof(deviceKey, fixture.Clock.GetUtcNow());
+        var proof = await fixture.Enrollment.AuthenticateEnrollmentKeyAsync(proofCertificate, requestId);
+        Assert.True(proof.IsSuccess, Describe(proof));
+        var renewed = await fixture.Enrollment.RecoverOrResumeAsync(proof.Value!);
+
+        Assert.True(renewed.IsSuccess, Describe(renewed));
+        Assert.Equal((99L, 99L), await fixture.ReadDeviceRevisionsAsync(initial.Value!.DeviceId));
+    }
+
+    [Fact]
+    public async Task Revoked_device_cannot_renew_expired_certificate()
+    {
+        await using var fixture = await AccessFixture.CreateAsync();
+        var issue = await fixture.IssueAsync();
+        using var deviceKey = RSA.Create(2048);
+        var csr = new CertificateRequest("CN=ignored", deviceKey, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1)
+            .CreateSigningRequestPem();
+        var requestId = Guid.NewGuid();
+        var initial = await fixture.Enrollment.EnrollAsync(new DeviceEnrollmentRequest(
+            DeviceAccessProtocol.Version, requestId, issue.Token, csr, "Revoked device"));
+        Assert.True(initial.IsSuccess, Describe(initial));
+        var revoked = await fixture.Administration.RevokeAsync(
+            new RevokeDeviceCommand("admin-1", "company-1", initial.Value!.DeviceId));
+        Assert.True(revoked.IsSuccess, Describe(revoked));
+
+        fixture.Clock.Advance(TimeSpan.FromHours(25));
+        using var proofCertificate = CreateEnrollmentProof(deviceKey, fixture.Clock.GetUtcNow());
+        var proof = await fixture.Enrollment.AuthenticateEnrollmentKeyAsync(proofCertificate, requestId);
+
+        Assert.False(proof.IsSuccess);
+        Assert.Equal("recovery_denied", proof.Failure!.Code);
+        Assert.Equal(1, fixture.Issuer.IssueCount);
+    }
+
+    [Fact]
     public async Task Revocation_blocks_auth_before_unavailable_provider_retry()
     {
         await using var fixture = await AccessFixture.CreateAsync(
@@ -477,6 +555,40 @@ internal sealed class AccessFixture : IAsyncDisposable
         return (long)(await command.ExecuteScalarAsync())!;
     }
 
+    public async ValueTask SetDeviceRevisionsAsync(string deviceId, long desired, long applied)
+    {
+        await using var connection = new SqliteConnection(new SqliteConnectionStringBuilder
+        {
+            DataSource = _databasePath,
+            Mode = SqliteOpenMode.ReadWrite,
+            Pooling = false,
+        }.ToString());
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = "UPDATE connector_access_devices SET desired_revision = $desired, applied_revision = $applied WHERE device_id = $device_id";
+        command.Parameters.AddWithValue("$desired", desired);
+        command.Parameters.AddWithValue("$applied", applied);
+        command.Parameters.AddWithValue("$device_id", deviceId);
+        Assert.Equal(1, await command.ExecuteNonQueryAsync());
+    }
+
+    public async ValueTask<(long Desired, long Applied)> ReadDeviceRevisionsAsync(string deviceId)
+    {
+        await using var connection = new SqliteConnection(new SqliteConnectionStringBuilder
+        {
+            DataSource = _databasePath,
+            Mode = SqliteOpenMode.ReadOnly,
+            Pooling = false,
+        }.ToString());
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT desired_revision, applied_revision FROM connector_access_devices WHERE device_id = $device_id";
+        command.Parameters.AddWithValue("$device_id", deviceId);
+        await using var reader = await command.ExecuteReaderAsync();
+        Assert.True(await reader.ReadAsync());
+        return (reader.GetInt64(0), reader.GetInt64(1));
+    }
+
     public async ValueTask<(string Status, string? Error, long AttemptCount)> ReadOutboxAsync(string commandId)
     {
         await using var connection = new SqliteConnection(new SqliteConnectionStringBuilder
@@ -620,9 +732,10 @@ internal sealed class FixtureCertificateIssuer : IX509DeviceCertificateIssuer, I
 
     public X509Certificate2 IssuerCertificate { get; }
     public bool FailNextIssue { get; set; }
+    public Func<ValueTask>? BeforeIssueAsync { get; set; }
     public int IssueCount { get; private set; }
 
-    public ValueTask<X509Certificate2> IssueAsync(
+    public async ValueTask<X509Certificate2> IssueAsync(
         CertificateRequest certificateRequest,
         DateTimeOffset notBefore,
         DateTimeOffset notAfter,
@@ -635,11 +748,14 @@ internal sealed class FixtureCertificateIssuer : IX509DeviceCertificateIssuer, I
             throw new CryptographicException("fixture issuer unavailable");
         }
 
-        return ValueTask.FromResult(certificateRequest.Create(
+        if (BeforeIssueAsync is not null)
+            await BeforeIssueAsync();
+
+        return certificateRequest.Create(
             _certificateWithKey,
             notBefore,
             notAfter,
-            RandomNumberGenerator.GetBytes(16)));
+            RandomNumberGenerator.GetBytes(16));
     }
 
     public void Dispose()

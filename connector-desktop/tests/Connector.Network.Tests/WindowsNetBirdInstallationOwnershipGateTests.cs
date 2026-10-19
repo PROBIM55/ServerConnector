@@ -51,7 +51,9 @@ public sealed class WindowsNetBirdInstallationOwnershipGateTests : IDisposable
         Assert.Equal(
             ["-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", _preflight, "-MsiPath", _msi],
             call.Arguments);
-        Assert.Null(call.Environment);
+        Assert.NotNull(call.Environment);
+        Assert.Equal(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System),
+            "WindowsPowerShell", "v1.0", "Modules"), call.Environment["PSModulePath"], ignoreCase: true);
         Assert.Equal(TimeSpan.FromSeconds(7), call.Timeout);
     }
 
