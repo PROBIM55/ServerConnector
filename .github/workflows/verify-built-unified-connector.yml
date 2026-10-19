@@ -1,90 +1,106 @@
-name: Verify Built Unified Connector
+name: Verify ready clean Platform Connector without product rebuild
 on:
   workflow_dispatch:
+    inputs:
+      producer_run:
+        description: Exact run that compiled and retained the installer
+        required: true
+        type: string
+      producer_sha:
+        description: Exact reviewed product source commit
+        required: true
+        type: string
 permissions:
   contents: read
   actions: read
 concurrency:
-  group: unified-connector-candidate
+  group: clean-platform-connector
   cancel-in-progress: false
 jobs:
   verify:
     runs-on: windows-latest
-    timeout-minutes: 25
     environment: production
+    timeout-minutes: 20
     defaults:
-      run:
-        shell: pwsh
+      run: {shell: pwsh}
     env:
       GH_TOKEN: ${{ github.token }}
-      PRODUCER_RUN: '38713535827'
-      PRODUCER_SHA: 'bfd40908a902ae27d15a0889233658921a4ec294'
-      PRODUCER_DIGEST: '90a2c59994fdc8ce1379fa22fe55dfb308aa56786cbb94cd05b1303496d7bf1f'
+      PRODUCER_RUN: ${{ inputs.producer_run }}
+      PRODUCER_SHA: ${{ inputs.producer_sha }}
     steps:
       - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
+        with: {persist-credentials: false, fetch-depth: 0}
       - uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '8.0.x'
-      - name: Retrieve exact previously built runtime
-        id: runtime
+        with: {dotnet-version: '8.0.x'}
+      - name: Authenticate compiled bytes and unchanged product source
         run: |
-          $ErrorActionPreference = 'Stop'
-          $source = gh api "repos/$env:GITHUB_REPOSITORY/actions/runs/$env:PRODUCER_RUN" | ConvertFrom-Json
-          if ($LASTEXITCODE -ne 0 -or $source.head_sha -cne $env:PRODUCER_SHA) { throw 'Runtime source differs.' }
-          $items = gh api "repos/$env:GITHUB_REPOSITORY/actions/runs/$env:PRODUCER_RUN/artifacts" | ConvertFrom-Json
-          $artifact = @($items.artifacts | Where-Object name -CEQ 'unverified-runtime-diagnostics-1.1.1')
-          if ($artifact.Count -ne 1 -or $artifact[0].expired -or $artifact[0].digest -cne ('sha256:' + $env:PRODUCER_DIGEST)) { throw 'Runtime artifact differs.' }
-          $archive = Join-Path $env:RUNNER_TEMP 'runtime.zip'
-          gh api "repos/$env:GITHUB_REPOSITORY/actions/artifacts/$($artifact[0].id)/zip" > $archive
-          if ($LASTEXITCODE -ne 0 -or (Get-FileHash -LiteralPath $archive).Hash.ToLowerInvariant() -cne $env:PRODUCER_DIGEST) { throw 'Runtime download digest differs.' }
-          $root = Join-Path $env:RUNNER_TEMP 'runtime'
-          Expand-Archive -LiteralPath $archive -DestinationPath $root
-          $exe = @(Get-ChildItem -LiteralPath $root -Recurse -File -Filter 'Structura.Connector.Installer.exe')
-          if ($exe.Count -ne 1) { throw 'Runtime installer is ambiguous.' }
-          $run = Split-Path (Split-Path $exe[0].FullName)
-          # The downloaded artifact is intentionally unverified. Only the native tests
-          # below can promote these exact bytes into a distributable artifact.
-          "run=$run" >> $env:GITHUB_OUTPUT
-      - name: Verify actual installer under ordinary users
-        env:
-          ACCESS_CONFIGURATION: ${{ secrets.UNIFIED_CONNECTOR_ACCESS_CONFIGURATION_JSON }}
+          $ErrorActionPreference='Stop'
+          if ($env:PRODUCER_RUN -cnotmatch '^[1-9][0-9]*$' -or $env:PRODUCER_SHA -cnotmatch '^[a-f0-9]{40}$') { throw 'Exact producer identity required.' }
+          $run=gh api "repos/$env:GITHUB_REPOSITORY/actions/runs/$env:PRODUCER_RUN"|ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0 -or $run.status -cne 'completed' -or $run.run_attempt -ne 1 -or
+              $run.head_sha -cne $env:PRODUCER_SHA -or $run.path -cne '.github/workflows/build-unified-connector-candidate.yml' -or
+              $run.event -cne 'workflow_dispatch' -or $run.repository.full_name -cne $env:GITHUB_REPOSITORY) { throw 'Producer run differs.' }
+          $jobs=gh api "repos/$env:GITHUB_REPOSITORY/actions/runs/$env:PRODUCER_RUN/jobs?per_page=100"|ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0 -or $jobs.total_count -ne 1) { throw 'Producer job identity differs.' }
+          foreach ($stepName in @('Targeted account-session and desktop tests','Download pinned dependencies and build final EXE','Retain compiled EXE and probe before native verification')) {
+            $steps=@($jobs.jobs[0].steps|Where-Object name -CEQ $stepName)
+            if ($steps.Count -ne 1 -or $steps[0].conclusion -cne 'success') { throw "Producer gate failed: $stepName" }
+          }
+          $changed=@(git diff --name-only $env:PRODUCER_SHA $env:GITHUB_SHA)
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot compare product source.' }
+          $allowed=@('.github/workflows/build-unified-connector-candidate.yml','.github/workflows/verify-built-unified-connector.yml',
+            'connector-desktop/installer/Connector.Clean.InstallProbe/Program.cs','connector-desktop/scripts/invoke_hosted_clean_install_fixture.ps1')
+          if (@($changed|Where-Object {$_ -cnotin $allowed}).Count) { throw 'Product source differs; a ready-only check cannot verify changed product code.' }
+          $items=gh api "repos/$env:GITHUB_REPOSITORY/actions/runs/$env:PRODUCER_RUN/artifacts?per_page=100"|ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0 -or $items.total_count -gt 100) { throw 'Artifact listing failed.' }
+          $artifacts=@($items.artifacts|Where-Object {$_.name -ceq 'platform-connector-1.1.8-compiled-unverified' -and !$_.expired})
+          if ($artifacts.Count -ne 1) { throw 'One retained compiled artifact is required.' }
+          $a=$artifacts[0]
+          if ($a.workflow_run.id -ne [long]$env:PRODUCER_RUN -or $a.workflow_run.head_sha -cne $env:PRODUCER_SHA -or
+              $a.size_in_bytes -le 0 -or $a.size_in_bytes -gt 3GB -or $a.digest -cnotmatch '^sha256:[a-f0-9]{64}$') { throw 'Compiled artifact identity differs.' }
+          $archive=Join-Path $env:RUNNER_TEMP 'compiled.zip'
+          gh api "repos/$env:GITHUB_REPOSITORY/actions/artifacts/$($a.id)/zip" > $archive
+          if ($LASTEXITCODE -ne 0 -or (Get-Item $archive).Length -ne $a.size_in_bytes -or
+              (Get-FileHash $archive).Hash.ToLowerInvariant() -cne $a.digest.Substring(7)) { throw 'Compiled artifact bytes differ.' }
+          $root=Join-Path $env:RUNNER_TEMP 'compiled';Expand-Archive -LiteralPath $archive -DestinationPath $root
+          $exes=@(Get-ChildItem $root -Recurse -File -Filter 'PlatformConnector-1.1.8.exe')
+          $manifests=@(Get-ChildItem $root -Recurse -File -Filter release.json)
+          if ($exes.Count -ne 1 -or $manifests.Count -ne 1) { throw 'Compiled delivery is ambiguous.' }
+          $m=Get-Content $manifests[0].FullName -Raw|ConvertFrom-Json
+          if ($m.schemaVersion -ne 1 -or $m.version -cne '1.1.8' -or $m.sourceSha -cne $env:PRODUCER_SHA -or [string]$m.sourceRun -cne $env:PRODUCER_RUN -or
+              $m.artifactKind -cne 'unsigned-cloud-candidate' -or $m.authenticodeStatus -cne 'NotSigned' -or
+              $m.freshInstallation -isnot [bool] -or !$m.freshInstallation -or
+              $m.legacyPayloads -isnot [bool] -or $m.legacyPayloads -or $m.legacyImport -isnot [bool] -or $m.legacyImport -or
+              $m.blenderIncluded -isnot [bool] -or $m.blenderIncluded -or
+              $m.fileName -cne $exes[0].Name -or $m.bytes -ne $exes[0].Length -or
+              $m.sha256 -cne (Get-FileHash $exes[0].FullName).Hash.ToLowerInvariant()) { throw 'Compiled release manifest differs.' }
+          $delivery=Join-Path $env:RUNNER_TEMP 'verified-clean-release';New-Item -ItemType Directory -Path $delivery|Out-Null
+          Copy-Item -LiteralPath $exes[0].FullName,$manifests[0].FullName -Destination $delivery
+      - name: Compile only the verification probe
         run: |
-          $ErrorActionPreference = 'Stop'
-          $config = Join-Path $env:RUNNER_TEMP 'expected-connector-access.json'
-          [IO.File]::WriteAllText($config, (($env:ACCESS_CONFIGURATION | ConvertFrom-Json) | ConvertTo-Json -Depth 30))
-          Remove-Item Env:ACCESS_CONFIGURATION
-          $guard = 'connector-desktop/scripts/resource-guard/platform-build-guard.cs'
-          if ((Get-FileHash -LiteralPath $guard).Hash.ToLowerInvariant() -cne '99f6d32467f46042a367fad6383d088432c54a9e181e72a92d397a314a1a4c09') { throw 'Resource guard changed.' }
-          Add-Type -Path $guard
-          $arguments = @('-NoProfile','-NonInteractive','-File',
-            (Join-Path $env:GITHUB_WORKSPACE 'connector-desktop/scripts/invoke_hosted_unified_upgrade_fixture.ps1'),
-            '-RunDirectory','${{ steps.runtime.outputs.run }}','-ExpectedConfiguration',$config,'-RuntimeSourceSha',$env:PRODUCER_SHA)
-          $exit = [PlatformBuild.Guard]::RunWithPolicy((Get-Command pwsh).Source,$arguments,
-            $env:GITHUB_WORKSPACE,'unified-built-runtime-verification',0,$null,[uint64](2GB),[uint64](2GB),100,
-            [PlatformBuild.Guard]::MutexName,[Func[PlatformBuild.Guard+Memory]]{ [PlatformBuild.Guard]::ReadMemory() })
-          if ($exit -ne 0) { throw "Native verification failed ($exit)." }
-          $run = '${{ steps.runtime.outputs.run }}'
-          $delivery = Join-Path $env:RUNNER_TEMP 'verified-installer'
-          New-Item -ItemType Directory -Path $delivery | Out-Null
-          Copy-Item -LiteralPath (Join-Path $run 'unified-installer/Structura.Connector.Installer.exe'),(Join-Path $run 'native-upgrade-proof.json') -Destination $delivery
-          $hash = (Get-FileHash -LiteralPath (Join-Path $delivery 'Structura.Connector.Installer.exe')).Hash.ToLowerInvariant()
-          "$hash  Structura.Connector.Installer.exe" | Set-Content -LiteralPath (Join-Path $delivery 'checksums.sha256') -Encoding ascii
-      - name: Upload verified installer
-        uses: actions/upload-artifact@v4
+          dotnet publish connector-desktop/installer/Connector.Clean.InstallProbe -c Release -r win-x64 --self-contained true -o (Join-Path $env:RUNNER_TEMP 'ready-probe') -m:1 -nodeReuse:false -p:BuildInParallel=false -p:UseSharedCompilation=false
+          if ($LASTEXITCODE -ne 0) { throw 'Native probe compilation failed.' }
+      - name: Verify unchanged final EXE under an ordinary user
+        run: |
+          $delivery=Join-Path $env:RUNNER_TEMP 'verified-clean-release'
+          & connector-desktop/scripts/invoke_hosted_clean_install_fixture.ps1 -SetupExecutable (Join-Path $delivery 'PlatformConnector-1.1.8.exe') -ProbeExecutable (Join-Path $env:RUNNER_TEMP 'ready-probe/Connector.Clean.InstallProbe.exe') -EvidenceDirectory (Join-Path $delivery 'evidence')
+          @{schemaVersion=1;producerRun=$env:PRODUCER_RUN;runtimeSourceSha=$env:PRODUCER_SHA;verificationSourceSha=$env:GITHUB_SHA;verificationRun=$env:GITHUB_RUN_ID;
+            installerSha256=(Get-FileHash (Join-Path $delivery 'PlatformConnector-1.1.8.exe')).Hash.ToLowerInvariant();productRebuilt=$false}|
+            ConvertTo-Json|Set-Content (Join-Path $delivery 'verification.json') -Encoding utf8
+      - uses: actions/upload-artifact@v4
         with:
-          name: unified-connector-installer-1.1.1
-          path: ${{ runner.temp }}/verified-installer/*
-          if-no-files-found: error
-          retention-days: 14
-      - name: Retain native diagnostics
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: built-runtime-verification-diagnostics
+          name: platform-connector-1.1.8-cloud-tested-unsigned
           path: |
-            ${{ steps.runtime.outputs.run }}/native-upgrade-fixture/*.json
-            ${{ steps.runtime.outputs.run }}/native-upgrade-fixture/*.log
-          if-no-files-found: warn
-          retention-days: 3
+            ${{ runner.temp }}/verified-clean-release/PlatformConnector-1.1.8.exe
+            ${{ runner.temp }}/verified-clean-release/release.json
+            ${{ runner.temp }}/verified-clean-release/verification.json
+            ${{ runner.temp }}/verified-clean-release/evidence/*.json
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: clean-ready-diagnostics
+          path: |
+            ${{ runner.temp }}/verified-clean-release/evidence/*.json
+            ${{ runner.temp }}/verified-clean-release/evidence/*.log
+          if-no-files-found: ignore

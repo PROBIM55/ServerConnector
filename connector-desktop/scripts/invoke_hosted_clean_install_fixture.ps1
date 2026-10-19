@@ -8,6 +8,9 @@ $setup=[IO.Path]::GetFullPath($SetupExecutable)
 $msiInstaller=New-Object -ComObject WindowsInstaller.Installer
 $cleanUpgradeCode='{67B43FCD-4FE8-4D29-9F64-6F190FCD6E51}'
 if (@($msiInstaller.RelatedProducts($cleanUpgradeCode)).Count -ne 0) { throw 'Clean fixture requires no existing product of its own identity.' }
+foreach ($folder in @([Environment]::GetFolderPath('CommonDesktopDirectory'),[Environment]::GetFolderPath('CommonPrograms'))) {
+    if (Test-Path -LiteralPath (Join-Path $folder 'Платформа Коннектор.lnk')) { throw 'Fresh fixture requires no existing application shortcut.' }
+}
 if ((Get-Service NetBird -ErrorAction SilentlyContinue) -or (Test-Path -LiteralPath (Join-Path $env:ProgramFiles 'NetBird/netbird.exe')) -or
     (Test-Path -LiteralPath (Join-Path $env:ProgramData 'NetBird')) -or
     (Test-Path -LiteralPath (Join-Path $env:ProgramData 'Structura Connector/Network/netbird-bundle-owner.json')) -or
@@ -27,7 +30,8 @@ using System.Runtime.InteropServices;
 using System.Text;
 public static class CleanFixtureProfile {
  [DllImport("userenv.dll",CharSet=CharSet.Unicode,SetLastError=true)] public static extern int CreateProfile(string sid,string name,StringBuilder path,uint length);
- [DllImport("userenv.dll",CharSet=CharSet.Unicode,SetLastError=true)] [return:MarshalAs(UnmanagedType.Bool)] public static extern bool DeleteProfile(string sid,string path,string computer);
+ [DllImport("userenv.dll",EntryPoint="DeleteProfileW",CharSet=CharSet.Unicode,SetLastError=true)] [return:MarshalAs(UnmanagedType.Bool)] private static extern bool DeleteProfile(string sid,string path,IntPtr computer);
+ public static int DeleteLocalProfile(string sid,string path) { return DeleteProfile(sid,path,IntPtr.Zero) ? 0 : Marshal.GetLastWin32Error(); }
 }
 '@
 $name='platform'+[Guid]::NewGuid().ToString('N').Substring(0,8)
@@ -103,9 +107,9 @@ try {
                 [IO.Path]::GetDirectoryName($profileFull) -ine (Join-Path $env:SystemDrive 'Users')) { throw 'Disposable profile path differs from its exact owned user.' }
             $until=[DateTime]::UtcNow.AddSeconds(15);$deleted=$false;$lastError=0
             do {
-                $deleted=[CleanFixtureProfile]::DeleteProfile($user.SID.Value,$profileFull,$null)
+                $lastError=[CleanFixtureProfile]::DeleteLocalProfile($user.SID.Value,$profileFull)
+                $deleted=($lastError -eq 0)
                 if ($deleted) { break }
-                $lastError=[Runtime.InteropServices.Marshal]::GetLastWin32Error()
                 Start-Sleep -Milliseconds 500
             } while ([DateTime]::UtcNow -lt $until)
             if (!$deleted) { throw "Disposable user profile cleanup failed: Win32=$lastError" }
