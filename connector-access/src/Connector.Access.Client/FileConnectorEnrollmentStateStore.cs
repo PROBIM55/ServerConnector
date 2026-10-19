@@ -23,6 +23,17 @@ public sealed class FileConnectorEnrollmentStateStore
     public string DirectoryPath { get; }
     public string StateFilePath { get; }
 
+    internal async ValueTask DeleteAsync(CancellationToken cancellationToken)
+    {
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            File.Delete(StateFilePath);
+        }
+        finally { _gate.Release(); }
+    }
+
     internal async ValueTask<StoredEnrollmentState?> LoadAsync(CancellationToken cancellationToken)
     {
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);

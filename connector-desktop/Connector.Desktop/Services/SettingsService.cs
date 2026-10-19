@@ -16,7 +16,7 @@ public sealed class SettingsService
         var root = UnifiedUserStatePaths.Structura;
         Directory.CreateDirectory(root);
         _settingsPath = Path.Combine(root, "settings.json");
-        _legacySettingsPath = UnifiedUserStatePaths.LegacySettings;
+        _legacySettingsPath = null; // New connector never imports an older application.
     }
 
     // Explicit paths keep fixtures isolated and allow a read-only legacy import test.

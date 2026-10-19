@@ -20,7 +20,7 @@ public sealed class PlatformViewModel : ObservableObject
         _runtime.SnapshotChanged += _ => RefreshSnapshot();
         ConnectCommand = new AsyncRelayCommand(ConnectAsync, () => !_runtime.RuntimeEnabled);
         DisconnectCommand = new AsyncRelayCommand(DisconnectAsync, () => _runtime.RuntimeEnabled);
-        ImportSettingsCommand = new RelayCommand(ImportLegacySettings, () => !_runtime.RuntimeEnabled);
+        ImportSettingsCommand = new RelayCommand(() => { }, () => false);
         RefreshSnapshot();
     }
 

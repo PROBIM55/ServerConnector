@@ -54,21 +54,7 @@ public sealed class ConnectorRuntimeServices : IAsyncDisposable
             ],
             controlPlaneClientFactory: _ => new HttpMtlsConnectorControlPlaneClient(CommonAccess,
                 CommonAccess.Current?.AccessProfile?.CompanyId ?? throw new InvalidOperationException("Нет подтверждённого профиля доступа.")));
-        var platformSettings = new PlatformSettingsPersistence(runtimeRoot is null
-            ? null
-            : Path.Combine(localRuntimeRoot, "Platform"));
-        if (runtimeRoot is null && !CommonAccess.IsSelected)
-        {
-            // Legacy credential import belongs only to an explicitly legacy session.
-            // The common-access desktop starts without reading old token locations
-            // (which may be unavailable network files), or creating a second credential.
-            PlatformLegacyImport = platformSettings.ImportLegacyIfFresh();
-            if (!PlatformLegacyImport.Imported)
-            {
-                Trace.TraceWarning("Platform legacy settings import did not complete: {0}",
-                    PlatformLegacyImport.Code);
-            }
-        }
+        var platformSettings = new PlatformSettingsPersistence(Path.Combine(localRuntimeRoot, "Platform"));
         Platform = new PlatformRuntimeFacade(Host, materializer, platformSettings);
         ConverterClient = new AgentConverterJobClient(Host);
         LegacyPartConverter = new AgentAgrPartConverter(ConverterClient);
@@ -80,8 +66,6 @@ public sealed class ConnectorRuntimeServices : IAsyncDisposable
     public PlatformRuntimeFacade Platform { get; }
     public AgentConverterJobClient ConverterClient { get; }
     public IAgrPartConverter LegacyPartConverter { get; }
-    /// <summary>First-run legacy import outcome; contains no credential data.</summary>
-    public PlatformLegacyImportResult? PlatformLegacyImport { get; }
     public CommonAccessRuntime CommonAccess { get; }
     public CommonSmbAccessService CommonFolders { get; }
     public string CommonFolderStatus => Volatile.Read(ref _commonFolderStatus);
@@ -171,6 +155,20 @@ public sealed class ConnectorRuntimeServices : IAsyncDisposable
             finally { Host.Resume(); }
         }
         finally { _commonLifecycle.Release(); }
+    }
+
+    public async Task SignOutCommonAsync(CancellationToken cancellationToken)
+    {
+        await _commonLifecycle.WaitAsync(cancellationToken);
+        try
+        {
+            await StopForConnectionChangeAsync(cancellationToken);
+            BeginCommonSession();
+            await CommonFolders.ClearAuthorizationAsync(cancellationToken);
+            SetCommonFolderStatus("Папки не подключены");
+            await CommonAccess.SignOutAsync(cancellationToken);
+        }
+        finally { Host.Resume(); _commonLifecycle.Release(); }
     }
 
     private async Task StopForConnectionChangeAsync(CancellationToken cancellationToken)

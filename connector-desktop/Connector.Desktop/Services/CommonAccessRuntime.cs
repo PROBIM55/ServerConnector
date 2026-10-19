@@ -175,6 +175,15 @@ public sealed class CommonAccessRuntime : ICommonConnectorRequestTransport
         finally { ObserveConnectionState(Volatile.Read(ref _accessSessionGeneration)); }
     }
 
+    public async Task SignOutAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await RequireCoordinator().SignOutAsync(cancellationToken);
+        }
+        finally { ObserveConnectionState(Volatile.Read(ref _accessSessionGeneration)); }
+    }
+
     public async ValueTask<ProtectedServiceRoute> OpenProtectedServiceAsync(
         string serviceId,
         string relativeUri,

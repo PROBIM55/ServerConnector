@@ -106,6 +106,14 @@ public interface IConnectorExactDeviceRevocationClient
         CancellationToken cancellationToken = default);
 }
 
+public sealed record ConnectorSignOutIdentity(Guid RequestId, string? DeviceId);
+
+public interface IConnectorAccountSessionClient
+{
+    ValueTask<ConnectorSignOutIdentity?> GetSignOutIdentityAsync(CancellationToken cancellationToken = default);
+    ValueTask ClearRevokedSessionAsync(ConnectorSignOutIdentity identity, CancellationToken cancellationToken = default);
+}
+
 public sealed class ConnectorIssuedCertificateLease : IDisposable
 {
     internal ConnectorIssuedCertificateLease(string deviceId, long enrollmentRevision, System.Security.Cryptography.X509Certificates.X509Certificate2 certificate)

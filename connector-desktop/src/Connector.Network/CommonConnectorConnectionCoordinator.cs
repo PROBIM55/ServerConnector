@@ -147,6 +147,25 @@ public sealed class CommonConnectorConnectionCoordinator
                 "disconnected_by_user"));
         }, cancellationToken);
 
+    public ValueTask<CommonConnectorConnectionSnapshot> SignOutAsync(CancellationToken cancellationToken = default) =>
+        RunSerializedAsync(async ct =>
+        {
+            RevokeAuthorization();
+            if (_enrollment is not IConnectorAccountSessionClient accounts ||
+                _enrollment is not IConnectorExactDeviceRevocationClient revocation)
+                throw new InvalidOperationException("Выход из учётной записи недоступен в этой версии.");
+            var identity = await accounts.GetSignOutIdentityAsync(ct).ConfigureAwait(false);
+            if (identity is not null)
+            {
+                if (identity.DeviceId is not null)
+                {
+                    await revocation.RevokeAndConfirmExactAsync(identity.DeviceId, ct).ConfigureAwait(false);
+                }
+                await accounts.ClearRevokedSessionAsync(identity, ct).ConfigureAwait(false);
+            }
+            return Set(CommonConnectorConnectionStatus.EnrollmentRequired, null, null, "signed_out");
+        }, cancellationToken);
+
     public ValueTask<ProtectedServiceRoute> OpenProtectedServiceAsync(
         string serviceId,
         string relativeUri,

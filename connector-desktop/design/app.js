@@ -156,7 +156,7 @@
     if(id==='exports-run'||id==='exports-history'){const item=state.exports[Number(element.dataset.index)];showDialog(id==='exports-run'?'Запуск выгрузки':'История выгрузки',`${row('Настройка',escape(item.name))}${row('Папка моделей',escape(item.folder))}${row('Результат',escape(item.destinationLabel))}${row('Состояние','Механизм ещё не подключён. Реальная выгрузка не запускалась.')}`);return;}
     if(id==='ifc-optimize'){if(!state.ifcFiles.length){state.notices.ifc='Добавьте IFC-файлы перед обработкой.';render(false);return;}start('ifc');return;}
     if(id==='connect'){showDialog('Вход в Structura','<p>В приложении откроется браузер для входа в общую учётную запись.</p>');return;}
-    if(id==='disconnect'||id==='reconnect'){state.notices.connect=id==='disconnect'?'Сценарий отключения выбран. Рабочие подключения не изменялись.':'Сценарий повторного подключения выбран. Рабочие подключения не изменялись.';render(false);return;}
+    if(id==='signout'||id==='disconnect'||id==='reconnect'){state.notices.connect=id==='disconnect'?'Сценарий отключения выбран. Рабочие подключения не изменялись.':'Сценарий повторного подключения выбран. Рабочие подключения не изменялись.';render(false);return;}
     if(id==='agent-start'||id==='agent-stop'){state.running=id==='agent-start';state.notices.agent=state.running?'Фоновая работа включена в сценарии просмотра.':'Фоновая работа приостановлена в сценарии просмотра.';render(false);return;}
     if(id==='agr-install'||id==='agr-install-cancel'){state.installingBlender=id==='agr-install';state.notices.agr=state.installingBlender?'Показан сценарий установки Blender. Файлы не загружаются.':'Сценарий установки отменён.';render(false);return;}
     if(id==='update-check'){state.updateChecked=true;state.notices.update='Рабочий сервер обновлений в макете не запрашивается. Ниже — действия для новой версии.';render(false);return;}
@@ -214,7 +214,7 @@
     }
   });
   window.CONNECTOR_DESKTOP_COMMAND_UNAVAILABLE=(command,error)=>{
-    const group=command==='connect'||command==='reconnect'?'connect':command==='start'||command==='cancel'||command==='ifc-optimize'?'ifc':command.startsWith('sharing-')?'tekla':command.split('-')[0];
+    const group=command==='connect'||command==='reconnect'||command==='signout'?'connect':command==='start'||command==='cancel'||command==='ifc-optimize'?'ifc':command.startsWith('sharing-')?'tekla':command.split('-')[0];
     state.notices[group]=String(error||'Действие пока недоступно.');
     render(false);
     if(!document.querySelector('.notice'))$('#active-job').textContent=state.notices[group];

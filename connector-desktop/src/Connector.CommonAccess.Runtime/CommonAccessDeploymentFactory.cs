@@ -138,7 +138,7 @@ public static class CommonAccessDeploymentFactory
     }
 
     private static string GetMachineNetworkRoot() => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Structura Connector", "NetBird");
+        Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Platform Connector", "Network");
 
     private sealed class DeploymentConfiguration
     {

@@ -1,0 +1,21 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs" xmlns:bal="http://wixtoolset.org/schemas/v4/wxs/bal" xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
+  <Bundle Name="Платформа Коннектор" Manufacturer="Structura" Version="$(var.ProductVersion)" UpgradeCode="0D26EA9E-AB56-44A9-AF07-2521F6CBFB91" Compressed="yes" IconSourceFile="$(sys.SOURCEFILEDIR)..\Connector.Desktop\Assets\platform_connector.ico">
+    <BootstrapperApplication><Payload Name="platform_connector.ico" SourceFile="$(sys.SOURCEFILEDIR)..\Connector.Desktop\Assets\platform_connector.ico" /><bal:WixStandardBootstrapperApplication Theme="hyperlinkLicense" LicenseUrl="" SuppressOptionsUI="yes" LogoFile="$(sys.SOURCEFILEDIR)..\Connector.Desktop\Assets\platform_installer_logo.png" ThemeFile="$(sys.SOURCEFILEDIR)..\Connector.Unified.Bundle\InstallerTheme.xml" LocalizationFile="$(sys.SOURCEFILEDIR)Installer.ru-ru.wxl" /></BootstrapperApplication>
+    <Variable Name="WebView2MachineVersion" Type="version" Value="0.0.0.0" /><Variable Name="WebView2UserVersion" Type="version" Value="0.0.0.0" />
+    <Variable Name="NetBirdInstalledVersion" Type="version" Value="0.0.0.0" /><Variable Name="NetBirdServicePresent" Type="numeric" Value="0" /><Variable Name="NetBirdCliPresent" Type="numeric" Value="0" /><Variable Name="NetBirdDataPresent" Type="numeric" Value="0" />
+    <Variable Name="NetBirdOwnerPresent" Type="numeric" Value="0" />
+    <util:FileSearch Id="NetBirdOwnerSearch" Path="[CommonAppDataFolder]Structura Connector\Network\netbird-bundle-owner.json" Result="exists" Variable="NetBirdOwnerPresent" />
+    <util:ProductSearch Id="NetBirdVersionSearch" UpgradeCode="$(var.NetBirdUpgradeCode)" Result="version" Variable="NetBirdInstalledVersion" />
+    <util:RegistrySearch Id="NetBirdServiceSearch" Root="HKLM" Bitness="always64" Key="SYSTEM\CurrentControlSet\Services\NetBird" Result="exists" Variable="NetBirdServicePresent" />
+    <util:FileSearch Id="NetBirdCliSearch" Path="[ProgramFiles64Folder]NetBird\netbird.exe" Result="exists" Variable="NetBirdCliPresent" />
+    <util:DirectorySearch Id="NetBirdDataSearch" Path="[CommonAppDataFolder]NetBird" Result="exists" Variable="NetBirdDataPresent" />
+    <bal:Condition Message="Обнаружена другая или неполная установка NetBird. Обратитесь к администратору, чтобы проверить защищённое подключение.">WixBundleInstalled OR (NetBirdInstalledVersion = v0.0.0.0 AND NetBirdServicePresent = 0 AND NetBirdCliPresent = 0 AND NetBirdDataPresent = 0 AND NetBirdOwnerPresent = 0) OR (NetBirdInstalledVersion = v0.79.0 AND NetBirdServicePresent = 1 AND NetBirdCliPresent = 1 AND NetBirdOwnerPresent = 1)</bal:Condition>
+    <util:RegistrySearch Id="WebView2Machine" Root="HKLM" Bitness="always32" Key="SOFTWARE\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}" Value="pv" Variable="WebView2MachineVersion" />
+    <util:RegistrySearch Id="WebView2User" Root="HKCU" Bitness="always32" Key="SOFTWARE\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}" Value="pv" Variable="WebView2UserVersion" />
+    <Chain DisableSystemRestore="yes">
+      <ExePackage Id="WebView2" DisplayName="Компонент интерфейса Microsoft WebView2" SourceFile="$(var.WebView2Installer)" InstallArguments="/silent /install" DetectCondition="WebView2MachineVersion &gt; v0.0.0.0" PerMachine="yes" Permanent="yes" Vital="yes" />
+      <MsiPackage Id="NetBird" DisplayName="Защищённое подключение NetBird" SourceFile="$(var.NetBirdMsi)" Permanent="yes" Vital="yes" Visible="no" InstallCondition="NetBirdInstalledVersion = v0.0.0.0 AND NetBirdServicePresent = 0 AND NetBirdCliPresent = 0 AND NetBirdDataPresent = 0" RepairCondition="0"><MsiProperty Name="MSIFASTINSTALL" Value="1" /></MsiPackage>
+      <MsiPackage Id="PlatformConnector" DisplayName="Платформа Коннектор и ярлыки" SourceFile="$(var.SetupMsi)" Vital="yes" Visible="no"><MsiProperty Name="MSIFASTINSTALL" Value="1" /><MsiProperty Name="NETBIRD_WAS_ABSENT" Value="1" Condition="NetBirdInstalledVersion = v0.0.0.0 AND NetBirdServicePresent = 0 AND NetBirdCliPresent = 0 AND NetBirdDataPresent = 0" /></MsiPackage>
+    </Chain>
+  </Bundle>
+</Wix>

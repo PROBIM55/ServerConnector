@@ -2,6 +2,7 @@ param(
     [ValidatePattern('^https://')]
     [string]$FeedUrl,
     [switch]$LocalOnly,
+    [switch]$PublishOnly,
     [Parameter(Mandatory = $true)]
     [ValidatePattern('^\d+\.\d+\.\d+([-.+][0-9A-Za-z.-]+)?$')]
     [string]$PackVersion,
@@ -43,7 +44,7 @@ $bundledGltfpackDir = Join-Path $root 'Connector.Desktop\tools\gltfpack'
 $ensureGltfpackScript = Join-Path $PSScriptRoot 'ensure_bundled_gltfpack.ps1'
 $bundleEnginesScript = Join-Path $PSScriptRoot 'bundle_connector_engines.ps1'
 $checkNativeImportsScript = Join-Path $PSScriptRoot 'check_native_imports.ps1'
-$appId = if ($TestAppId) { $TestAppId } else { 'Structura.Connector.Desktop' }
+$appId = if ($TestAppId) { $TestAppId } elseif ($PublishOnly) { 'Platform.Connector.Desktop' } else { 'Structura.Connector.Desktop' }
 $mainExe = 'Connector.Desktop.exe'
 
 if (-not $feedUri -and -not $LocalOnly) {
@@ -69,7 +70,7 @@ if ($feedUri -and (-not $feedUri.IsAbsoluteUri -or $feedUri.Scheme -ne 'https' -
 New-Item -ItemType Directory -Path $publishDir -Force | Out-Null
 New-Item -ItemType Directory -Path $outputDir -Force | Out-Null
 
-if (-not (Test-Path $vpk)) {
+if (-not $PublishOnly -and -not (Test-Path $vpk)) {
     dotnet tool install vpk --tool-path $toolPath --version 1.2.161
     if ($LASTEXITCODE -ne 0) { throw 'Unable to install pinned vpk 1.2.161.' }
 }
@@ -112,6 +113,13 @@ foreach ($name in @('Connector.AgrConversion.dll', 'Assimp64.dll', 'Silk.NET.Ass
 }
 & $checkNativeImportsScript -Dir $publishDir -Files @('Assimp64.dll', 'gltfpack.exe')
 
+if ($PublishOnly) {
+    if (-not $LocalOnly -or $TestAppId -or $SmokeProbe -or $PreviousReleasesDir) { throw 'PublishOnly is only for a fresh production desktop image.' }
+    @{ schemaVersion=1; applicationId=$appId; version=$PackVersion; publishDirectory=$publishDir } |
+        ConvertTo-Json | Set-Content -LiteralPath (Join-Path $outputDir 'desktop-image.json') -Encoding utf8
+    return
+}
+
 @{ feedUrl = $(if ($feedUri) { $feedUri.AbsoluteUri.TrimEnd('/') } else { '' }); channel = $Channel } |
     ConvertTo-Json | Set-Content -LiteralPath (Join-Path $publishDir 'connector-update.json') -Encoding utf8
 
@@ -140,7 +148,7 @@ if ($UpdateSigningKeyPemPath -or $HostedSigningRef) {
     if ($LASTEXITCODE -ne 0) { throw 'Signing the update feed failed.' }
 }
 
-Get-ChildItem -LiteralPath $outputDir -File | Where-Object { $_.Name -match '^(releases\.|assets\.|Structura\.Connector\.Desktop-)' } |
+Get-ChildItem -LiteralPath $outputDir -File | Where-Object { $_.Name -match '^(releases\.|assets\.|Platform\.Connector\.Desktop-)' } |
     Select-Object FullName, Length, LastWriteTime
 @{ schemaVersion = 1; applicationId = $appId; version = $PackVersion; channel = $Channel; feedPublished = -not $LocalOnly;
    packTitle = $packTitle; shortcuts = $shortcutLocations;

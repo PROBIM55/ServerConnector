@@ -31,6 +31,10 @@ public sealed class PackageUpdateService
 
     public static PackageUpdateService CreateDefault()
     {
+        // Machine MSI releases are updated by their EXE installer. Never feed a
+        // Program Files installation into Velopack or the retired legacy updater.
+        if (File.Exists(Path.Combine(AppContext.BaseDirectory, "connector-install.json")))
+            return new PackageUpdateService(null, managedInstall: true);
         if (Velopack.Locators.VelopackLocator.Current.CurrentlyInstalledVersion is null)
         {
             return new PackageUpdateService(null);

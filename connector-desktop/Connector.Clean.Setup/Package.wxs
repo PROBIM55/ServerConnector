@@ -1,0 +1,56 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package Name="Платформа Коннектор" Manufacturer="Structura" Version="$(var.ProductVersion)"
+      UpgradeCode="67B43FCD-4FE8-4D29-9F64-6F190FCD6E51" Scope="perMachine"
+      InstallerVersion="500" Compressed="yes" Language="1049" Codepage="1251">
+    <MajorUpgrade DowngradeErrorMessage="Установлена более новая версия Платформа Коннектора." />
+    <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
+    <Property Id="MSIFASTINSTALL" Value="1" />
+    <Property Id="ARPPRODUCTICON" Value="PlatformIcon" />
+    <Icon Id="PlatformIcon" SourceFile="$(sys.SOURCEFILEDIR)..\Connector.Desktop\Assets\platform_connector.ico" />
+    <Property Id="NETBIRD_WAS_ABSENT" Secure="yes" />
+    <StandardDirectory Id="ProgramMenuFolder" />
+    <StandardDirectory Id="DesktopFolder" />
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="Platform Connector">
+        <Directory Id="NETWORK" Name="Network">
+          <Directory Id="SCRIPTS" Name="scripts" />
+          <Directory Id="INFRA" Name="infra"><Directory Id="LOCKS" Name="netbird" /></Directory>
+          <Directory Id="PINNED_INSTALLER" Name="installer" />
+        </Directory>
+      </Directory>
+    </StandardDirectory>
+    <StandardDirectory Id="CommonAppDataFolder">
+      <Directory Id="SHARED_NETWORK_PARENT" Name="Structura Connector"><Directory Id="SHARED_NETWORK" Name="Network" /></Directory>
+    </StandardDirectory>
+    <Component Id="Application" Directory="INSTALLFOLDER" Guid="*">
+      <File Id="DesktopExe" Source="$(var.DesktopDir)\Connector.Desktop.exe" KeyPath="yes">
+        <Shortcut Id="StartMenuShortcut" Name="Платформа Коннектор" Directory="ProgramMenuFolder" Advertise="yes" Icon="PlatformIcon" WorkingDirectory="INSTALLFOLDER" />
+        <Shortcut Id="DesktopShortcut" Name="Платформа Коннектор" Directory="DesktopFolder" Advertise="yes" Icon="PlatformIcon" WorkingDirectory="INSTALLFOLDER" />
+      </File>
+    </Component>
+    <Component Id="ProtectedAppRoot" Directory="INSTALLFOLDER" Guid="*">
+      <CreateFolder><PermissionEx Sddl="O:SYG:SYD:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;GRGX;;;BU)" /></CreateFolder>
+      <RegistryValue Root="HKLM" Key="Software\Structura\PlatformConnector" Name="InstallRoot" Type="string" Value="[INSTALLFOLDER]" KeyPath="yes" />
+    </Component>
+    <Component Id="ProtectedNetwork" Directory="NETWORK" Guid="*"><CreateFolder><PermissionEx Sddl="O:SYG:SYD:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;GRGX;;;BU)" /></CreateFolder><RegistryValue Root="HKLM" Key="Software\Structura\PlatformConnector" Name="Network" Type="integer" Value="1" KeyPath="yes" /></Component>
+    <Component Id="ProtectedScripts" Directory="SCRIPTS" Guid="*"><CreateFolder><PermissionEx Sddl="O:SYG:SYD:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;GRGX;;;BU)" /></CreateFolder><RegistryValue Root="HKLM" Key="Software\Structura\PlatformConnector" Name="Scripts" Type="integer" Value="1" KeyPath="yes" /></Component>
+    <Component Id="ProtectedInfra" Directory="INFRA" Guid="*"><CreateFolder><PermissionEx Sddl="O:SYG:SYD:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;GRGX;;;BU)" /></CreateFolder><RegistryValue Root="HKLM" Key="Software\Structura\PlatformConnector" Name="Infra" Type="integer" Value="1" KeyPath="yes" /></Component>
+    <Component Id="ProtectedLocks" Directory="LOCKS" Guid="*"><CreateFolder><PermissionEx Sddl="O:SYG:SYD:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;GRGX;;;BU)" /></CreateFolder><RegistryValue Root="HKLM" Key="Software\Structura\PlatformConnector" Name="Locks" Type="integer" Value="1" KeyPath="yes" /></Component>
+    <Component Id="ProtectedInstaller" Directory="PINNED_INSTALLER" Guid="*"><CreateFolder><PermissionEx Sddl="O:SYG:SYD:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;GRGX;;;BU)" /></CreateFolder><RegistryValue Root="HKLM" Key="Software\Structura\PlatformConnector" Name="Installer" Type="integer" Value="1" KeyPath="yes" /></Component>
+    <Component Id="Configuration" Directory="NETWORK" Guid="*"><File Source="$(var.AccessConfiguration)" KeyPath="yes"><PermissionEx Sddl="O:SYG:SYD:P(A;;FA;;;SY)(A;;FA;;;BA)(A;;GRGX;;;BU)" /></File></Component>
+    <Component Id="Preflight" Directory="SCRIPTS" Guid="*"><File Source="$(var.NetBirdPreflight)" KeyPath="yes"><PermissionEx Sddl="O:SYG:SYD:P(A;;FA;;;SY)(A;;FA;;;BA)(A;;GRGX;;;BU)" /></File></Component>
+    <Component Id="Verifier" Directory="SCRIPTS" Guid="*"><File Source="$(var.NetBirdVerifier)" KeyPath="yes"><PermissionEx Sddl="O:SYG:SYD:P(A;;FA;;;SY)(A;;FA;;;BA)(A;;GRGX;;;BU)" /></File></Component>
+    <Component Id="IdentityLock" Directory="LOCKS" Guid="*"><File Source="$(var.NetBirdLock)" KeyPath="yes"><PermissionEx Sddl="O:SYG:SYD:P(A;;FA;;;SY)(A;;FA;;;BA)(A;;GRGX;;;BU)" /></File></Component>
+    <Component Id="NetBirdPackage" Directory="PINNED_INSTALLER" Guid="*"><File Source="$(var.NetBirdMsi)" Name="netbird_installer_0.79.0_windows_amd64.msi" KeyPath="yes"><PermissionEx Sddl="O:SYG:SYD:P(A;;FA;;;SY)(A;;FA;;;BA)(A;;GRGX;;;BU)" /></File></Component>
+    <Component Id="SharedNetworkParent" Directory="SHARED_NETWORK_PARENT" Guid="07245D8F-632A-4AE4-839F-53E08464DE06" Permanent="yes"><CreateFolder><PermissionEx Sddl="O:SYG:SYD:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;GRGX;;;BU)" /></CreateFolder><RegistryValue Root="HKLM" Key="Software\Structura\UnifiedConnectorSetup" Name="NetworkParent" Type="integer" Value="1" KeyPath="yes" /></Component>
+    <Component Id="SharedNetworkRoot" Directory="SHARED_NETWORK" Guid="0B483D11-A498-4FCA-8F23-6CC4AB9BCE3F" Permanent="yes"><CreateFolder><PermissionEx Sddl="O:SYG:SYD:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;GRGX;;;BU)" /></CreateFolder><RegistryValue Root="HKLM" Key="Software\Structura\UnifiedConnectorSetup" Name="NetworkRoot" Type="integer" Value="1" KeyPath="yes" /></Component>
+    <Component Id="NetBirdOwnership" Directory="SHARED_NETWORK" Guid="A0710F90-3344-482A-9E8F-B6E6FF9EDB15" Permanent="yes" NeverOverwrite="yes" Condition="NETBIRD_WAS_ABSENT = &quot;1&quot;">
+      <File Source="$(sys.SOURCEFILEDIR)..\Connector.Unified.Setup\netbird-bundle-owner.json" KeyPath="yes"><PermissionEx Sddl="O:SYG:SYD:P(A;;FA;;;SY)(A;;FA;;;BA)(A;;GRGX;;;BU)" /></File>
+    </Component>
+    <Feature Id="Complete" Title="Платформа Коннектор" Level="1">
+      <Files Include="$(var.DesktopDir)\**" Directory="INSTALLFOLDER"><Exclude Files="$(var.DesktopDir)\Connector.Desktop.exe" /><Exclude Files="$(var.DesktopDir)\**\*.pdb" /></Files>
+      <ComponentRef Id="Application" /><ComponentRef Id="ProtectedAppRoot" /><ComponentRef Id="ProtectedNetwork" /><ComponentRef Id="ProtectedScripts" /><ComponentRef Id="ProtectedInfra" /><ComponentRef Id="ProtectedLocks" /><ComponentRef Id="ProtectedInstaller" />
+      <ComponentRef Id="Configuration" /><ComponentRef Id="Preflight" /><ComponentRef Id="Verifier" /><ComponentRef Id="IdentityLock" /><ComponentRef Id="NetBirdPackage" /><ComponentRef Id="SharedNetworkParent" /><ComponentRef Id="SharedNetworkRoot" /><ComponentRef Id="NetBirdOwnership" />
+    </Feature>
+  </Package>
+</Wix>

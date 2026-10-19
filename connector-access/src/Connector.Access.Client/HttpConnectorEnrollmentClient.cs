@@ -9,8 +9,8 @@ using Connector.Access.Contracts;
 
 namespace Connector.Access.Client;
 
-public sealed class HttpConnectorEnrollmentClient : IConnectorEnrollmentClient, IConnectorDeviceAccessClient,
-    IConnectorIssuedCredentialSource, IConnectorExactDeviceRevocationClient
+public sealed partial class HttpConnectorEnrollmentClient : IConnectorEnrollmentClient, IConnectorDeviceAccessClient,
+    IConnectorIssuedCredentialSource, IConnectorExactDeviceRevocationClient, IConnectorAccountSessionClient
 {
     private static readonly TimeSpan CertificateRenewalLead = TimeSpan.FromHours(1);
     private const int MaximumResponseBytes = 128 * 1024;
@@ -461,6 +461,7 @@ public sealed class HttpConnectorEnrollmentClient : IConnectorEnrollmentClient, 
                     invoker, HttpMethod.Post, endpoint, timeout.Token).ConfigureAwait(false);
                 if (postStatus is null)
                 {
+                    _confirmedRevokedRequestId = receipt.RequestId;
                     return;
                 }
 
@@ -472,6 +473,7 @@ public sealed class HttpConnectorEnrollmentClient : IConnectorEnrollmentClient, 
                         invoker, HttpMethod.Get, endpoint, timeout.Token).ConfigureAwait(false);
                     if (status is null)
                     {
+                        _confirmedRevokedRequestId = receipt.RequestId;
                         return;
                     }
 

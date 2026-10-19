@@ -7,6 +7,57 @@ namespace Connector.Access.Client.Tests;
 public sealed class HttpConnectorDeviceSelfRevocationTests
 {
     [Fact]
+    public async Task ConfirmedSignOutClearsDurableSessionAndNextLoginCreatesANewDeviceRequest()
+    {
+        using var directory = new TemporaryDirectory();
+        using var authority = new TestCertificateAuthority();
+        var requests = new List<Guid>();
+        var transport = new DelegateHttpInvokerFactory(async (_, request, cancellationToken) =>
+        {
+            if (request.RequestUri!.AbsolutePath.EndsWith("/enroll", StringComparison.Ordinal))
+            {
+                var enrollment = await request.Content!.ReadFromJsonAsync<DeviceEnrollmentRequest>(cancellationToken);
+                requests.Add(enrollment!.RequestId);
+                return TestCertificateAuthority.JsonResponse(authority.Issue(enrollment));
+            }
+            return new HttpResponseMessage(HttpStatusCode.NoContent);
+        });
+        var store = new FileConnectorEnrollmentStateStore(directory.Path);
+        var client = CreateClient(store, authority, transport);
+        await client.EnrollAsync("first-secret", "test-device");
+        var identity = (await client.GetSignOutIdentityAsync())!;
+        await Assert.ThrowsAsync<ConnectorEnrollmentStateException>(() => client.ClearRevokedSessionAsync(identity).AsTask());
+        await client.RevokeAndConfirmExactAsync(identity.DeviceId!);
+        await client.ClearRevokedSessionAsync(identity);
+        Assert.Null(await store.LoadAsync(default));
+        var restarted = CreateClient(store, authority, transport);
+        await restarted.EnrollAsync("second-account-secret", "test-device");
+        Assert.Equal(2, requests.Count);
+        Assert.NotEqual(requests[0], requests[1]);
+    }
+
+    [Fact]
+    public async Task FailedSignOutRetainsCredentialForRetry()
+    {
+        using var directory = new TemporaryDirectory();
+        using var authority = new TestCertificateAuthority();
+        var transport = new DelegateHttpInvokerFactory(async (_, request, cancellationToken) =>
+        {
+            if (request.RequestUri!.AbsolutePath.EndsWith("/enroll", StringComparison.Ordinal))
+                return TestCertificateAuthority.JsonResponse(authority.Issue(
+                    (await request.Content!.ReadFromJsonAsync<DeviceEnrollmentRequest>(cancellationToken))!));
+            return new HttpResponseMessage(HttpStatusCode.ServiceUnavailable);
+        });
+        var store = new FileConnectorEnrollmentStateStore(directory.Path);
+        var client = CreateClient(store, authority, transport);
+        await client.EnrollAsync("first-secret", "test-device");
+        var identity = (await client.GetSignOutIdentityAsync())!;
+        await Assert.ThrowsAsync<ConnectorEnrollmentProtocolException>(() => client.RevokeAndConfirmExactAsync(identity.DeviceId!).AsTask());
+        await Assert.ThrowsAsync<ConnectorEnrollmentStateException>(() => client.ClearRevokedSessionAsync(identity).AsTask());
+        Assert.Equal(identity.RequestId, (await store.LoadAsync(default))!.RequestId);
+    }
+
+    [Fact]
     public async Task Inspect_RequiresExactAnonymousRouteAndUnauthorizedCode()
     {
         using var directory = new TemporaryDirectory();

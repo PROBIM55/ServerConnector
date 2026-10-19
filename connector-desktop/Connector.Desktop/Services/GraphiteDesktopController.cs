@@ -273,6 +273,9 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
 
         switch (request.Command)
         {
+            case "signout":
+                StartOperation(() => _runtimeServices.SignOutCommonAsync(cancellationToken), "connect-common", cancellationToken);
+                break;
             case "connect":
                 if (_commonAccess.ShouldUse()) StartCommonConnect(null, false, cancellationToken);
                 else if (_mode == "platform") StartPlatformConnect(ReadField(request.Payload, "token"), reconnect: false, cancellationToken);
@@ -617,8 +620,6 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
             if (!_connectorHost.Settings.VpnEnabled || string.IsNullOrWhiteSpace(_connectorHost.Settings.VpnConfigCipherBase64))
                 await _connectorHost.ConnectByTokenAsync(ReadStoredToken(), showSuccessDialog: false);
             await _connectorHost.EnsureVpnReadyAsync();
-            if (string.IsNullOrWhiteSpace(token) && !_platformConnection.Connection.HasStoredCredential)
-                RequireAccepted(_platformConnection.ImportLegacyCredential());
             RequireAccepted(reconnect
                 ? await _platformConnection.ReconnectAsync(cancellationToken)
                 : await _platformConnection.ConnectAsync(token, cancellationToken));
