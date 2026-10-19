@@ -1,0 +1,102 @@
+name: Publish exact verified Platform Connector installer
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: unified-connector-candidate
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    environment: production
+    permissions:
+      contents: write
+      actions: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      VERIFIED_RUN: '39308895173'
+      VERIFIED_ATTEMPT: '1'
+      VERIFIED_SHA: '49405ad862afb90b912fb9764ea64ee241b0d879'
+      RUNTIME_SHA: '49405ad862afb90b912fb9764ea64ee241b0d879'
+      ARTIFACT_ID: '12215292792'
+      ARTIFACT_DIGEST: '846ac9ddda8cd09d13d4e2781bb37a86422d9c3f21b801d406cbe360e5031828'
+      ARTIFACT_SIZE: '721297148'
+    steps:
+      - name: Verify accepted cloud evidence and publish exact EXE
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $repository=$env:GITHUB_REPOSITORY
+          $source=gh api "repos/$repository/actions/runs/$env:VERIFIED_RUN" | ConvertFrom-Json
+          if($LASTEXITCODE -ne 0 -or $source.status -cne 'completed' -or $source.conclusion -cne 'success' -or $source.head_sha -cne $env:VERIFIED_SHA -or $source.run_attempt -ne [int]$env:VERIFIED_ATTEMPT){throw 'Accepted verification differs.'}
+          $attempt=gh api "repos/$repository/actions/runs/$env:VERIFIED_RUN/attempts/$env:VERIFIED_ATTEMPT" | ConvertFrom-Json
+          if($LASTEXITCODE -ne 0 -or $attempt.status -cne 'completed' -or $attempt.conclusion -cne 'success' -or $attempt.run_attempt -ne [int]$env:VERIFIED_ATTEMPT -or $attempt.head_sha -cne $env:VERIFIED_SHA){throw 'Accepted attempt differs.'}
+          $artifact=gh api "repos/$repository/actions/artifacts/$env:ARTIFACT_ID" | ConvertFrom-Json
+          if($LASTEXITCODE -ne 0 -or $artifact.expired -or $artifact.name -cne 'unified-connector-installer-1.1.7' -or $artifact.workflow_run.id -ne [long]$env:VERIFIED_RUN -or $artifact.workflow_run.head_sha -cne $env:VERIFIED_SHA -or $artifact.digest -cne ('sha256:'+$env:ARTIFACT_DIGEST) -or $artifact.size_in_bytes -ne [long]$env:ARTIFACT_SIZE){throw 'Verified installer artifact differs.'}
+          $archive=Join-Path $env:RUNNER_TEMP 'accepted-installer.zip'
+          gh api "repos/$repository/actions/artifacts/$env:ARTIFACT_ID/zip" > $archive
+          if($LASTEXITCODE -ne 0 -or (Get-Item -LiteralPath $archive).Length -ne [long]$env:ARTIFACT_SIZE -or (Get-FileHash -LiteralPath $archive).Hash.ToLowerInvariant() -cne $env:ARTIFACT_DIGEST){throw 'Installer archive digest differs.'}
+          $root=Join-Path $env:RUNNER_TEMP 'accepted-installer'
+          Expand-Archive -LiteralPath $archive -DestinationPath $root
+          $files=@(Get-ChildItem -LiteralPath $root -Recurse -File)
+          $expected=@('Structura.Connector.Installer.exe','checksums.sha256','native-upgrade-proof.json')
+          if($files.Count -ne 3 -or @($files | Where-Object {$_.DirectoryName -cne $root -or $_.Name -cnotin $expected}).Count -ne 0){throw 'Installer delivery contains unexpected files.'}
+          $proof=Get-Content -LiteralPath (Join-Path $root 'native-upgrade-proof.json') -Raw | ConvertFrom-Json
+          if($proof.sourceSha -cne $env:RUNTIME_SHA -or $proof.verificationSourceSha -cne $env:VERIFIED_SHA){throw 'Native evidence identity differs.'}
+          foreach($flag in @('installedRuntimePayloadsVerified','nativeCallerStarted','deploymentConfigurationVerified','relatedBundleRollbackNotInvoked','productionPreflightVerified','defaultInstallationVerified','netBirdFirstLoginVerified')){
+            if($proof.$flag -isnot [bool] -or !$proof.$flag){throw "Native evidence incomplete: $flag"}
+          }
+          $exe=Join-Path $root 'Structura.Connector.Installer.exe'
+          $hash=(Get-FileHash -LiteralPath $exe).Hash.ToLowerInvariant()
+          $checksum=@(Get-Content -LiteralPath (Join-Path $root 'checksums.sha256') | Where-Object {$_ -cmatch '^[a-f0-9]{64}  Structura\.Connector\.Installer\.exe$'})
+          if($checksum.Count -ne 1 -or $checksum[0].Substring(0,64) -cne $hash -or $proof.installerSha256 -cne $hash){throw 'Native installer digest differs.'}
+          $latest=gh api "repos/$repository/releases/latest" | ConvertFrom-Json
+          if($LASTEXITCODE -ne 0 -or $latest.tag_name -cne 'v1.0.31'){throw 'Legacy release has changed; preserve it.'}
+          $releases=gh api "repos/$repository/releases?per_page=100" | ConvertFrom-Json
+          if($LASTEXITCODE -ne 0 -or @($releases | Where-Object tag_name -CEQ 'unified-connector-v1.1.7').Count){throw 'Release already exists; do not overwrite.'}
+          $refs=gh api "repos/$repository/git/matching-refs/tags/unified-connector-v1.1.7" | ConvertFrom-Json
+          if($LASTEXITCODE -ne 0 -or @($refs | Where-Object ref -CEQ 'refs/tags/unified-connector-v1.1.7').Count){throw 'Release tag already exists; do not reuse or move it.'}
+          $createdTag=gh api --method POST "repos/$repository/git/refs" -f ref=refs/tags/unified-connector-v1.1.7 -f "sha=$env:RUNTIME_SHA" | ConvertFrom-Json
+          if($LASTEXITCODE -ne 0 -or $createdTag.object.type -cne 'commit' -or $createdTag.object.sha -cne $env:RUNTIME_SHA){throw 'Exact release tag creation failed; do not publish.'}
+          $notes=@'
+          Платформа Коннектор 1.1.7. После входа через браузер коннектор сохраняет подключение на этом компьютере и продлевает сертификат устройства без повторного ввода токена. Исправлена проверка установленного NetBird и названия ярлыков. NetBird и необходимые компоненты включены в установку; Blender устанавливается отдельно по запросу из приложения.
+          Установка, повторная установка, обновление, иконки и установка без доступа к серверу проверены на облачной Windows под обычными пользователями. Канал старого коннектора не изменён.
+          '@
+          $request=@{tag_name='unified-connector-v1.1.7';target_commitish=$env:RUNTIME_SHA;name='Платформа Коннектор 1.1.7';body=$notes;draft=$true;prerelease=$true;make_latest='false'}
+          $requestPath=Join-Path $env:RUNNER_TEMP 'release-request.json'
+          $request | ConvertTo-Json | Set-Content -LiteralPath $requestPath -Encoding utf8
+          $release=gh api --method POST "repos/$repository/releases" --input $requestPath | ConvertFrom-Json
+          if($LASTEXITCODE -ne 0 -or !$release.draft -or !$release.prerelease){throw 'Draft release creation failed.'}
+          $tag=gh api "repos/$repository/git/ref/tags/unified-connector-v1.1.7" | ConvertFrom-Json
+          if($LASTEXITCODE -ne 0 -or $tag.object.type -cne 'commit' -or $tag.object.sha -cne $env:RUNTIME_SHA){throw 'New release tag identity differs; leave draft unpublished.'}
+          $delivery=Join-Path $env:RUNNER_TEMP 'delivery'
+          New-Item -ItemType Directory -Path $delivery | Out-Null
+          $deliveryExe=Join-Path $delivery 'PlatformConnector-1.1.7.exe'
+          Copy-Item -LiteralPath $exe -Destination $deliveryExe
+          "$hash  PlatformConnector-1.1.7.exe" | Set-Content -LiteralPath (Join-Path $delivery 'checksums.sha256') -Encoding ascii
+          Copy-Item -LiteralPath (Join-Path $root 'native-upgrade-proof.json') -Destination $delivery
+          gh release upload unified-connector-v1.1.7 $deliveryExe (Join-Path $delivery 'checksums.sha256') (Join-Path $delivery 'native-upgrade-proof.json') --repo $repository
+          if($LASTEXITCODE -ne 0){throw 'Draft assets upload failed; release stays draft.'}
+          $assets=gh api "repos/$repository/releases/$($release.id)/assets" | ConvertFrom-Json
+          if($LASTEXITCODE -ne 0 -or @($assets).Count -ne 3){throw 'Uploaded release assets differ.'}
+          $asset=@($assets | Where-Object name -CEQ 'PlatformConnector-1.1.7.exe')
+          if($asset.Count -ne 1 -or $asset[0].size -ne (Get-Item -LiteralPath $deliveryExe).Length -or $asset[0].digest -cne ('sha256:'+$hash)){throw 'Uploaded EXE digest differs.'}
+          $tag=gh api "repos/$repository/git/ref/tags/unified-connector-v1.1.7" | ConvertFrom-Json
+          if($LASTEXITCODE -ne 0 -or $tag.object.type -cne 'commit' -or $tag.object.sha -cne $env:RUNTIME_SHA){throw 'Release tag changed before publication.'}
+          $published=gh api --method PATCH "repos/$repository/releases/$($release.id)" -F draft=false -F prerelease=true -f make_latest=false | ConvertFrom-Json
+          if($LASTEXITCODE -ne 0 -or $published.draft -or !$published.prerelease){throw 'Release did not publish.'}
+          $after=gh api "repos/$repository/releases/latest" | ConvertFrom-Json
+          if($LASTEXITCODE -ne 0 -or $after.tag_name -cne $latest.tag_name){throw 'Legacy release changed unexpectedly.'}
+          @{releaseUrl=$published.html_url;downloadUrl=$asset[0].browser_download_url;installerSha256=$hash;installerSize=$asset[0].size;runtimeSourceSha=$env:RUNTIME_SHA;verificationSourceSha=$env:VERIFIED_SHA;verificationRun=$env:VERIFIED_RUN;verificationAttempt=$env:VERIFIED_ATTEMPT;legacyLatest=$after.tag_name} | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $delivery 'publication-proof.json') -Encoding utf8
+          Get-Content -LiteralPath (Join-Path $delivery 'publication-proof.json')
+      - name: Retain delivery receipt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: connector-1.1.7-publication-receipt
+          path: ${{ runner.temp }}/delivery/publication-proof.json
+          if-no-files-found: warn
+          retention-days: 14
