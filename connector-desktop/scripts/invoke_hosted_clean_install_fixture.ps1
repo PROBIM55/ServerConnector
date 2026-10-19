@@ -10,7 +10,8 @@ $cleanUpgradeCode='{67B43FCD-4FE8-4D29-9F64-6F190FCD6E51}'
 if (@($msiInstaller.RelatedProducts($cleanUpgradeCode)).Count -ne 0) { throw 'Clean fixture requires no existing product of its own identity.' }
 if ((Get-Service NetBird -ErrorAction SilentlyContinue) -or (Test-Path -LiteralPath (Join-Path $env:ProgramFiles 'NetBird/netbird.exe')) -or
     (Test-Path -LiteralPath (Join-Path $env:ProgramData 'NetBird')) -or
-    (Test-Path -LiteralPath (Join-Path $env:ProgramData 'Structura Connector/Network/netbird-bundle-owner.json'))) { throw 'Fresh fixture requires no pre-existing NetBird state.' }
+    (Test-Path -LiteralPath (Join-Path $env:ProgramData 'Structura Connector/Network/netbird-bundle-owner.json')) -or
+    (Test-Path -LiteralPath (Join-Path $env:ProgramData 'Structura Connector/Network/netbird-install-owner.json'))) { throw 'Fresh fixture requires no pre-existing NetBird state.' }
 function Run-Setup([string]$Mode) {
     $log=Join-Path $EvidenceDirectory ($Mode+'.log')
     $process=Start-Process -FilePath $setup -ArgumentList @('/quiet','/norestart',('/'+$Mode),'/log',('"'+$log+'"')) -WindowStyle Hidden -PassThru
