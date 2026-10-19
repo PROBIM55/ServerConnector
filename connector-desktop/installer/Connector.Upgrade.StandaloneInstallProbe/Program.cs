@@ -43,7 +43,19 @@ try
         // Exercise the actual default GUI entrypoint, including its automatic Shown handler.
         // A token prompt, extra Finish click or network preflight makes this bounded test fail.
         using var installation = Process.Start(new ProcessStartInfo(caller) { UseShellExecute = false })!;
-        if (!installation.WaitForExit(180000)) { installation.Kill(true); throw new InvalidOperationException("Default installation waited for user input or network."); }
+        var installTimer = Stopwatch.StartNew();
+        while (!installation.WaitForExit(2000))
+        {
+            var failure = ReadInstallerFailure(installation);
+            if (failure is not null)
+            {
+                installation.Kill(true);
+                throw new InvalidOperationException("Default installer reported: " + failure);
+            }
+            if (installTimer.Elapsed < TimeSpan.FromSeconds(180)) continue;
+            installation.Kill(true);
+            throw new InvalidOperationException("Default installation waited for user input or network.");
+        }
         if (installation.ExitCode is not (0 or 3010) || probe.Inspect(pin, sid).Presence != VelopackInstallPresence.ExactInstalled)
             throw new InvalidOperationException("Default installation did not complete and verify its desktop package.");
     }
@@ -158,4 +170,26 @@ catch (Exception error)
     File.WriteAllText(output, JsonSerializer.Serialize(new { success = false, failure = error.Message, type = error.GetType().Name,
         diagnosticCode = error is NetworkGateException networkError ? networkError.Code : null, preflightDiagnostic }));
     Environment.ExitCode = 1;
+}
+
+static string? ReadInstallerFailure(Process process)
+{
+    try
+    {
+        process.Refresh();
+        if (process.MainWindowHandle == IntPtr.Zero) return null;
+        var window = AutomationElement.FromHandle(process.MainWindowHandle);
+        var close = window.FindFirst(TreeScope.Children, new AndCondition(
+            new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Button),
+            new PropertyCondition(AutomationElement.NameProperty, "Закрыть")));
+        if (close is null || !close.Current.IsEnabled) return null;
+        var labels = window.FindAll(TreeScope.Descendants,
+            new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Text));
+        var details = string.Join(" | ", labels.Cast<AutomationElement>()
+            .Select(label => label.Current.Name)
+            .Where(name => !string.IsNullOrWhiteSpace(name)));
+        return details.Length > 0 ? details[..Math.Min(details.Length, 500)] : "окно установки ожидает закрытия";
+    }
+    catch (ElementNotAvailableException) { return null; }
+    catch (InvalidOperationException) { return null; }
 }
