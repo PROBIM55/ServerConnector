@@ -32,18 +32,28 @@ try
     if (!File.Exists(git)) git = Path.Combine(appRoot, "tools", "git", "bin", "git.exe");
     using (var check = Process.Start(new ProcessStartInfo(git, "--version") { UseShellExecute = false, CreateNoWindow = true })!)
         if (!check.WaitForExit(10000) || check.ExitCode != 0) throw new InvalidOperationException("Bundled Git failed.");
-    foreach (var location in new[] { Environment.SpecialFolder.CommonDesktopDirectory, Environment.SpecialFolder.CommonPrograms })
+    // Windows Installer resolves advertised links through the shell's COM APIs.
+    // This continuation can be on a pool thread that has not initialized COM.
+    var com = Native.CoInitializeEx(IntPtr.Zero, 0);
+    if (com < 0 && com != unchecked((int)0x80010106)) Marshal.ThrowExceptionForHR(com);
+    try
     {
+      foreach (var location in new[] { Environment.SpecialFolder.CommonDesktopDirectory, Environment.SpecialFolder.CommonPrograms })
+      {
         var path = Path.Combine(Environment.GetFolderPath(location), "Платформа Коннектор.lnk");
         if (!File.Exists(path)) throw new InvalidOperationException("Application shortcut is missing.");
         var product = new StringBuilder(39); var feature = new StringBuilder(256); var component = new StringBuilder(39);
-        if (Native.MsiGetShortcutTarget(path, product, feature, component) != 0) throw new InvalidOperationException("Shortcut is not registered to the new MSI.");
+        var shortcutResult = Native.MsiGetShortcutTarget(path, product, feature, component);
+        if (shortcutResult != 0) throw new InvalidOperationException($"Shortcut MSI lookup failed: {shortcutResult}, {path}.");
         var target = new StringBuilder(32768); uint size = (uint)target.Capacity;
-        if (Native.MsiGetComponentPath(product.ToString(), component.ToString(), target, ref size) != 3 ||
-            !string.Equals(target.ToString(), desktop, StringComparison.OrdinalIgnoreCase)) throw new InvalidOperationException("Shortcut resolves to another installation.");
+        var componentState = Native.MsiGetComponentPath(product.ToString(), component.ToString(), target, ref size);
+        if (componentState != 3 || !string.Equals(target.ToString(), desktop, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException($"Shortcut component lookup differs: {componentState}, {product}, {component}, {target}.");
         using var icon = System.Drawing.Icon.ExtractAssociatedIcon(path);
         if (icon is null) throw new InvalidOperationException("Shortcut icon is absent.");
+      }
     }
+    finally { if (com >= 0) Native.CoUninitialize(); }
     Progress("actual-desktop-webview");
     using var app = Process.Start(new ProcessStartInfo(desktop) { UseShellExecute = false, WorkingDirectory = appRoot })!;
     var ready = false;
@@ -78,6 +88,8 @@ catch (Exception error)
 
 internal static class Native
 {
+    [DllImport("ole32.dll")] internal static extern int CoInitializeEx(IntPtr reserved, uint model);
+    [DllImport("ole32.dll")] internal static extern void CoUninitialize();
     [DllImport("msi.dll", CharSet = CharSet.Unicode, EntryPoint = "MsiGetShortcutTargetW")]
     internal static extern uint MsiGetShortcutTarget(string path, StringBuilder product, StringBuilder feature, StringBuilder component);
     [DllImport("msi.dll", CharSet = CharSet.Unicode, EntryPoint = "MsiGetComponentPathW")]

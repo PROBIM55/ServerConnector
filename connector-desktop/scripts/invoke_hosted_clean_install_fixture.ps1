@@ -31,7 +31,7 @@ public static class CleanFixtureProfile {
 '@
 $name='platform'+[Guid]::NewGuid().ToString('N').Substring(0,8)
 $publicRoot=Join-Path $env:PUBLIC ('PlatformCleanFixture-'+[Guid]::NewGuid().ToString('N'))
-$profilePath=$null; $user=$null; $probe=$null; $password=$null; $setupAttempted=$false; $complete=$false
+$profilePath=$null; $user=$null; $probe=$null; $password=$null; $setupAttempted=$false; $complete=$false; $primaryFailure=$null
 try {
     $setupAttempted=$true; $installExit=Run-Setup 'install'
     if (@($msiInstaller.RelatedProducts($cleanUpgradeCode)).Count -ne 1) { throw 'The final EXE did not register exactly one new application MSI.' }
@@ -71,23 +71,64 @@ try {
     if ($probe.ExitCode -ne 0 -or !$proof.success -or !$proof.actualDesktopWebView -or !$proof.ordinaryUser -or !$proof.protectedNetworkReady -or
         $proof.credentialCreated -or $proof.legacyImport -or $proof.blenderIncluded) { throw 'The actual installed application failed ordinary-user verification.' }
     $complete=$true
+} catch {
+    $primaryFailure=$_
+    @{failure=$_.Exception.Message;stage='native-fixture'} | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $EvidenceDirectory 'fixture-failure.json') -Encoding utf8
+    throw
 } finally {
-    if ($probe) { if (!$probe.HasExited) { $probe.Kill($true); [void]$probe.WaitForExit(10000) }; $probe.Dispose() }
-    try { if ($setupAttempted) { $uninstallExit=Run-Setup 'uninstall' } }
-    finally {
-        try {
-            if ($user) {
-                try { if ($profilePath -and ![CleanFixtureProfile]::DeleteProfile($user.SID.Value,$profilePath,$null)) { throw 'Disposable user profile cleanup failed.' } }
-                finally { Remove-LocalUser -Name $name }
-            }
-        } finally {
-            $password=$null
-            $resolved=[IO.Path]::GetFullPath($publicRoot)
-            if (!$resolved.StartsWith(([IO.Path]::GetFullPath($env:PUBLIC).TrimEnd('\')+'\'),[StringComparison]::OrdinalIgnoreCase) -or
-                [IO.Path]::GetFileName($resolved) -notlike 'PlatformCleanFixture-*') { throw 'Fixture cleanup path escaped its owned root.' }
-            if (Test-Path -LiteralPath $resolved) { Remove-Item -LiteralPath $resolved -Recurse -Force }
+    $cleanupFailures=[Collections.Generic.List[string]]::new()
+    $cleanupState=@{probeStopped=($null -eq $probe);uninstallExit=$null}
+    function Invoke-FixtureCleanup([string]$Stage,[scriptblock]$Action) {
+        try { & $Action }
+        catch { $cleanupFailures.Add($Stage+': '+$_.Exception.Message) }
+    }
+    Invoke-FixtureCleanup 'owned-probe-stop' {
+        if ($probe) {
+            try {
+                if (!$probe.HasExited) { $probe.Kill($true); if (!$probe.WaitForExit(10000)) { throw 'Own probe did not stop.' } }
+                $cleanupState.probeStopped=$true
+            } finally { $probe.Dispose() }
         }
     }
+    Invoke-FixtureCleanup 'owned-application-uninstall' {
+        if (!$cleanupState.probeStopped) { throw 'Cannot uninstall while own probe may still run.' }
+        if ($setupAttempted) { $cleanupState.uninstallExit=Run-Setup 'uninstall' }
+    }
+    Invoke-FixtureCleanup 'owned-profile-delete' {
+        if (!$cleanupState.probeStopped) { throw 'Cannot delete a profile while own probe may still run.' }
+        if ($user -and $profilePath) {
+            $profileFull=[IO.Path]::GetFullPath($profilePath)
+            if ([IO.Path]::GetFileName($profileFull) -cne $name -or
+                [IO.Path]::GetDirectoryName($profileFull) -ine (Join-Path $env:SystemDrive 'Users')) { throw 'Disposable profile path differs from its exact owned user.' }
+            $until=[DateTime]::UtcNow.AddSeconds(15);$deleted=$false;$lastError=0
+            do {
+                $deleted=[CleanFixtureProfile]::DeleteProfile($user.SID.Value,$profileFull,$null)
+                if ($deleted) { break }
+                $lastError=[Runtime.InteropServices.Marshal]::GetLastWin32Error()
+                Start-Sleep -Milliseconds 500
+            } while ([DateTime]::UtcNow -lt $until)
+            if (!$deleted) { throw "Disposable user profile cleanup failed: Win32=$lastError" }
+        }
+    }
+    Invoke-FixtureCleanup 'owned-local-user-delete' {
+        if (!$cleanupState.probeStopped) { throw 'Cannot delete a user while own probe may still run.' }
+        if ($user) { Remove-LocalUser -Name $name }
+    }
+    $password=$null
+    Invoke-FixtureCleanup 'owned-fixture-directory-delete' {
+        if (!$cleanupState.probeStopped) { throw 'Cannot delete the fixture while own probe may still run.' }
+        $resolved=[IO.Path]::GetFullPath($publicRoot)
+        if (!$resolved.StartsWith(([IO.Path]::GetFullPath($env:PUBLIC).TrimEnd('\')+'\'),[StringComparison]::OrdinalIgnoreCase) -or
+            [IO.Path]::GetFileName($resolved) -notlike 'PlatformCleanFixture-*') { throw 'Fixture cleanup path escaped its owned root.' }
+        if (Test-Path -LiteralPath $resolved) { Remove-Item -LiteralPath $resolved -Recurse -Force }
+    }
+    if ($cleanupFailures.Count) {
+        @{failures=@($cleanupFailures);primaryFailurePreserved=($null -ne $primaryFailure)} | ConvertTo-Json |
+            Set-Content -LiteralPath (Join-Path $EvidenceDirectory 'cleanup-failure.json') -Encoding utf8
+        if (!$primaryFailure) { throw ('Owned fixture cleanup failed: '+($cleanupFailures -join '; ')) }
+        Write-Warning 'Owned cleanup also failed; original native failure is preserved in fixture-failure.json.'
+    }
+    $uninstallExit=$cleanupState.uninstallExit
 }
 if ($complete) {
     $appRoot=Join-Path $env:ProgramFiles 'Platform Connector'

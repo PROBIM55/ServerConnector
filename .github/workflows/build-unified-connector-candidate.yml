@@ -59,6 +59,16 @@ jobs:
           & connector-desktop/scripts/build_clean_connector_release.ps1 -Version $env:RELEASE_VERSION -IfcWorkerPath (Join-Path $assets 'ifc.exe') -NetBirdMsiPath (Join-Path $assets 'netbird.msi') -WebView2InstallerPath (Join-Path $assets 'webview2.exe') -ConnectorAccessConfigurationPath $access -OutputDirectory (Join-Path $env:RUNNER_TEMP 'clean-output')
           dotnet publish connector-desktop/installer/Connector.Clean.InstallProbe -c Release -r win-x64 --self-contained true -o (Join-Path $env:RUNNER_TEMP 'clean-probe') -m:1 -nodeReuse:false -p:BuildInParallel=false -p:UseSharedCompilation=false
           if ($LASTEXITCODE -ne 0) { throw 'Native probe did not compile.' }
+      - name: Retain compiled EXE and probe before native verification
+        uses: actions/upload-artifact@v4
+        with:
+          name: platform-connector-${{ inputs.version }}-compiled-unverified
+          path: |
+            ${{ runner.temp }}/clean-output/release/PlatformConnector-*.exe
+            ${{ runner.temp }}/clean-output/release/release.json
+            ${{ runner.temp }}/clean-probe/*
+          if-no-files-found: error
+          retention-days: 7
       - name: Verify final EXE and actual ordinary-user application
         run: |
           & connector-desktop/scripts/invoke_hosted_clean_install_fixture.ps1 -SetupExecutable (Join-Path $env:RUNNER_TEMP "clean-output/release/PlatformConnector-$env:RELEASE_VERSION.exe") -ProbeExecutable (Join-Path $env:RUNNER_TEMP 'clean-probe/Connector.Clean.InstallProbe.exe') -EvidenceDirectory (Join-Path $env:RUNNER_TEMP 'clean-output/release/evidence')
