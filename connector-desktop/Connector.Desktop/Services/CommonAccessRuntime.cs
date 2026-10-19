@@ -162,6 +162,17 @@ public sealed class CommonAccessRuntime : ICommonConnectorRequestTransport
                     throw new InvalidOperationException("Нужен токен подключения.");
                 await coordinator.EnrollAndConnectAsync(token, Environment.MachineName, cancellationToken);
             }
+            // First sign-in schedules provider work asynchronously. Continue with
+            // the same durable device; never consume the browser token a second
+            // time or claim Ready before all providers have confirmed its grants.
+            var completed = await CommonConnectorProvisioningWaiter.WaitAsync(coordinator.Current,
+                ct => coordinator.ResumeAndConnectAsync(ct),
+                async ct => { await coordinator.DisconnectAsync(ct); }, cancellationToken);
+            if (completed.Status is CommonConnectorConnectionStatus.AccessPending or
+                CommonConnectorConnectionStatus.AwaitingVpnAuthorization)
+            {
+                throw new InvalidOperationException("Подключение пока не готово. Повторите проверку.");
+            }
         }
         finally { ObserveConnectionState(Volatile.Read(ref _accessSessionGeneration)); }
     }

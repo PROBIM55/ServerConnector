@@ -208,7 +208,21 @@ public sealed class CommonConnectorConnectionCoordinator
         CancellationToken cancellationToken)
     {
         RevokeAuthorization();
-        var state = await _access.GetVpnStateAsync(cancellationToken).ConfigureAwait(false);
+        ConnectorVpnTransportState state;
+        try
+        {
+            state = await _access.GetVpnStateAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (ConnectorEnrollmentProtocolException exception) when (IsProvisioningFailure(exception, "vpn_state_unavailable"))
+        {
+            // A fresh device has no provider state until its authenticated profile
+            // request durably schedules reconciliation. This request never admits
+            // work: Ready still requires the exact VPN peer and applied profile.
+            try { await _access.GetAccessProfileAsync(cancellationToken).ConfigureAwait(false); }
+            catch (ConnectorEnrollmentProtocolException pending) when (IsProvisioningFailure(pending, "access_pending_or_denied")) { }
+            return Set(CommonConnectorConnectionStatus.AccessPending, receipt.DeviceId,
+                receipt.AccessRevision, "access_providers_initializing");
+        }
         ValidateStateEnvelope(state, receipt);
 
         if (IsStatus(state, "revoked"))
@@ -228,7 +242,13 @@ public sealed class CommonConnectorConnectionCoordinator
         else if (IsStatus(state, "connecting") || IsStatus(state, "pending"))
         {
             Set(CommonConnectorConnectionStatus.ConnectingOverlay, state.DeviceId, state.Revision, "vpn_bootstrap_required");
-            var bootstrap = await _access.GetVpnBootstrapAsync(cancellationToken).ConfigureAwait(false);
+            ConnectorVpnBootstrap bootstrap;
+            try { bootstrap = await _access.GetVpnBootstrapAsync(cancellationToken).ConfigureAwait(false); }
+            catch (ConnectorEnrollmentProtocolException exception) when (IsProvisioningFailure(exception, "vpn_bootstrap_unavailable"))
+            {
+                return Set(CommonConnectorConnectionStatus.AwaitingVpnAuthorization, state.DeviceId,
+                    state.Revision, "vpn_bootstrap_pending");
+            }
             if (bootstrap.Revision != state.Revision)
                 throw new ConnectorEnrollmentProtocolException("The VPN bootstrap revision does not match transport state.");
             overlay = await _overlay.ConnectAsync(
@@ -252,11 +272,21 @@ public sealed class CommonConnectorConnectionCoordinator
         }
 
         Set(CommonConnectorConnectionStatus.AccessPending, state.DeviceId, state.Revision, "access_profile_pending", overlay);
-        var profile = await _access.GetAccessProfileAsync(cancellationToken).ConfigureAwait(false);
+        DeviceAccessProfile profile;
+        try { profile = await _access.GetAccessProfileAsync(cancellationToken).ConfigureAwait(false); }
+        catch (ConnectorEnrollmentProtocolException exception) when (IsProvisioningFailure(exception, "access_pending_or_denied"))
+        {
+            return Set(CommonConnectorConnectionStatus.AccessPending, state.DeviceId, state.Revision,
+                "access_profile_pending", overlay);
+        }
         ValidateProfile(profile, state);
         _authorization = new Authorization(state.DeviceId, state.Revision);
         return Set(CommonConnectorConnectionStatus.Ready, state.DeviceId, state.Revision, "ready", overlay, profile);
     }
+
+    private static bool IsProvisioningFailure(ConnectorEnrollmentProtocolException exception, string code) =>
+        exception.StatusCode == (int)HttpStatusCode.Forbidden &&
+        string.Equals(exception.ErrorCode, code, StringComparison.Ordinal);
 
     private void ValidateStateEnvelope(ConnectorVpnTransportState state, DeviceEnrollmentResponse receipt)
     {
