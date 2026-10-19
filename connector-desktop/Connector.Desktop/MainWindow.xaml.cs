@@ -844,7 +844,7 @@ public partial class MainWindow : Window, IShellHost, IConnectorHost
         _updateOfferShown = true;
 
         var result = ThemedDialogs.Show(this,
-            "Доступна новая версия Structura Connector. Установить обновление сейчас?",
+            "Доступна новая версия приложения «Платформа Коннектор». Установить обновление сейчас?",
             "Обновление доступно",
             MessageBoxButton.YesNo,
             MessageBoxImage.Question);
@@ -891,7 +891,7 @@ public partial class MainWindow : Window, IShellHost, IConnectorHost
 
         _lastUpdateToastVersion = version;
         var toast = new UpdateToastWindow(
-            "Structura Connector",
+            "Платформа Коннектор",
             "Доступна новая версия: " + version + ".",
             async () => await InstallPendingUpdateAsync(confirmBeforeRun: false));
         toast.Closed += (_, _) =>
@@ -914,7 +914,7 @@ public partial class MainWindow : Window, IShellHost, IConnectorHost
 
         _lastUpdateToastVersion = candidate.Version;
         var toast = new UpdateToastWindow(
-            "Structura Connector",
+            "Платформа Коннектор",
             "Доступна новая версия: " + candidate.Version + ".",
             async () => await InstallPendingUpdateAsync(confirmBeforeRun: false));
         toast.Closed += (_, _) =>
@@ -962,7 +962,7 @@ public partial class MainWindow : Window, IShellHost, IConnectorHost
     {
         var menu = new Forms.ContextMenuStrip();
 
-        var openItem = new Forms.ToolStripMenuItem("Открыть Structura Connector");
+        var openItem = new Forms.ToolStripMenuItem("Открыть Платформа Коннектор");
         openItem.Click += (_, _) => ShowFromTray();
 
         var closeItem = new Forms.ToolStripMenuItem("Закрыть");
@@ -976,7 +976,7 @@ public partial class MainWindow : Window, IShellHost, IConnectorHost
         var tray = new Forms.NotifyIcon
         {
             Icon = icon,
-            Text = "Structura Connector",
+            Text = "Платформа Коннектор",
             Visible = visible,
             ContextMenuStrip = menu
         };
@@ -1121,7 +1121,7 @@ public partial class MainWindow : Window, IShellHost, IConnectorHost
         if (!_trayHintShown)
         {
             _trayHintShown = true;
-            _trayIcon.ShowBalloonTip(2500, "Structura Connector", "Приложение работает в трее. ПКМ по иконке -> Закрыть.", Forms.ToolTipIcon.Info);
+            _trayIcon.ShowBalloonTip(2500, "Платформа Коннектор", "Приложение работает в трее. ПКМ по иконке -> Закрыть.", Forms.ToolTipIcon.Info);
         }
     }
 
@@ -1986,7 +1986,7 @@ public partial class MainWindow : Window, IShellHost, IConnectorHost
                     ? $"Подключение выполнено. Общая SMB-папка подключена {smbConnectionRoute}, автоотправка heartbeat включена."
                     : "Подключение к серверу выполнено, heartbeat включён, но общая папка пока не подключена. " +
                       "Проверьте статус VPN на вкладке «Общая папка (VPN)» и повторите подключение.",
-                "Structura Connector",
+                "Платформа Коннектор",
                 MessageBoxButton.OK,
                 MessageBoxImage.Information);
         }

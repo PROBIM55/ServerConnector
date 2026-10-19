@@ -117,6 +117,7 @@ jobs:
             'connector-desktop/Connector.JobModules.Tests/Connector.JobModules.Tests.csproj',
             'connector-desktop/tests/Connector.Network.Tests/Connector.Network.Tests.csproj',
             'connector-access/tests/Connector.Access.Tests/Connector.Access.Tests.csproj',
+            'connector-access/tests/Connector.Access.Client.Tests/Connector.Access.Client.Tests.csproj',
             'connector-access/tests/Connector.Access.NetBird.Tests/Connector.Access.NetBird.Tests.csproj',
             'connector-access/tests/Connector.Access.Smb.Tests/Connector.Access.Smb.Tests.csproj',
             'connector-desktop/installer/Connector.Upgrade.Tests/Connector.Upgrade.Tests.csproj',
@@ -156,6 +157,24 @@ jobs:
           if ($matching.Count -ne 1 -or $matching[0].outcome -ne 'Passed') {
             throw 'Real FBX regression was skipped, missing, or did not pass'
           }
+
+      - name: Pack tested Connector.Access core
+        shell: pwsh
+        run: |
+          dotnet pack connector-access/src/Connector.Access/Connector.Access.csproj --configuration Release --output connector-access-core-package -p:UseSharedCompilation=false -p:BuildInParallel=false --verbosity minimal
+          if ($LASTEXITCODE -ne 0) { throw 'Connector.Access package failed' }
+          $package = 'connector-access-core-package/Connector.Access.0.2.7.nupkg'
+          if (-not (Test-Path -LiteralPath $package -PathType Leaf)) { throw 'Expected Connector.Access 0.2.7 package is missing' }
+          $hash = (Get-FileHash -LiteralPath $package -Algorithm SHA256).Hash.ToLowerInvariant()
+          [pscustomobject]@{ sourceSha = $env:GITHUB_SHA; file = 'Connector.Access.0.2.7.nupkg'; sha256 = $hash; size = (Get-Item -LiteralPath $package).Length } |
+            ConvertTo-Json -Compress | Set-Content -LiteralPath 'connector-access-core-package/manifest.json' -Encoding utf8
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: connector-access-core-${{ github.sha }}
+          path: connector-access-core-package/
+          if-no-files-found: error
+          retention-days: 14
 
   stun-forward-fixture:
     runs-on: ubuntu-latest

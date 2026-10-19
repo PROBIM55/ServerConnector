@@ -79,6 +79,45 @@ public sealed class HttpConnectorEnrollmentClientTests
     }
 
     [Fact]
+    public async Task ExpiringCertificateRenewsStoredDeviceWithKeyProofAndNoBrowserToken()
+    {
+        using var directory = new TemporaryDirectory();
+        using var authority = new TestCertificateAuthority();
+        var store = new FileConnectorEnrollmentStateStore(directory.Path);
+        DeviceEnrollmentRequest? enrollment = null;
+        var proofCount = 0;
+        var transport = new DelegateHttpInvokerFactory(async (certificate, request, cancellationToken) =>
+        {
+            if (request.RequestUri!.AbsolutePath.EndsWith("/enroll", StringComparison.Ordinal))
+            {
+                Assert.Null(certificate);
+                enrollment = await request.Content!.ReadFromJsonAsync<DeviceEnrollmentRequest>(cancellationToken: cancellationToken);
+                return TestCertificateAuthority.JsonResponse(authority.Issue(enrollment!, DateTimeOffset.UtcNow.AddMinutes(30)));
+            }
+            Assert.EndsWith($"/enrollments/{enrollment!.RequestId:D}/resume", request.RequestUri.AbsolutePath, StringComparison.Ordinal);
+            Assert.Equal(HttpMethod.Post, request.Method);
+            Assert.NotNull(certificate);
+            Assert.Equal(certificate!.SubjectName.RawData, certificate.IssuerName.RawData);
+            Assert.Equal(TestCertificateAuthority.ReadCsrSpki(enrollment.CertificateSigningRequestPem),
+                certificate.PublicKey.ExportSubjectPublicKeyInfo());
+            proofCount++;
+            return TestCertificateAuthority.JsonResponse(authority.Issue(enrollment));
+        });
+        var client = CreateClient(store, authority.Pin, transport);
+        var first = await client.EnrollAsync("one-time-token", "Persistent device");
+
+        var renewed = await client.ResumeAsync();
+        var saved = await store.LoadAsync(CancellationToken.None);
+
+        Assert.Equal(first.DeviceId, renewed.DeviceId);
+        Assert.Equal(first.RequestId, renewed.RequestId);
+        Assert.NotEqual(first.ClientCertificatePem, renewed.ClientCertificatePem);
+        Assert.Equal(renewed, saved!.Response);
+        Assert.Equal(1, proofCount);
+        CryptographicOperations.ZeroMemory(saved.PrivateKeyPkcs8);
+    }
+
+    [Fact]
     public async Task ExistingPendingStateMakesEnrollResumeInsteadOfCreatingSecondDevice()
     {
         using var directory = new TemporaryDirectory();

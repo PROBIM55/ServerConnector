@@ -7,6 +7,7 @@ namespace Connector.Access;
 
 public sealed class DeviceEnrollmentService
 {
+    private static readonly TimeSpan CertificateRenewalLead = TimeSpan.FromHours(1);
     private readonly DbDeviceAccessRepository _repository;
     private readonly IPlatformAccessDirectory _directory;
     private readonly IX509DeviceCertificateIssuer _issuer;
@@ -227,14 +228,17 @@ public sealed class DeviceEnrollmentService
             return EnrollmentFailure("access_denied", "Current platform access denies enrollment recovery.");
         }
 
+        var now = _timeProvider.GetUtcNow();
         if (stored.EnrollmentStatus == "active" && stored.CertificatePem is not null &&
             stored.IssuerCertificatePem is not null && stored.CertificateExpiresAtUtc is not null &&
-            stored.CertificateExpiresAtUtc > _timeProvider.GetUtcNow())
+            stored.CertificateExpiresAtUtc > now.Add(CertificateRenewalLead))
         {
             return EnrollmentResponse(stored, access!.AccessRevision);
         }
 
-        if (stored.EnrollmentStatus != "pending_certificate" || stored.OriginalCsrDer is null)
+        var renewal = stored.EnrollmentStatus == "active" &&
+            stored.CertificateSha256 is not null && stored.CertificateExpiresAtUtc <= now.Add(CertificateRenewalLead);
+        if ((!renewal && stored.EnrollmentStatus != "pending_certificate") || stored.OriginalCsrDer is null)
         {
             return EnrollmentFailure("recovery_denied", "Enrollment is not recoverable in its current state.");
         }
@@ -243,8 +247,9 @@ public sealed class DeviceEnrollmentService
             stored.DeviceId,
             stored.EnrollmentRequestId,
             access!.AccessRevision,
-            _timeProvider.GetUtcNow(),
-            cancellationToken);
+            now,
+            cancellationToken,
+            renewal);
     }
 
     public async ValueTask<DeviceAccessResult<DeviceEnrollmentResponse>> RecoverResponseAsync(
@@ -282,7 +287,8 @@ public sealed class DeviceEnrollmentService
         Guid requestId,
         long accessRevision,
         DateTimeOffset now,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool renewal = false)
     {
         var attemptId = Guid.NewGuid().ToString("N");
         var stored = await _repository.TryAcquireIssuanceLeaseAsync(
@@ -291,7 +297,9 @@ public sealed class DeviceEnrollmentService
             attemptId,
             now,
             now.Add(_options.EnrollmentIssuanceLease),
-            cancellationToken);
+            cancellationToken,
+            renewal,
+            now.Add(CertificateRenewalLead));
         if (stored?.OriginalCsrDer is null)
         {
             return EnrollmentFailure("issuance_in_progress", "Certificate issuance is already in progress.");
@@ -327,7 +335,9 @@ public sealed class DeviceEnrollmentService
                     expiresAt,
                     accessRevision,
                     now,
-                    cancellationToken))
+                    cancellationToken,
+                    renewal,
+                    now.Add(CertificateRenewalLead)))
             {
                 return EnrollmentFailure("enrollment_conflict", "Enrollment completion was rejected.");
             }
@@ -348,7 +358,8 @@ public sealed class DeviceEnrollmentService
                 attemptId,
                 exception.GetType().Name,
                 now,
-                cancellationToken);
+                cancellationToken,
+                renewal);
             return EnrollmentFailure("certificate_issue_failed", "Certificate issuance failed and may be resumed with enrollment key proof.");
         }
     }

@@ -12,6 +12,7 @@ namespace Connector.Access.Client;
 public sealed class HttpConnectorEnrollmentClient : IConnectorEnrollmentClient, IConnectorDeviceAccessClient,
     IConnectorIssuedCredentialSource, IConnectorExactDeviceRevocationClient
 {
+    private static readonly TimeSpan CertificateRenewalLead = TimeSpan.FromHours(1);
     private const int MaximumResponseBytes = 128 * 1024;
     private const int MaximumRevocationStatusPolls = 20;
     private static readonly TimeSpan RevocationPollInterval = TimeSpan.FromMilliseconds(250);
@@ -170,7 +171,7 @@ public sealed class HttpConnectorEnrollmentClient : IConnectorEnrollmentClient, 
                 return null;
             }
 
-            return await GetIssuedReceiptAsync(state, cancellationToken).ConfigureAwait(false);
+            return await ResumeStateAsync(state, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
@@ -190,6 +191,21 @@ public sealed class HttpConnectorEnrollmentClient : IConnectorEnrollmentClient, 
         using var key = EnrollmentCryptography.LoadAndValidateKey(state);
         if (state.Status == StoredEnrollmentStatus.Completed)
         {
+            if (state.Response is null)
+                throw new ConnectorEnrollmentStateException("Completed enrollment has no issued receipt.");
+            if (state.Response.CertificateExpiresAtUtc <= _options.TimeProvider.GetUtcNow().Add(CertificateRenewalLead))
+            {
+                // The short-lived self-issued proof binds this renewal to the
+                // durable device key. The server retains the same device and can
+                // still deny it after revocation or membership removal.
+                using var proof = EnrollmentCryptography.CreateBootstrapCertificate(state, key, _options);
+                var renewed = await SendForEnrollmentResponseAsync(HttpMethod.Post,
+                    Endpoint($"enrollments/{state.RequestId:D}/resume"), null, proof, cancellationToken).ConfigureAwait(false);
+                if (renewed.DeviceId != state.Response.DeviceId ||
+                    renewed.AccessRevision < state.Response.AccessRevision)
+                    throw new ConnectorEnrollmentProtocolException("Certificate renewal changed the durable device identity.");
+                return await ValidateAndCompleteAsync(state, renewed, key, cancellationToken).ConfigureAwait(false);
+            }
             return await GetIssuedReceiptAsync(state, key, cancellationToken).ConfigureAwait(false);
         }
 
@@ -338,6 +354,16 @@ public sealed class HttpConnectorEnrollmentClient : IConnectorEnrollmentClient, 
             ValidateBinding(state);
             if (state.Status != StoredEnrollmentStatus.Completed || state.Response is null)
                 throw new ConnectorEnrollmentStateException("Device enrollment has not completed.");
+            if (state.Response.CertificateExpiresAtUtc <= _options.TimeProvider.GetUtcNow().Add(CertificateRenewalLead))
+            {
+                await ResumeStateAsync(state, cancellationToken).ConfigureAwait(false);
+                CryptographicOperations.ZeroMemory(state.PrivateKeyPkcs8);
+                state = await _store.LoadAsync(cancellationToken).ConfigureAwait(false)
+                    ?? throw new ConnectorEnrollmentStateException("Renewed enrollment was not stored.");
+                ValidateBinding(state);
+                if (state.Status != StoredEnrollmentStatus.Completed || state.Response is null)
+                    throw new ConnectorEnrollmentStateException("Renewed enrollment is incomplete.");
+            }
             using var key = EnrollmentCryptography.LoadAndValidateKey(state);
             var certificate = EnrollmentCryptography.CreateIssuedTlsCertificate(state, key, _options);
             return new ConnectorIssuedCertificateLease(state.Response.DeviceId, state.Response.AccessRevision, certificate);
@@ -487,6 +513,16 @@ public sealed class HttpConnectorEnrollmentClient : IConnectorEnrollmentClient, 
             ValidateBinding(state);
             if (state.Status != StoredEnrollmentStatus.Completed || state.Response is null)
                 throw new ConnectorEnrollmentStateException("Device enrollment has not completed.");
+            if (state.Response.CertificateExpiresAtUtc <= _options.TimeProvider.GetUtcNow().Add(CertificateRenewalLead))
+            {
+                await ResumeStateAsync(state, cancellationToken).ConfigureAwait(false);
+                CryptographicOperations.ZeroMemory(state.PrivateKeyPkcs8);
+                state = await _store.LoadAsync(cancellationToken).ConfigureAwait(false)
+                    ?? throw new ConnectorEnrollmentStateException("Renewed enrollment was not stored.");
+                ValidateBinding(state);
+                if (state.Status != StoredEnrollmentStatus.Completed || state.Response is null)
+                    throw new ConnectorEnrollmentStateException("Renewed enrollment is incomplete.");
+            }
             using var key = EnrollmentCryptography.LoadAndValidateKey(state);
             using var certificate = EnrollmentCryptography.CreateIssuedTlsCertificate(state, key, _options);
             var value = await SendForJsonResponseAsync<T>(HttpMethod.Get, Endpoint(path), null, certificate, cancellationToken).ConfigureAwait(false);

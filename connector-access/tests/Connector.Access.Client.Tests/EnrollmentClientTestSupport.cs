@@ -60,7 +60,7 @@ internal sealed class TestCertificateAuthority : IDisposable
 
     public string Pin => Convert.ToHexString(SHA256.HashData(_certificate.RawData)).ToLowerInvariant();
 
-    public DeviceEnrollmentResponse Issue(DeviceEnrollmentRequest enrollment)
+    public DeviceEnrollmentResponse Issue(DeviceEnrollmentRequest enrollment, DateTimeOffset? expiresAt = null)
     {
         var signingRequest = CertificateRequest.LoadSigningRequestPem(
             enrollment.CertificateSigningRequestPem,
@@ -84,7 +84,7 @@ internal sealed class TestCertificateAuthority : IDisposable
             new OidCollection { new(DeviceAccessProtocol.ClientAuthenticationOid) },
             true));
         leafRequest.CertificateExtensions.Add(new X509SubjectKeyIdentifierExtension(leafRequest.PublicKey, false));
-        var notAfter = DateTimeOffset.UtcNow.AddDays(30);
+        var notAfter = expiresAt ?? DateTimeOffset.UtcNow.AddDays(30);
         var serial = RandomNumberGenerator.GetBytes(16);
         var signatureGenerator = X509SignatureGenerator.CreateForRSA(_key, RSASignaturePadding.Pkcs1);
         using var leaf = leafRequest.Create(
