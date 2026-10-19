@@ -5,8 +5,8 @@
     <MajorUpgrade DowngradeErrorMessage="Установлена более новая версия Платформа Коннектора." />
     <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
     <Property Id="MSIFASTINSTALL" Value="1" />
-    <Property Id="ARPPRODUCTICON" Value="PlatformIcon" />
-    <Icon Id="PlatformIcon" SourceFile="$(sys.SOURCEFILEDIR)..\Connector.Desktop\Assets\platform_connector.ico" />
+    <Property Id="ARPPRODUCTICON" Value="PlatformIcon.exe" />
+    <Icon Id="PlatformIcon.exe" SourceFile="$(var.DesktopDir)\Connector.Desktop.exe" />
     <Property Id="NETBIRD_WAS_ABSENT" Secure="yes" />
     <StandardDirectory Id="ProgramMenuFolder" />
     <StandardDirectory Id="DesktopFolder" />
@@ -24,8 +24,8 @@
     </StandardDirectory>
     <Component Id="Application" Directory="INSTALLFOLDER" Guid="*">
       <File Id="DesktopExe" Source="$(var.DesktopDir)\Connector.Desktop.exe" KeyPath="yes">
-        <Shortcut Id="StartMenuShortcut" Name="Платформа Коннектор" Directory="ProgramMenuFolder" Advertise="yes" Icon="PlatformIcon" WorkingDirectory="INSTALLFOLDER" />
-        <Shortcut Id="DesktopShortcut" Name="Платформа Коннектор" Directory="DesktopFolder" Advertise="yes" Icon="PlatformIcon" WorkingDirectory="INSTALLFOLDER" />
+        <Shortcut Id="StartMenuShortcut" Name="Платформа Коннектор" Directory="ProgramMenuFolder" Advertise="yes" Icon="PlatformIcon.exe" WorkingDirectory="INSTALLFOLDER" />
+        <Shortcut Id="DesktopShortcut" Name="Платформа Коннектор" Directory="DesktopFolder" Advertise="yes" Icon="PlatformIcon.exe" WorkingDirectory="INSTALLFOLDER" />
       </File>
     </Component>
     <Component Id="ProtectedAppRoot" Directory="INSTALLFOLDER" Guid="*">
