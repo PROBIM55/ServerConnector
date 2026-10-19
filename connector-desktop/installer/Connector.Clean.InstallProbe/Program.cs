@@ -100,7 +100,7 @@ catch (Exception error)
 
 internal static class Native
 {
-    internal sealed record ShortcutProof(string Path, string Resolution, uint MsiResult, string IconPath);
+    internal sealed record ShortcutProof(string Path, string Resolution, uint MsiResult, string IconPath, string ShellTarget);
     internal static Task<T> OnStaAsync<T>(Func<T> action)
     {
         var completion = new TaskCompletionSource<T>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -154,6 +154,7 @@ internal static class Native
             // Load only: Resolve is deliberately not called (it can repair links).
             var shell = (IShellLinkW)Activator.CreateInstance(Type.GetTypeFromCLSID(new Guid("00021401-0000-0000-C000-000000000046"))!)!;
             string iconPath;
+            string shellTarget;
             try
             {
                 ((System.Runtime.InteropServices.ComTypes.IPersistFile)shell).Load(path, 0);
@@ -163,9 +164,14 @@ internal static class Native
                 shell.GetArguments(arguments, arguments.Capacity);
                 shell.GetWorkingDirectory(working, working.Capacity);
                 shell.GetIconLocation(icon, icon.Capacity, out var iconIndex);
-                if ((result != 0 || target.Length != 0) && !string.Equals(target.ToString(), desktop, StringComparison.OrdinalIgnoreCase) ||
-                    arguments.Length != 0 || !string.Equals(working.ToString().TrimEnd('\\'), appRoot.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase))
-                    throw new InvalidOperationException($"Shortcut shell target, arguments or working directory differs (MSI {result}).");
+                shellTarget = target.ToString();
+                // An advertised link identifies its application through the MSI
+                // descriptor, not an ordinary filesystem target. The exact
+                // product/feature/component target has already been checked.
+                if (result != 0 && !string.Equals(shellTarget, desktop, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException($"Shortcut fallback target differs: '{shellTarget}', expected '{desktop}' (MSI {result}).");
+                if (arguments.Length != 0 || !string.Equals(working.ToString().TrimEnd('\\'), appRoot.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException($"Shortcut arguments '{arguments}' or working directory '{working}' differs from '{appRoot}' (MSI {result}).");
                 var expectedIcon = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "Installer", product.ToString(), "PlatformIcon.exe");
                 iconPath = icon.ToString();
                 if (iconIndex != 0 || !string.Equals(iconPath, expectedIcon, StringComparison.OrdinalIgnoreCase) || !File.Exists(iconPath))
@@ -174,7 +180,7 @@ internal static class Native
             finally { Marshal.FinalReleaseComObject(shell); }
             using var image = System.Drawing.Icon.ExtractAssociatedIcon(path);
             if (image is null) throw new InvalidOperationException("Shortcut icon is absent.");
-            proofs.Add(new(path, result == 0 ? "msi" : "shell", result, iconPath));
+            proofs.Add(new(path, result == 0 ? "msi" : "shell", result, iconPath, shellTarget));
         }
         return proofs.ToArray();
     }
