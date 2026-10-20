@@ -19,6 +19,7 @@ public sealed record CommonAccessDeployment(
     // Enrollment and its read-only readiness probe are public HTTPS. Protected
     // control-plane requests still use ControlPlaneBaseUri through the overlay gate.
     public Uri? PublicProfileUri { get; init; }
+    public IReadOnlyList<string> LegacyEncryptedSmbShares { get; init; } = Array.Empty<string>();
 
     public bool IsConfigured => Coordinator is not null && EnrollmentClient is not null &&
         OverlayClient is not null && ProtectedNetworkGate is not null;
@@ -55,6 +56,7 @@ public static class CommonAccessDeploymentFactory
         Uri? netBirdManagementUri = null;
         Uri? publicProfileUri = null;
         ManagedOverlayDestinationPolicy smbDestinations = new([]);
+        IReadOnlyList<string> legacyEncryptedSmbShares = Array.Empty<string>();
         IConnectorEnrollmentClient? enrollmentClient = null;
         INetworkOverlayClient? overlayClient = null;
         IProtectedServiceNetworkGate? protectedNetworkGate = null;
@@ -77,8 +79,10 @@ public static class CommonAccessDeploymentFactory
                          expectedManagementUri.Scheme != Uri.UriSchemeHttps ||
                          !string.IsNullOrEmpty(expectedManagementUri.UserInfo)))
                         throw new InvalidDataException("Invalid NetBird management URI.");
+                    legacyEncryptedSmbShares = LegacyEncryptedSmbPolicy.Validate(configuration.SmbLegacyEncryptedShareUncs);
                     smbDestinations = new ManagedOverlayDestinationPolicy(configuration.SmbOverlayDestinations,
-                        configuration.SmbRoutedDestinations);
+                        configuration.SmbRoutedDestinations.Concat(legacyEncryptedSmbShares.Count == 0
+                            ? Array.Empty<string>() : new[] { LegacyEncryptedSmbPolicy.Destination }));
                     var controlPlane = configuration.Services.Single(service => service.ServiceId == ControlPlaneServiceId);
                     if (controlPlane.BaseUri is null || controlPlane.HealthPath != "jobs/health" ||
                         controlPlane.BaseUri.AbsolutePath.TrimEnd('/') != "/api/platform/connector/access/v1")
@@ -117,7 +121,7 @@ public static class CommonAccessDeploymentFactory
         }
         return new CommonAccessDeployment(store.StateFilePath, coordinator, enrollmentClient, overlayClient,
             protectedNetworkGate, controlPlaneBaseUri, netBirdManagementUri, smbDestinations)
-            { PublicProfileUri = publicProfileUri };
+            { PublicProfileUri = publicProfileUri, LegacyEncryptedSmbShares = legacyEncryptedSmbShares };
     }
 
     private static WindowsNetBirdInstallationOwnershipOptions CreateNetBirdOwnershipOptions()
@@ -151,5 +155,6 @@ public static class CommonAccessDeploymentFactory
         public List<ProtectedServiceDefinition> Services { get; init; } = [];
         public List<string> SmbOverlayDestinations { get; init; } = [];
         public List<string> SmbRoutedDestinations { get; init; } = [];
+        public List<string> SmbLegacyEncryptedShareUncs { get; init; } = [];
     }
 }

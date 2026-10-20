@@ -86,6 +86,7 @@ public sealed class CommonAccessRuntimeTests : IDisposable
               "serviceBaseUri": "https://enrollment.test/",
               "issuerCertificateSha256": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
               "smbOverlayDestinations": ["100.90.0.5"],
+              "smbLegacyEncryptedShareUncs": ["\\\\62.113.36.107\\BIM_Models"],
               "services": [{
                 "serviceId": "control-plane",
                 "baseUri": "https://control.test/api/platform/connector/access/v1/",
@@ -106,6 +107,8 @@ public sealed class CommonAccessRuntimeTests : IDisposable
         Assert.IsType<ProtectedServiceNetworkGate>(result.Ports.ProtectedNetworkGate);
         Assert.Same(runtime, result.Ports.Transport);
         Assert.True(result.Ports.SmbDestinations.Contains(IPAddress.Parse("100.90.0.5")));
+        Assert.True(result.Ports.SmbDestinations.Contains(IPAddress.Parse("62.113.36.107")));
+        Assert.Equal(new[] { LegacyEncryptedSmbPolicy.ShareUnc }, runtime.LegacyEncryptedSmbShares);
 
         var repeated = runtime.TryGetUpgradeRuntimePorts();
         Assert.Same(result.Ports.EnrollmentClient, repeated.Ports!.EnrollmentClient);

@@ -40,7 +40,7 @@ public sealed class ConnectorRuntimeServices : IAsyncDisposable
         CommonFolders = new CommonSmbAccessService(CommonAccess,
             () => CommonAccess.Current?.AccessProfile,
             CommonAccess.IsSmbDestinationAllowed,
-            new WindowsSmbMappingPort(ProbeCommonOverlayAsync));
+            new WindowsSmbMappingPort(ProbeCommonOverlayAsync, CommonAccess.LegacyEncryptedSmbShares));
         Host = new ConnectorRuntimeHost(
             [new AutoCadProviderAdapter(), new TeklaProviderAdapter()],
             [AgrConnectorIntegration.CreateExecutor(materializer),

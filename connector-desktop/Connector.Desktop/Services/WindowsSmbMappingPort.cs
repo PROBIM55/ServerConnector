@@ -4,6 +4,7 @@ using System.Net.NetworkInformation;
 using System.Runtime.InteropServices;
 using System.Text;
 using Connector.Network;
+using Microsoft.Win32.SafeHandles;
 
 namespace Connector.SmbAccess;
 
@@ -14,6 +15,11 @@ public interface IWindowsSmbMappingPort
     ValueTask<string?> GetTargetAsync(string drive, CancellationToken cancellationToken);
     ValueTask<bool> IsRouteAllowedAsync(IPAddress destination,
         IReadOnlyList<IPAddress> expectedOverlayAddresses, CancellationToken cancellationToken);
+    ValueTask<bool> IsShareRouteAllowedAsync(string shareUnc, IPAddress destination,
+        IReadOnlyList<IPAddress> expectedOverlayAddresses, CancellationToken cancellationToken) =>
+        IsRouteAllowedAsync(destination, expectedOverlayAddresses, cancellationToken);
+    ValueTask<bool> IsMappingSecurityAllowedAsync(string drive, string shareUnc, CancellationToken cancellationToken) =>
+        ValueTask.FromResult(true);
     ValueTask MountAsync(string drive, string shareUnc, string userName, string password,
         IPAddress destination, IReadOnlyList<IPAddress> expectedOverlayAddresses, CancellationToken cancellationToken);
     ValueTask UnmountAsync(string drive, CancellationToken cancellationToken);
@@ -33,6 +39,9 @@ internal interface IWindowsSmbNativeApi
     string? GetTarget(string drive);
     IPAddress GetBestRouteSource(IPAddress destination);
     int AddConnection(string drive, string shareUnc, string userName, string password);
+    int AddEncryptedConnection(string drive, string shareUnc, string userName, string password) =>
+        throw new PlatformNotSupportedException("Required SMB encryption is unavailable.");
+    bool HasEncryptedIntegrity(string drive, string expectedShareUnc) => false;
     int CancelConnection(string drive);
 }
 
@@ -70,19 +79,24 @@ public sealed class WindowsSmbMappingPort : IWindowsSmbMappingPort, IDisposable
     private readonly IWindowsSmbNativeApi _native;
     private readonly IWindowsNetworkChangeMonitor? _networkChanges;
     private readonly Func<CancellationToken, ValueTask<NetworkOverlaySnapshot>>? _overlayLiveness;
+    private readonly IReadOnlyList<string> _legacyEncryptedShares;
+    private readonly Dictionary<string, string> _encryptedMappings = new(StringComparer.OrdinalIgnoreCase);
     private int _disposed;
 
-    public WindowsSmbMappingPort(Func<CancellationToken, ValueTask<NetworkOverlaySnapshot>> overlayLiveness)
-        : this(new WindowsSmbNativeApi(), new WindowsNetworkChangeMonitor(), overlayLiveness) { }
+    public WindowsSmbMappingPort(Func<CancellationToken, ValueTask<NetworkOverlaySnapshot>> overlayLiveness,
+        IEnumerable<string>? legacyEncryptedShares = null)
+        : this(new WindowsSmbNativeApi(), new WindowsNetworkChangeMonitor(), overlayLiveness, legacyEncryptedShares) { }
 
     internal WindowsSmbMappingPort(
         IWindowsSmbNativeApi native,
         IWindowsNetworkChangeMonitor? networkChanges = null,
-        Func<CancellationToken, ValueTask<NetworkOverlaySnapshot>>? overlayLiveness = null)
+        Func<CancellationToken, ValueTask<NetworkOverlaySnapshot>>? overlayLiveness = null,
+        IEnumerable<string>? legacyEncryptedShares = null)
     {
         _native = native ?? throw new ArgumentNullException(nameof(native));
         _networkChanges = networkChanges;
         _overlayLiveness = overlayLiveness;
+        _legacyEncryptedShares = LegacyEncryptedSmbPolicy.Validate(legacyEncryptedShares ?? Array.Empty<string>());
         if (_networkChanges is not null) _networkChanges.Changed += OnNetworkChanged;
     }
 
@@ -115,16 +129,48 @@ public sealed class WindowsSmbMappingPort : IWindowsSmbMappingPort, IDisposable
         return ValueTask.FromResult(allowed);
     }
 
+    public ValueTask<bool> IsShareRouteAllowedAsync(string shareUnc, IPAddress destination,
+        IReadOnlyList<IPAddress> expectedOverlayAddresses, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!IsLegacyEncrypted(shareUnc))
+            return IsRouteAllowedAsync(destination, expectedOverlayAddresses, cancellationToken);
+        // The exact legacy share uses mandatory SMB3 crypto. Overlay identity is
+        // still checked by admission; this does not claim an overlay-bound socket.
+        return ValueTask.FromResult(destination.Equals(IPAddress.Parse(LegacyEncryptedSmbPolicy.Destination)) &&
+            expectedOverlayAddresses.Any(address => address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork));
+    }
+
+    public ValueTask<bool> IsMappingSecurityAllowedAsync(string drive, string shareUnc, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!IsLegacyEncrypted(shareUnc)) return ValueTask.FromResult(true);
+        // Never adopt an earlier-process or foreign mapping on UNC equality.
+        var allowed = _encryptedMappings.TryGetValue(drive, out var created) && SameTarget(created, shareUnc) &&
+            SameTarget(_native.GetTarget(drive), shareUnc) && _native.HasEncryptedIntegrity(drive, shareUnc) &&
+            SameTarget(_native.GetTarget(drive), shareUnc);
+        cancellationToken.ThrowIfCancellationRequested();
+        return ValueTask.FromResult(allowed);
+    }
+
     public ValueTask MountAsync(string drive, string shareUnc, string userName, string password,
         IPAddress destination, IReadOnlyList<IPAddress> expectedOverlayAddresses, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(expectedOverlayAddresses);
         cancellationToken.ThrowIfCancellationRequested();
-        EnsureOverlayRoute(destination, expectedOverlayAddresses);
+        var encrypted = IsLegacyEncrypted(shareUnc);
+        if (encrypted)
+        {
+            if (!destination.Equals(IPAddress.Parse(LegacyEncryptedSmbPolicy.Destination)) || expectedOverlayAddresses.Count == 0)
+                throw new SmbRouteUnavailableException();
+        }
+        else EnsureOverlayRoute(destination, expectedOverlayAddresses);
         if (_native.GetTarget(drive) is not null)
             throw new InvalidOperationException("The SMB drive is already mapped.");
 
-        var result = _native.AddConnection(drive, shareUnc, userName, password);
+        _encryptedMappings.Remove(drive);
+        var result = encrypted ? _native.AddEncryptedConnection(drive, shareUnc, userName, password)
+            : _native.AddConnection(drive, shareUnc, userName, password);
         if (result != NoError)
             throw new Win32Exception(result, "Windows refused the temporary SMB drive mapping.");
 
@@ -133,7 +179,14 @@ public sealed class WindowsSmbMappingPort : IWindowsSmbMappingPort, IDisposable
             cancellationToken.ThrowIfCancellationRequested();
             if (!SameTarget(_native.GetTarget(drive), shareUnc))
                 throw new InvalidOperationException("Windows did not confirm the requested SMB drive target.");
-            EnsureOverlayRoute(destination, expectedOverlayAddresses);
+            if (encrypted)
+            {
+                if (!_native.HasEncryptedIntegrity(drive, shareUnc) || !SameTarget(_native.GetTarget(drive), shareUnc))
+                    throw new InvalidOperationException("Windows did not confirm encrypted and integrity-protected SMB.");
+                cancellationToken.ThrowIfCancellationRequested();
+                _encryptedMappings[drive] = shareUnc;
+            }
+            else EnsureOverlayRoute(destination, expectedOverlayAddresses);
             return ValueTask.CompletedTask;
         }
         catch (Exception primaryFailure)
@@ -154,6 +207,7 @@ public sealed class WindowsSmbMappingPort : IWindowsSmbMappingPort, IDisposable
             throw new Win32Exception(result, "Windows refused to remove the SMB drive mapping.");
         if (_native.GetTarget(drive) is not null)
             throw new InvalidOperationException("Windows still reports the SMB drive mapping after removal.");
+        _encryptedMappings.Remove(drive);
         return ValueTask.CompletedTask;
     }
 
@@ -162,7 +216,7 @@ public sealed class WindowsSmbMappingPort : IWindowsSmbMappingPort, IDisposable
     {
         cancellationToken.ThrowIfCancellationRequested();
         var current = _native.GetTarget(drive);
-        if (current is null) return ValueTask.FromResult(SmbExactMappingRemoval.Missing);
+        if (current is null) { _encryptedMappings.Remove(drive); return ValueTask.FromResult(SmbExactMappingRemoval.Missing); }
         if (!SameTarget(current, expectedShareUnc))
             return ValueTask.FromResult(SmbExactMappingRemoval.TargetChanged);
 
@@ -173,7 +227,7 @@ public sealed class WindowsSmbMappingPort : IWindowsSmbMappingPort, IDisposable
             throw new Win32Exception(result, "Windows refused to remove the exact SMB drive mapping.");
 
         current = _native.GetTarget(drive);
-        if (current is null) return ValueTask.FromResult(SmbExactMappingRemoval.Removed);
+        if (current is null) { _encryptedMappings.Remove(drive); return ValueTask.FromResult(SmbExactMappingRemoval.Removed); }
         if (!SameTarget(current, expectedShareUnc))
             return ValueTask.FromResult(SmbExactMappingRemoval.TargetChanged);
         throw new InvalidOperationException("Windows still reports the exact SMB drive mapping after removal.");
@@ -181,6 +235,7 @@ public sealed class WindowsSmbMappingPort : IWindowsSmbMappingPort, IDisposable
 
     private Exception? TryRollbackExactMapping(string drive, string shareUnc)
     {
+        _encryptedMappings.Remove(drive);
         try
         {
             var current = _native.GetTarget(drive);
@@ -240,6 +295,9 @@ public sealed class WindowsSmbMappingPort : IWindowsSmbMappingPort, IDisposable
 
     private static bool SameTarget(string? left, string right) =>
         string.Equals(left?.TrimEnd('\\'), right.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase);
+
+    private bool IsLegacyEncrypted(string shareUnc) => _legacyEncryptedShares.Any(share =>
+        string.Equals(share, shareUnc, StringComparison.OrdinalIgnoreCase));
 }
 
 internal sealed class WindowsNetworkChangeMonitor : IWindowsNetworkChangeMonitor
@@ -310,6 +368,47 @@ internal sealed class WindowsSmbNativeApi : IWindowsSmbNativeApi
         return WNetAddConnection2(ref resource, password, userName, ConnectTemporary);
     }
 
+    public int AddEncryptedConnection(string drive, string shareUnc, string userName, string password)
+    {
+        // USE_INFO_3: integrity=0x8, privacy=0x10. No global or persistent mapping.
+        var secret = Marshal.StringToCoTaskMemUni(password);
+        try
+        {
+            var separator = userName.IndexOf('\\');
+            var info = new UseInfo3
+            {
+                Info = new UseInfo2 { Local = drive, Remote = shareUnc, Password = secret, AssignmentType = 0,
+                    UserName = separator < 0 ? userName : userName[(separator + 1)..],
+                    DomainName = separator < 0 ? null : userName[..separator] },
+                Flags = 0x18
+            };
+            return NetUseAdd(null, 3, ref info, out _);
+        }
+        finally { Marshal.ZeroFreeCoTaskMemUnicode(secret); }
+    }
+
+    public bool HasEncryptedIntegrity(string drive, string expectedShareUnc) =>
+        ReadEncryptedIntegrity(drive, expectedShareUnc, allowLoopback: false);
+
+    internal bool ReadEncryptedIntegrity(string drive, string expectedShareUnc, bool allowLoopback)
+    {
+        // Query the actual mapped SMB handle, not server capability flags.
+        using var handle = CreateFile(drive + @"\", 0x80, 7, IntPtr.Zero, 3, 0x02000000, IntPtr.Zero);
+        if (handle.IsInvalid) throw new Win32Exception(Marshal.GetLastWin32Error(), "Cannot verify the SMB mapping security.");
+        var finalPath = new StringBuilder(32768);
+        var finalLength = GetFinalPathNameByHandle(handle, finalPath, (uint)finalPath.Capacity, 0);
+        if (finalLength == 0 || finalLength >= finalPath.Capacity ||
+            !string.Equals(finalPath.ToString().TrimEnd('\\'), @"\\?\UNC\" + expectedShareUnc[2..], StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("The SMB handle does not resolve to the authorized share.");
+        var info = new RemoteProtocolInfo { StructureVersion = 2, StructureSize = 116 };
+        if (!GetFileInformationByHandleEx(handle, 13, ref info, 116))
+            throw new Win32Exception(Marshal.GetLastWin32Error(), "Cannot read the SMB mapping security.");
+        // FILE_REMOTE_PROTOCOL_INFO has privacy=0x8, integrity=0x10 (unlike USE_INFO_3).
+        return info.StructureVersion >= 2 && info.StructureSize >= 20 && info.Protocol == 0x20000 &&
+            info.MajorVersion == 3 && (info.Flags & 2) == 0 && (allowLoopback || (info.Flags & 1) == 0) &&
+            (info.Flags & 0x8) == 0x8; // SMB3 encryption authenticates every message (AEAD).
+    }
+
     public int CancelConnection(string drive) => WNetCancelConnection2(drive, 0, force: false);
 
     public IPAddress GetBestRouteSource(IPAddress destination)
@@ -339,6 +438,45 @@ internal sealed class WindowsSmbNativeApi : IWindowsSmbNativeApi
 
     private static bool IsLogicalDrivePresent(string drive) => Environment.GetLogicalDrives()
         .Any(root => root.StartsWith(drive, StringComparison.OrdinalIgnoreCase));
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    private struct UseInfo2
+    {
+        [MarshalAs(UnmanagedType.LPWStr)] public string? Local;
+        [MarshalAs(UnmanagedType.LPWStr)] public string? Remote;
+        public IntPtr Password;
+        public uint Status, AssignmentType, ReferenceCount, UseCount;
+        [MarshalAs(UnmanagedType.LPWStr)] public string? UserName;
+        [MarshalAs(UnmanagedType.LPWStr)] public string? DomainName;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct UseInfo3 { public UseInfo2 Info; public uint Flags; }
+
+    [StructLayout(LayoutKind.Explicit, Size = 116)]
+    private struct RemoteProtocolInfo
+    {
+        [FieldOffset(0)] public ushort StructureVersion;
+        [FieldOffset(2)] public ushort StructureSize;
+        [FieldOffset(4)] public uint Protocol;
+        [FieldOffset(8)] public ushort MajorVersion;
+        [FieldOffset(16)] public uint Flags;
+    }
+
+    [DllImport("Netapi32.dll", CharSet = CharSet.Unicode)]
+    private static extern int NetUseAdd(string? serverName, uint level, ref UseInfo3 info, out uint parameterError);
+
+    [DllImport("kernel32.dll", EntryPoint = "CreateFileW", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern SafeFileHandle CreateFile(string path, uint access, uint shareMode, IntPtr security,
+        uint creationDisposition, uint flags, IntPtr template);
+
+    [DllImport("kernel32.dll", EntryPoint = "GetFinalPathNameByHandleW", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern uint GetFinalPathNameByHandle(SafeFileHandle handle, StringBuilder path, uint size, uint flags);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetFileInformationByHandleEx(SafeFileHandle handle, int infoClass,
+        ref RemoteProtocolInfo info, uint size);
 
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
     private struct NetResource

@@ -569,8 +569,14 @@ public sealed class CommonSmbAccessService : IDisposable
         bool allowed;
         try
         {
-            allowed = await _port.IsRouteAllowedAsync(mapping.Destination,
+            allowed = await _port.IsShareRouteAllowedAsync(mapping.ShareUnc, mapping.Destination,
                 mapping.AuthorizedOverlayAddresses, cancellationToken).ConfigureAwait(false);
+            if (allowed)
+            {
+                foreach (var owned in _ownedMappings.Where(pair => ReferenceEquals(pair.Value, mapping)))
+                    allowed &= await _port.IsMappingSecurityAllowedAsync(owned.Key, mapping.ShareUnc, cancellationToken)
+                        .ConfigureAwait(false);
+            }
         }
         catch (OperationCanceledException) { throw; }
         catch (Exception exception)

@@ -40,6 +40,11 @@ jobs:
             dotnet test $project -c Release -p:RestoreLockedMode=true -m:1 -nodeReuse:false -p:BuildInParallel=false -p:UseSharedCompilation=false
             if ($LASTEXITCODE -ne 0) { throw "Targeted tests failed: $project" }
           }
+      - name: Verify native encrypted SMB as an ordinary user
+        run: |
+          dotnet publish connector-desktop/installer/Connector.Smb.NativeProbe -c Release -r win-x64 --self-contained true -p:RuntimeFrameworkVersion=8.0.32 -p:TargetLatestRuntimePatch=false -o (Join-Path $env:RUNNER_TEMP 'smb-probe') -m:1 -nodeReuse:false -p:BuildInParallel=false -p:UseSharedCompilation=false
+          if ($LASTEXITCODE -ne 0) { throw 'Native SMB probe did not compile.' }
+          & connector-desktop/scripts/invoke_hosted_encrypted_smb_fixture.ps1 -ProbeExecutable (Join-Path $env:RUNNER_TEMP 'smb-probe/Connector.Smb.NativeProbe.exe') -EvidencePath (Join-Path $env:RUNNER_TEMP 'encrypted-smb-native.json')
       - name: Download pinned dependencies and build final EXE
         env:
           ACCESS_CONFIGURATION: ${{ secrets.UNIFIED_CONNECTOR_ACCESS_CONFIGURATION_JSON }}
@@ -49,7 +54,7 @@ jobs:
           $assets=Join-Path $env:RUNNER_TEMP 'clean-assets'; New-Item -ItemType Directory -Path $assets | Out-Null
           $access=Join-Path $assets 'connector-access.json'
           $accessConfig=$env:ACCESS_CONFIGURATION|ConvertFrom-Json
-          $accessConfig|Add-Member -Force -NotePropertyName smbRoutedDestinations -NotePropertyValue @('62.113.36.107')
+          $accessConfig|Add-Member -Force -NotePropertyName smbLegacyEncryptedShareUncs -NotePropertyValue @('\\62.113.36.107\BIM_Models')
           [IO.File]::WriteAllText($access,($accessConfig|ConvertTo-Json -Depth 16),[Text.UTF8Encoding]::new($false)); Remove-Item Env:ACCESS_CONFIGURATION
           $client=[Net.Http.HttpClient]::new()
           try {
@@ -101,6 +106,7 @@ jobs:
             ${{ runner.temp }}/clean-output/release/desktop-image-manifest.json
             ${{ runner.temp }}/clean-output/release/evidence/*.json
             ${{ runner.temp }}/clean-output/release/evidence/upgrade119/*.json
+            ${{ runner.temp }}/encrypted-smb-native.json
           if-no-files-found: error
       - name: Upload bounded failure diagnostics
         if: failure()
@@ -112,4 +118,6 @@ jobs:
             ${{ runner.temp }}/clean-output/release/evidence/*.json
             ${{ runner.temp }}/clean-output/release/evidence/upgrade119/*.log
             ${{ runner.temp }}/clean-output/release/evidence/upgrade119/*.json
+            ${{ runner.temp }}/accepted-predecessor/msi-inventory.json
+            ${{ runner.temp }}/accepted-predecessor/extract.log
           if-no-files-found: ignore

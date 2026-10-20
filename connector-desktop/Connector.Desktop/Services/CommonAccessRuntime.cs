@@ -22,6 +22,7 @@ public sealed class CommonAccessRuntime : ICommonConnectorRequestTransport, IOve
     private readonly Uri? _controlPlaneBaseUri;
     private readonly Uri? _netBirdManagementUri;
     private ManagedOverlayDestinationPolicy _smbDestinations = new([]);
+    public IReadOnlyList<string> LegacyEncryptedSmbShares { get; private set; } = Array.Empty<string>();
     private int _selected;
     private int _readyObserved;
     private int _vpnSetupRequired;
@@ -117,7 +118,7 @@ public sealed class CommonAccessRuntime : ICommonConnectorRequestTransport, IOve
         return new CommonAccessRuntime(deployment.StateFilePath, deployment.Coordinator,
             deployment.ControlPlaneBaseUri, deployment.NetBirdManagementUri,
             deployment.EnrollmentClient, deployment.OverlayClient, deployment.ProtectedNetworkGate)
-            { _smbDestinations = deployment.SmbDestinations };
+            { _smbDestinations = deployment.SmbDestinations, LegacyEncryptedSmbShares = deployment.LegacyEncryptedSmbShares };
     }
 
     /// <summary>

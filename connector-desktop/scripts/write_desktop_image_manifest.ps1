@@ -34,7 +34,9 @@ if ($AcceptedPredecessorManifest) {
     }
     foreach($critical in @('coreclr.dll','hostfxr.dll','hostpolicy.dll','createdump.exe')) {
         $resolved=@($files|Where-Object path -ceq $critical)
-        if($resolved.Count -ne 1 -or [Version]$resolved[0].fileVersion -lt [Version]'8.0.3226.50405'){throw 'Runtime key file is missing or below the accepted predecessor.'}
+        $previous=$oldByPath[$critical]
+        if($resolved.Count -ne 1 -or !$resolved[0].fileVersion -or !$previous -or !$previous.fileVersion -or
+            [Version]$resolved[0].fileVersion -lt [Version]$previous.fileVersion){throw 'Runtime key file is missing or below its accepted predecessor.'}
     }
     $baselineSha=(Get-FileHash -LiteralPath $AcceptedPredecessorManifest).Hash.ToLowerInvariant()
 }
