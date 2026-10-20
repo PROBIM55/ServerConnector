@@ -29,7 +29,9 @@ try{
     $unc='\\'+$ip+'\'+$share
     $start=[Diagnostics.ProcessStartInfo]::new((Join-Path $probeRoot ([IO.Path]::GetFileName($ProbeExecutable))))
     $start.UseShellExecute=$false;$start.CreateNoWindow=$true;$start.UserName=$name;$start.Domain=$env:COMPUTERNAME
-    $start.Password=$secure;$start.LoadUserProfile=$true;$start.WorkingDirectory=$probeRoot
+    # This native SMB-only process needs an ordinary logon token, not HKCU or a
+    # desktop profile. Avoid an unrelated User Profile Service unload race.
+    $start.Password=$secure;$start.LoadUserProfile=$false;$start.WorkingDirectory=$probeRoot
     $start.RedirectStandardInput=$true;$start.RedirectStandardOutput=$true;$start.RedirectStandardError=$true
     # No deployment secrets or inherited GitHub tokens reach the ordinary user.
     $start.Environment.Clear()
@@ -93,6 +95,10 @@ try{
         if(Test-Path -LiteralPath $resolved){throw 'Owned directory remains.'}
     }catch{$cleanupFailures.Add('owned-directory')}
     try{if($secure){$secure.Dispose()}}catch{$cleanupFailures.Add('secret-dispose')}
+}
+if($cleanupFailures.Count -or $primaryFailure -or !$proofPassed){
+    $failureType=if($primaryFailure){$primaryFailure.Exception.GetType().FullName}else{$null}
+    [IO.File]::WriteAllText([IO.Path]::GetFullPath($EvidencePath),(@{schemaVersion=1;state='failed';steps=$steps.ToArray();proofPassed=$proofPassed;cleanupFailures=$cleanupFailures.ToArray();failureType=$failureType;productionTouched=$false;utc=[datetime]::UtcNow.ToString('o')}|ConvertTo-Json -Depth 6))
 }
 if($cleanupFailures.Count){throw ('Native SMB fixture cleanup incomplete: '+($cleanupFailures.ToArray() -join ','))}
 if($primaryFailure){throw $primaryFailure}
