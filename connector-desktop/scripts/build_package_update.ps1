@@ -115,7 +115,7 @@ foreach ($name in @('Connector.AgrConversion.dll', 'Assimp64.dll', 'Silk.NET.Ass
 
 if ($PublishOnly) {
     if (-not $LocalOnly -or $TestAppId -or $SmokeProbe -or $PreviousReleasesDir) { throw 'PublishOnly is only for a fresh production desktop image.' }
-    @{ schemaVersion=1; applicationId=$appId; version=$PackVersion; publishDirectory=$publishDir } |
+    @{ schemaVersion=1; applicationId=$appId; version=$PackVersion; publishDirectory=$publishDir; sdkVersion='8.0.426';runtimeVersion='8.0.32' } |
         ConvertTo-Json | Set-Content -LiteralPath (Join-Path $outputDir 'desktop-image.json') -Encoding utf8
     return
 }

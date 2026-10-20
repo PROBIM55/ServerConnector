@@ -77,7 +77,8 @@ public static class CommonAccessDeploymentFactory
                          expectedManagementUri.Scheme != Uri.UriSchemeHttps ||
                          !string.IsNullOrEmpty(expectedManagementUri.UserInfo)))
                         throw new InvalidDataException("Invalid NetBird management URI.");
-                    smbDestinations = new ManagedOverlayDestinationPolicy(configuration.SmbOverlayDestinations);
+                    smbDestinations = new ManagedOverlayDestinationPolicy(configuration.SmbOverlayDestinations,
+                        configuration.SmbRoutedDestinations);
                     var controlPlane = configuration.Services.Single(service => service.ServiceId == ControlPlaneServiceId);
                     if (controlPlane.BaseUri is null || controlPlane.HealthPath != "jobs/health" ||
                         controlPlane.BaseUri.AbsolutePath.TrimEnd('/') != "/api/platform/connector/access/v1")
@@ -149,5 +150,6 @@ public static class CommonAccessDeploymentFactory
         public string NetBirdManagementUri { get; init; } = "";
         public List<ProtectedServiceDefinition> Services { get; init; } = [];
         public List<string> SmbOverlayDestinations { get; init; } = [];
+        public List<string> SmbRoutedDestinations { get; init; } = [];
     }
 }

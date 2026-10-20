@@ -1,5 +1,6 @@
 [CmdletBinding()]
-param([Parameter(Mandatory)][string]$SetupExecutable,[Parameter(Mandatory)][string]$ProbeExecutable,[Parameter(Mandatory)][string]$EvidenceDirectory)
+param([Parameter(Mandatory)][string]$SetupExecutable,[Parameter(Mandatory)][string]$ProbeExecutable,[Parameter(Mandatory)][string]$EvidenceDirectory,
+    [Parameter(Mandatory)][string]$ImageManifest,[string]$PredecessorSetupExecutable,[string]$PredecessorImageManifest)
 $ErrorActionPreference='Stop'
 Set-StrictMode -Version Latest
 if ($env:GITHUB_ACTIONS -ne 'true' -or $env:RUNNER_ENVIRONMENT -ne 'github-hosted') { throw 'Disposable hosted Windows required.' }
@@ -11,13 +12,21 @@ if (@($msiInstaller.RelatedProducts($cleanUpgradeCode)).Count -ne 0) { throw 'Cl
 foreach ($folder in @([Environment]::GetFolderPath('CommonDesktopDirectory'),[Environment]::GetFolderPath('CommonPrograms'))) {
     if (Test-Path -LiteralPath (Join-Path $folder 'Платформа Коннектор.lnk')) { throw 'Fresh fixture requires no existing application shortcut.' }
 }
-if ((Get-Service NetBird -ErrorAction SilentlyContinue) -or (Test-Path -LiteralPath (Join-Path $env:ProgramFiles 'NetBird/netbird.exe')) -or
+if (!$PredecessorSetupExecutable -and ((Get-Service NetBird -ErrorAction SilentlyContinue) -or (Test-Path -LiteralPath (Join-Path $env:ProgramFiles 'NetBird/netbird.exe')) -or
     (Test-Path -LiteralPath (Join-Path $env:ProgramData 'NetBird')) -or
     (Test-Path -LiteralPath (Join-Path $env:ProgramData 'Structura Connector/Network/netbird-bundle-owner.json')) -or
-    (Test-Path -LiteralPath (Join-Path $env:ProgramData 'Structura Connector/Network/netbird-install-owner.json'))) { throw 'Fresh fixture requires no pre-existing NetBird state.' }
-function Run-Setup([string]$Mode) {
-    $log=Join-Path $EvidenceDirectory ($Mode+'.log')
-    $process=Start-Process -FilePath $setup -ArgumentList @('/quiet','/norestart',('/'+$Mode),'/log',('"'+$log+'"')) -WindowStyle Hidden -PassThru
+    (Test-Path -LiteralPath (Join-Path $env:ProgramData 'Structura Connector/Network/netbird-install-owner.json')))) { throw 'Fresh fixture requires no pre-existing NetBird state.' }
+if($PredecessorSetupExecutable){
+    if(!$PredecessorImageManifest -or (Get-Item -LiteralPath $PredecessorSetupExecutable).Length -ne 416519356 -or
+        (Get-FileHash -LiteralPath $PredecessorSetupExecutable).Hash -cne '2EA234DEA9238F59BC4DEF852D9B0EF72872612706ED70891B53A6B2AECFF769'){throw 'Accepted upgrade predecessor missing or changed.'}
+    # This prerequisite is the one just created by the preceding fresh fixture
+    # on this disposable VM; no foreign installer state is adopted.
+    $owner=Join-Path $env:ProgramData 'Structura Connector/Network/netbird-bundle-owner.json'
+    if((Get-Content -LiteralPath $owner -Raw|ConvertFrom-Json).installerSha256 -cne '50f822c0f5f6e54e7618096cdd36b63bf4b169e125c9da06052fd4fd96115210'){throw 'Upgrade prerequisite ownership differs.'}
+}
+function Run-Setup([string]$Mode,[string]$Executable=$setup,[string]$Label=$Mode) {
+    $log=Join-Path $EvidenceDirectory ($Label+'.log')
+    $process=Start-Process -FilePath $Executable -ArgumentList @('/quiet','/norestart',('/'+$Mode),'/log',('"'+$log+'"')) -WindowStyle Hidden -PassThru
     try {
         if (!$process.WaitForExit(240000)) { $process.Kill($true); throw 'The final installer EXE timed out.' }
         if ($process.ExitCode -notin @(0,3010)) { throw "Final EXE $Mode failed: $($process.ExitCode)" }
@@ -38,10 +47,33 @@ $name='platform'+[Guid]::NewGuid().ToString('N').Substring(0,8)
 $publicRoot=Join-Path $env:PUBLIC ('PlatformCleanFixture-'+[Guid]::NewGuid().ToString('N'))
 $profilePath=$null; $user=$null; $probe=$null; $password=$null; $setupAttempted=$false; $complete=$false; $primaryFailure=$null
 try {
+    $previousCodes=@()
+    if($PredecessorSetupExecutable){
+        $setupAttempted=$true
+        $previousExit=Run-Setup 'install' $PredecessorSetupExecutable 'predecessor-install'
+        $previousCodes=@($msiInstaller.RelatedProducts($cleanUpgradeCode))
+        if($previousCodes.Count -ne 1 -or $msiInstaller.ProductInfo($previousCodes[0],'VersionString') -cne '1.1.9'){throw 'Exact predecessor was not installed.'}
+        $appRoot=Join-Path $env:ProgramFiles 'Platform Connector'
+        & (Join-Path $PSScriptRoot 'assert_installed_desktop_image.ps1') -ImageManifest $PredecessorImageManifest -InstalledDirectory $appRoot
+        $oldApp=Start-Process -FilePath (Join-Path $appRoot 'Connector.Desktop.exe') -WorkingDirectory $appRoot -WindowStyle Hidden -PassThru
+        try{
+            $until=[datetime]::UtcNow.AddSeconds(60);$managed=$false
+            do{
+                if($oldApp.HasExited){throw 'Accepted predecessor exited before managed startup.'}
+                $oldApp.Refresh()
+                $managed=@($oldApp.Modules|Where-Object{$_.ModuleName -ieq 'coreclr.dll' -and $_.FileName -ieq (Join-Path $appRoot 'coreclr.dll')}).Count -eq 1
+                if(!$managed){Start-Sleep -Milliseconds 250}
+            }while(!$managed -and [datetime]::UtcNow -lt $until)
+            if(!$managed){throw 'Accepted predecessor did not load its installed managed runtime.'}
+        }finally{if(!$oldApp.HasExited){$oldApp.Kill($true);if(!$oldApp.WaitForExit(10000)){throw 'Owned predecessor did not stop.'}};$oldApp.Dispose()}
+    }
     $setupAttempted=$true; $installExit=Run-Setup 'install'
     if (@($msiInstaller.RelatedProducts($cleanUpgradeCode)).Count -ne 1) { throw 'The final EXE did not register exactly one new application MSI.' }
+    $currentCodes=@($msiInstaller.RelatedProducts($cleanUpgradeCode))
+    if(@($currentCodes|Where-Object{$_ -in $previousCodes}).Count){throw 'Upgrade left the old ProductCode registered.'}
+    & (Join-Path $PSScriptRoot 'assert_installed_desktop_image.ps1') -ImageManifest $ImageManifest -InstalledDirectory (Join-Path $env:ProgramFiles 'Platform Connector')
+    if(@(Get-ChildItem -LiteralPath $EvidenceDirectory -File -Filter 'install*.log'|Select-String -Pattern 'Disallowing installation.*higher versioned keyfile').Count){throw 'MSI disallowed a higher-version predecessor key file.'}
     if (!(Get-Service NetBird -ErrorAction SilentlyContinue)) { throw 'The EXE did not install NetBird.' }
-    $repairExit=Run-Setup 'repair'
     New-Item -ItemType Directory -Path $publicRoot | Out-Null
     $probeRoot=Join-Path $publicRoot 'probe'
     Copy-Item -LiteralPath (Split-Path $ProbeExecutable) -Destination $probeRoot -Recurse
@@ -76,6 +108,10 @@ try {
     if ($probe.ExitCode -ne 0 -or !$proof.success -or !$proof.actualDesktopWebView -or !$proof.ordinaryUser -or !$proof.protectedNetworkReady -or
         !$proof.singleInstance -or !$proof.trayReactivation -or
         $proof.credentialCreated -or $proof.legacyImport -or $proof.blenderIncluded) { throw 'The actual installed application failed ordinary-user verification.' }
+    # Repair is a separate servicing test, only AFTER exact installed bytes and
+    # the ordinary-user managed application have passed normal installation.
+    $repairExit=Run-Setup 'repair'
+    & (Join-Path $PSScriptRoot 'assert_installed_desktop_image.ps1') -ImageManifest $ImageManifest -InstalledDirectory (Join-Path $env:ProgramFiles 'Platform Connector')
     $complete=$true
 } catch {
     $primaryFailure=$_
@@ -99,6 +135,7 @@ try {
     Invoke-FixtureCleanup 'owned-application-uninstall' {
         if (!$cleanupState.probeStopped) { throw 'Cannot uninstall while own probe may still run.' }
         if ($setupAttempted) { $cleanupState.uninstallExit=Run-Setup 'uninstall' }
+        if($PredecessorSetupExecutable -and @($msiInstaller.RelatedProducts($cleanUpgradeCode)).Count){Run-Setup 'uninstall' $PredecessorSetupExecutable 'predecessor-cleanup'|Out-Null}
     }
     Invoke-FixtureCleanup 'owned-profile-delete' {
         if (!$cleanupState.probeStopped) { throw 'Cannot delete a profile while own probe may still run.' }
@@ -161,6 +198,6 @@ if ($complete) {
         if ((Get-FileHash -LiteralPath $hidden).Hash -cne $ownerHash -or (Test-Path -LiteralPath $owner)) { throw 'Fixture marker changed while held.' }
         Move-Item -LiteralPath $hidden -Destination $owner
     }
-    @{success=$true;installExit=$installExit;repairExit=$repairExit;uninstallExit=$uninstallExit;ordinaryUser=$true;profileRemoved=$true;fixtureRemoved=$true;foreignExactVersionRejected=$true;freshInstall=$true;legacyImport=$false} |
+    @{success=$true;installExit=$installExit;repairExit=$repairExit;uninstallExit=$uninstallExit;ordinaryUser=$true;profileRemoved=$true;fixtureRemoved=$true;foreignExactVersionRejected=$true;freshInstall=(!$PredecessorSetupExecutable);upgradeFrom119=[bool]$PredecessorSetupExecutable;exactImageBeforeRepair=$true;legacyImport=$false} |
         ConvertTo-Json | Set-Content -LiteralPath (Join-Path $EvidenceDirectory 'installation.json') -Encoding utf8
 }

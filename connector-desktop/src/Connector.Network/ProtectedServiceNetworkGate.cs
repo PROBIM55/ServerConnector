@@ -48,10 +48,26 @@ public sealed class ProtectedServiceNetworkGate : IProtectedServiceNetworkGate
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(identity);
+        if (!_services.ContainsKey(serviceId))
+            throw new NetworkGateException("service_not_allowed", "The protected service is not in the managed allowlist.");
+        var snapshot = await _overlay.GetStatusAsync(cancellationToken);
+        return await ResolveAndProbeFromSnapshotAsync(identity, serviceId, relativeUri, snapshot, cancellationToken);
+    }
+
+    // The coordinator can reuse its observation within this one serialized request.
+    // BoundOverlayConnector still re-reads ownership/status after DNS and immediately
+    // before opening the socket. This is not a cached authorization or a public bypass.
+    internal async ValueTask<ProtectedServiceRoute> ResolveAndProbeFromSnapshotAsync(
+        ProtectedOverlayTransportIdentity identity,
+        string serviceId,
+        string relativeUri,
+        NetworkOverlaySnapshot snapshot,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(identity);
         if (!_services.TryGetValue(serviceId, out var service))
             throw new NetworkGateException("service_not_allowed", "The protected service is not in the managed allowlist.");
 
-        var snapshot = await _overlay.GetStatusAsync(cancellationToken);
         EnsureMatches(identity, snapshot);
 
         if (string.IsNullOrWhiteSpace(relativeUri) || Uri.TryCreate(relativeUri, UriKind.Absolute, out _) ||
@@ -91,7 +107,8 @@ public sealed class ProtectedServiceNetworkGate : IProtectedServiceNetworkGate
         {
             if (!await _probe.IsOnlineAsync(client, service.HealthUri, cancellationToken))
                 throw new NetworkGateException("service_offline", "The protected service did not pass its overlay health check.");
-            return new ProtectedServiceRoute(service.ServiceId, target, snapshot, client, credential);
+            return new ProtectedServiceRoute(service.ServiceId, target,
+                connector.LastSuccessfulOverlay ?? snapshot, client, credential);
         }
         catch
         {

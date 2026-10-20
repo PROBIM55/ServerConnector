@@ -89,6 +89,7 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
         _platformConnection = platformConnection ?? runtimeServices.Platform;
         _commonAccess = runtimeServices.CommonAccess;
         _runtimeServices.CommonOperations.Changed += OnCommonOperationChanged;
+        _runtimeServices.CommonRecoveryChanged += OnCommonRecoveryChanged;
         _confirmFolderDisconnect = confirmFolderDisconnect;
         _runtimeServices.Platform.SnapshotChanged += OnPlatformSnapshotChanged;
         _converterWorkspace = converterWorkspace ?? throw new ArgumentNullException(nameof(converterWorkspace));
@@ -206,8 +207,10 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
         };
 
         var connectionProgress = _runtimeServices.CommonOperations.Progress;
-        var commonBusy = connectionProgress.Operation is not null;
-        var commonStatus = commonBusy ? connectionProgress.Message : _commonAccess.DisplayStatus;
+        var recoveryProgress = _runtimeServices.CommonRecoveryProgress;
+        var commonBusy = connectionProgress.Operation is not null || recoveryProgress.Length != 0;
+        var progressMessage = connectionProgress.Operation is not null ? connectionProgress.Message : recoveryProgress;
+        var commonStatus = commonBusy ? progressMessage : _commonAccess.DisplayStatus;
         if (notice?.ConnectionGeneration is { } noticeGeneration && noticeGeneration != connectionProgress.Generation)
             notice = null;
         if (_commonAccess.IsSelected && commonBusy)
@@ -232,7 +235,7 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
             ["signInPending"] = Volatile.Read(ref _browserSignInPending) != 0,
             ["connectPending"] = commonBusy,
             ["signOutPending"] = connectionProgress.Operation == CommonConnectionOperation.SignOut,
-            ["connectionProgress"] = connectionProgress.Message,
+            ["connectionProgress"] = progressMessage,
             ["assignedFolders"] = _commonAccess.IsSelected && _commonAccess.HasPermission(mode, "folders", ConnectorPermission.Read)
                 ? _runtimeServices.CommonFolders.Folders : Array.Empty<CommonSmbFolder>(),
             ["folderStatus"] = _runtimeServices.CommonFolderStatus,
@@ -639,7 +642,9 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
     }
 
     private void StartCommonConnect(string? token, bool reconnect, CancellationToken cancellationToken)
-        => StartCommonOperation(reconnect ? CommonConnectionOperation.Restore : CommonConnectionOperation.SignIn,
+    {
+        _runtimeServices.CancelCommonConnectionIntent();
+        StartCommonOperation(reconnect ? CommonConnectionOperation.Restore : CommonConnectionOperation.SignIn,
             async (attempt, ct) =>
         {
             _commonAccess.Select();
@@ -681,14 +686,18 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
             await _runtimeServices.ConnectCommonAsync(token, reconnect, ct, ReportNativePhase);
             _connectorHost.Log($"Common connection native completed in {nativeStarted.Elapsed.TotalSeconds:F1}s.");
         }, "connect-common", cancellationToken);
+    }
 
     private void StartCommonSignOut(CancellationToken cancellationToken)
-        => StartCommonOperation(CommonConnectionOperation.SignOut, async (attempt, ct) =>
+    {
+        _runtimeServices.CancelCommonConnectionIntent();
+        StartCommonOperation(CommonConnectionOperation.SignOut, async (attempt, ct) =>
         {
             if (_commonAccess.HasStoredCredential)
                 await _runtimeServices.SignOutCommonAsync(ct);
             // Cancelling a browser request before enrollment has no device to revoke.
         }, "signout", cancellationToken);
+    }
 
     private void StartCommonOperation(CommonConnectionOperation operation,
         Func<CommonConnectionAttempt, CancellationToken, Task> execute, string name, CancellationToken cancellationToken)
@@ -1120,6 +1129,11 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
     private void OnPropertyChanged(object? sender, PropertyChangedEventArgs args) => PublishSnapshot();
     private void OnPlatformSnapshotChanged(ConnectorRuntimeSnapshot snapshot) => PublishSnapshot();
     private void OnCommonOperationChanged() => PublishSnapshot();
+    private void OnCommonRecoveryChanged()
+    {
+        lock (_gate) if (_notice?.ConnectionGeneration is not null) _notice = null;
+        PublishSnapshot();
+    }
     private void Subscribe(INotifyPropertyChanged? source) { if (source is not null) source.PropertyChanged += OnPropertyChanged; }
     private void Unsubscribe(INotifyPropertyChanged? source) { if (source is not null) source.PropertyChanged -= OnPropertyChanged; }
 
@@ -1153,6 +1167,7 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
         Unsubscribe(_structura);
         _runtimeServices.Platform.SnapshotChanged -= OnPlatformSnapshotChanged;
         _runtimeServices.CommonOperations.Changed -= OnCommonOperationChanged;
+        _runtimeServices.CommonRecoveryChanged -= OnCommonRecoveryChanged;
         foreach (ConverterWorkspaceJob job in _converterWorkspace.Jobs) Unsubscribe(job);
 
         Task[] pending;

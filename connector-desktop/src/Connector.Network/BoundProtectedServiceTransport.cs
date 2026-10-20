@@ -10,6 +10,9 @@ internal sealed class BoundOverlayConnector
     private readonly INetworkOverlayClient _overlay;
     private readonly IProtectedDnsResolver _dnsResolver;
     private readonly IOverlaySocketConnector _socketConnector;
+    private NetworkOverlaySnapshot? _lastSuccessfulOverlay;
+
+    internal NetworkOverlaySnapshot? LastSuccessfulOverlay => Volatile.Read(ref _lastSuccessfulOverlay);
 
     public BoundOverlayConnector(
         ProtectedServiceNetworkGate.ValidatedProtectedService service,
@@ -55,7 +58,11 @@ internal sealed class BoundOverlayConnector
                 address.AddressFamily == remote.AddressFamily && OverlayAddressRange.IsPrivateOverlayAddress(address));
             if (local is null) continue;
             var stream = await _socketConnector.ConnectAsync(local, remote, endpoint.Port, cancellationToken);
-            if (!_identity.AuthorizationLifetime.IsCancellationRequested) return stream;
+            if (!_identity.AuthorizationLifetime.IsCancellationRequested)
+            {
+                Volatile.Write(ref _lastSuccessfulOverlay, overlay);
+                return stream;
+            }
             await stream.DisposeAsync();
             throw new NetworkGateException("route_authorization_expired", "The protected route authorization expired while connecting.");
         }

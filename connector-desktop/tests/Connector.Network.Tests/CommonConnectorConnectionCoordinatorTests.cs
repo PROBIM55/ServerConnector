@@ -10,6 +10,44 @@ public sealed class CommonConnectorConnectionCoordinatorTests
     private static readonly Uri ManagementUri = new("https://netbird.test");
 
     [Fact]
+    public async Task First_bootstrap_with_settling_local_overlay_waits_without_second_enrollment()
+    {
+        var events = new List<string>();
+        var access = new FakeAccess(events, State("connecting"), State("ready"), State("ready"));
+        var overlay = new SequenceOverlay(ReadyOverlay() with
+        {
+            Status = NetworkServiceStatus.Connecting, SignalConnected = false,
+        }, ReadyOverlay());
+        var coordinator = new CommonConnectorConnectionCoordinator(access, overlay, new FakeGate(events));
+        var pending = await coordinator.EnrollAndConnectAsync("one-time-token", "Workstation");
+        Assert.Equal(CommonConnectorConnectionStatus.AwaitingVpnAuthorization, pending.Status);
+        Assert.Null(pending.AccessProfile);
+        var ready = await coordinator.ResumeAndConnectAsync();
+        Assert.Equal(CommonConnectorConnectionStatus.Ready, ready.Status);
+        Assert.Equal(1, access.EnrollmentCalls);
+    }
+
+    [Fact]
+    public async Task LostLocalOverlay_keeps_specific_diagnostic_after_request_catch()
+    {
+        var events = new List<string>();
+        var access = new FakeAccess(events, State("ready"), State("ready"));
+        var overlay = new SequenceOverlay(ReadyOverlay(), ReadyOverlay() with
+        {
+            Status = NetworkServiceStatus.Disconnected, SignalConnected = false,
+        });
+        var coordinator = new CommonConnectorConnectionCoordinator(access, overlay, new FakeGate(events));
+        await coordinator.ReconnectAsync();
+
+        await Assert.ThrowsAsync<NetworkGateException>(() => coordinator.OpenProtectedServiceAsync("platform", "jobs").AsTask());
+
+        Assert.Equal("overlay_not_ready", coordinator.Current.DiagnosticCode);
+        Assert.Null(coordinator.Current.AccessProfile);
+        await Assert.ThrowsAsync<NetworkGateException>(() => coordinator.OpenProtectedServiceAsync("platform", "jobs").AsTask());
+        Assert.Equal("overlay_not_ready", coordinator.Current.DiagnosticCode);
+    }
+
+    [Fact]
     public async Task UnavailableOverlayPreflight_RejectsBeforeOneTimeEnrollment()
     {
         var events = new List<string>();
@@ -193,12 +231,14 @@ public sealed class CommonConnectorConnectionCoordinatorTests
             ProfileFailure = new ConnectorEnrollmentProtocolException("not applied", 403, "access_pending_or_denied"),
         };
         var gate = new FakeGate(events);
-        var coordinator = new CommonConnectorConnectionCoordinator(access, new FakeOverlay(events, ReadyOverlay()), gate);
+        var overlay = new FakeOverlay(events, ReadyOverlay());
+        var coordinator = new CommonConnectorConnectionCoordinator(access, overlay, gate);
 
         var result = await coordinator.ReconnectAsync();
 
         Assert.Equal(CommonConnectorConnectionStatus.AccessPending, result.Status);
         Assert.Null(result.AccessProfile);
+        Assert.Equal(0, overlay.StatusCalls);
         await Assert.ThrowsAsync<NetworkGateException>(() => coordinator.OpenProtectedServiceAsync("platform", "jobs").AsTask());
         Assert.Empty(gate.Services);
     }
@@ -223,7 +263,7 @@ public sealed class CommonConnectorConnectionCoordinatorTests
     }
 
     [Fact]
-    public async Task ExistingReadyFromAnotherManagementPlane_IsRejectedWithoutProfileOrRoute()
+    public async Task ExistingReadyFromAnotherManagementPlane_IsRejectedWithoutRoute()
     {
         var events = new List<string>();
         var access = new FakeAccess(events, State("ready"));
@@ -234,7 +274,7 @@ public sealed class CommonConnectorConnectionCoordinatorTests
 
         Assert.Equal(CommonConnectorConnectionStatus.Unknown, result.Status);
         Assert.Equal("overlay_identity_mismatch", result.DiagnosticCode);
-        Assert.Equal(0, access.ProfileCalls);
+        Assert.Equal(1, access.ProfileCalls);
         Assert.Equal(0, access.BootstrapCalls);
     }
 
@@ -252,7 +292,7 @@ public sealed class CommonConnectorConnectionCoordinatorTests
         var result = await coordinator.ReconnectAsync();
 
         Assert.Equal(CommonConnectorConnectionStatus.Unknown, result.Status);
-        Assert.Equal(0, access.ProfileCalls);
+        Assert.Equal(1, access.ProfileCalls);
     }
 
     [Fact]
@@ -348,7 +388,7 @@ public sealed class CommonConnectorConnectionCoordinatorTests
     }
 
     [Fact]
-    public async Task OverlayChangeBetweenCoordinatorAndGate_IsRejectedBeforeRouteCreation()
+    public async Task RealGate_ReusesOnlyTheCurrentCoordinatorsObservation()
     {
         var events = new List<string>();
         var access = new FakeAccess(events, State("ready"), State("ready"));
@@ -358,11 +398,11 @@ public sealed class CommonConnectorConnectionCoordinatorTests
         var coordinator = new CommonConnectorConnectionCoordinator(access, overlay, gate);
         await coordinator.ReconnectAsync();
 
-        var error = await Assert.ThrowsAsync<NetworkGateException>(() =>
-            coordinator.OpenProtectedServiceAsync("platform", "jobs").AsTask());
-
-        Assert.Equal("overlay_identity_mismatch", error.Code);
-        Assert.Equal(CommonConnectorConnectionStatus.Failed, coordinator.Current.Status);
+        using var route = await coordinator.OpenProtectedServiceAsync("platform", "jobs");
+        // This fixture's probe opens no socket. Actual socket freshness is
+        // covered by BoundProtectedServiceTransportTests after DNS resolution.
+        Assert.Equal(CommonConnectorConnectionStatus.Ready, coordinator.Current.Status);
+        Assert.Equal(ReadyOverlay().ManagementUri, route.Overlay.ManagementUri);
     }
 
     [Fact]

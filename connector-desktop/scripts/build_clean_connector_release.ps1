@@ -5,6 +5,7 @@ param(
     [Parameter(Mandatory)][string]$NetBirdMsiPath,
     [Parameter(Mandatory)][string]$WebView2InstallerPath,
     [Parameter(Mandatory)][string]$ConnectorAccessConfigurationPath,
+    [Parameter(Mandatory)][string]$AcceptedPredecessorManifest,
     [Parameter(Mandatory)][string]$OutputDirectory
 )
 $ErrorActionPreference='Stop'
@@ -42,6 +43,18 @@ $publish=[string]$image.publishDirectory
     Set-Content -LiteralPath (Join-Path $publish 'connector-install.json') -Encoding utf8
 $config=Join-Path $out 'connector-access.json'
 Copy-Item -LiteralPath $ConnectorAccessConfigurationPath -Destination $config
+$imageManifest=Join-Path $out 'desktop-image-manifest.json'
+& (Join-Path $PSScriptRoot 'write_desktop_image_manifest.ps1') -Directory $publish -OutputFile $imageManifest -Version $Version -AcceptedPredecessorManifest $AcceptedPredecessorManifest
+$manifest=Get-Content -LiteralPath $imageManifest -Raw|ConvertFrom-Json
+foreach($extra in @(
+    @('Network/connector-access.json',$config),
+    @('Network/scripts/netbird_windows_preflight.ps1',(Join-Path $PSScriptRoot 'netbird_windows_preflight.ps1')),
+    @('Network/scripts/verify_netbird_installer.ps1',(Join-Path $PSScriptRoot 'verify_netbird_installer.ps1')),
+    @('Network/infra/netbird/v0.79.0-windows-x64.lock.json',$lock),
+    @('Network/installer/netbird_installer_0.79.0_windows_amd64.msi',$NetBirdMsiPath))) {
+    $manifest.files+=@{path=$extra[0];bytes=(Get-Item -LiteralPath $extra[1]).Length;sha256=(Get-FileHash -LiteralPath $extra[1]).Hash.ToLowerInvariant();fileVersion=$null}
+}
+$manifest|ConvertTo-Json -Depth 6|Set-Content -LiteralPath $imageManifest -Encoding utf8
 function Invoke-Build([string[]]$Arguments) {
     & dotnet @Arguments -m:1 -nodeReuse:false -p:BuildInParallel=false -p:UseSharedCompilation=false
     if ($LASTEXITCODE -ne 0) { throw 'Cloud installer build failed.' }
@@ -68,12 +81,14 @@ $release=Join-Path $out 'release'
 New-Item -ItemType Directory -Path $release | Out-Null
 $final=Join-Path $release "PlatformConnector-$Version.exe"
 Copy-Item -LiteralPath $exe -Destination $final
+Copy-Item -LiteralPath $imageManifest -Destination (Join-Path $release 'desktop-image-manifest.json')
 if ((Get-AuthenticodeSignature -LiteralPath $final).Status -ne 'NotSigned' -or
     (Get-AuthenticodeSignature -LiteralPath $msis[0].FullName).Status -ne 'NotSigned') { throw 'Unsigned candidate contains an unexpected signature state.' }
 @{schemaVersion=1;version=$Version;sourceSha=$env:GITHUB_SHA;sourceRun=$env:GITHUB_RUN_ID;
     fileName=[IO.Path]::GetFileName($final);bytes=(Get-Item $final).Length;sha256=(Get-FileHash $final).Hash.ToLowerInvariant();
     artifactKind='unsigned-cloud-candidate';authenticodeStatus=[string](Get-AuthenticodeSignature -LiteralPath $final).Status;
     freshInstallation=$true;legacyPayloads=$false;legacyImport=$false;blenderIncluded=$false;
+    sdkVersion='8.0.426';runtimeVersion='8.0.32';desktopImageManifestSha256=(Get-FileHash -LiteralPath $imageManifest).Hash.ToLowerInvariant();
     netBirdSha256=(Get-FileHash $NetBirdMsiPath).Hash.ToLowerInvariant();webView2Sha256=(Get-FileHash $WebView2InstallerPath).Hash.ToLowerInvariant()} |
     ConvertTo-Json | Set-Content -LiteralPath (Join-Path $release 'release.json') -Encoding utf8
 Write-Host "CLEAN_RELEASE_EXE=$final"

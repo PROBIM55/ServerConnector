@@ -362,21 +362,43 @@ public sealed class CommonSmbAccessService : IDisposable
             throw Error("smb_profile_missing", "An applied device access profile is required.");
         var now = _time.GetUtcNow();
         ValidateProfile(profile, now);
-        var overlay = await GetLiveReadyOverlayAsync(cancellationToken).ConfigureAwait(false);
+        NetworkOverlaySnapshot overlay;
+        HttpResponseMessage response;
+        if (_transport is IOverlayAwareConnectorRequestTransport liveTransport)
+        {
+            // The real SMB request already obtains a fresh, bound local route.
+            // Do not open a second health route solely to obtain the same evidence.
+            var result = await liveTransport.SendWithOverlayAsync(
+                HttpMethod.Get, "smb/access", body: null, EmptyHeaders, cancellationToken).ConfigureAwait(false);
+            response = result.Response;
+            try { overlay = NormalizeReadyOverlay(result.Overlay); }
+            catch
+            {
+                response.Dispose();
+                SignalRouteInvalidation();
+                throw;
+            }
+        }
+        else
+        {
+            overlay = await GetLiveReadyOverlayAsync(cancellationToken).ConfigureAwait(false);
+            response = await _transport.SendAsync(
+                HttpMethod.Get, "smb/access", body: null, EmptyHeaders, cancellationToken).ConfigureAwait(false);
+        }
+        using (response)
+        {
+            if (response.StatusCode != HttpStatusCode.OK)
+                throw Error(response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden
+                    ? "smb_access_denied"
+                    : "smb_access_unavailable", "The SMB access service did not issue access.");
 
-        using var response = await _transport.SendAsync(
-            HttpMethod.Get, "smb/access", body: null, EmptyHeaders, cancellationToken).ConfigureAwait(false);
-        if (response.StatusCode != HttpStatusCode.OK)
-            throw Error(response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden
-                ? "smb_access_denied"
-                : "smb_access_unavailable", "The SMB access service did not issue access.");
-
-        var receipt = await ReadBoundedAsync<ConnectorSmbAccess>(response, cancellationToken).ConfigureAwait(false) ??
-            throw Error("smb_receipt_invalid", "The SMB access response is empty.");
-        var validated = ValidateReceipt(receipt, profile, overlay, now);
-        _authorization = validated;
-        await PublishFoldersAsync(validated, admission, cancellationToken).ConfigureAwait(false);
-        return validated;
+            var receipt = await ReadBoundedAsync<ConnectorSmbAccess>(response, cancellationToken).ConfigureAwait(false) ??
+                throw Error("smb_receipt_invalid", "The SMB access response is empty.");
+            var validated = ValidateReceipt(receipt, profile, overlay, _time.GetUtcNow());
+            _authorization = validated;
+            await PublishFoldersAsync(validated, admission, cancellationToken).ConfigureAwait(false);
+            return validated;
+        }
     }
 
     private ValidatedAccess ValidateReceipt(
@@ -454,17 +476,7 @@ public sealed class CommonSmbAccessService : IDisposable
         try
         {
             var overlay = await _port.GetLiveOverlayAsync(cancellationToken).ConfigureAwait(false);
-            if (overlay.Status != NetworkServiceStatus.Ready || !overlay.StartupCheckPassed ||
-                !overlay.ManagementConnected || !overlay.SignalConnected ||
-                overlay.ManagementUri is null || overlay.AssignedInternalAddresses is null)
-                throw Error("smb_overlay_not_ready", "The managed overlay is not ready.");
-            var addresses = overlay.AssignedInternalAddresses
-                .Where(IsPrivateOverlayIpv4)
-                .Distinct()
-                .ToArray();
-            if (addresses.Length == 0)
-                throw Error("smb_overlay_not_ready", "The managed overlay has no private IPv4 address.");
-            return overlay with { AssignedInternalAddresses = Array.AsReadOnly(addresses) };
+            return NormalizeReadyOverlay(overlay);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
         catch (CommonSmbAccessException)
@@ -477,6 +489,18 @@ public sealed class CommonSmbAccessService : IDisposable
             SignalRouteInvalidation();
             throw Error("smb_overlay_unavailable", "The live managed overlay state could not be verified.", exception);
         }
+    }
+
+    private static NetworkOverlaySnapshot NormalizeReadyOverlay(NetworkOverlaySnapshot overlay)
+    {
+        if (overlay.Status != NetworkServiceStatus.Ready || !overlay.StartupCheckPassed ||
+            !overlay.ManagementConnected || !overlay.SignalConnected ||
+            overlay.ManagementUri is null || overlay.AssignedInternalAddresses is null)
+            throw Error("smb_overlay_not_ready", "The managed overlay is not ready.");
+        var addresses = overlay.AssignedInternalAddresses.Where(IsPrivateOverlayIpv4).Distinct().ToArray();
+        if (addresses.Length == 0)
+            throw Error("smb_overlay_not_ready", "The managed overlay has no private IPv4 address.");
+        return overlay with { AssignedInternalAddresses = Array.AsReadOnly(addresses) };
     }
 
     private async Task MountCoreAsync(
@@ -750,11 +774,13 @@ public sealed class CommonSmbAccessService : IDisposable
             throw Error("smb_unc_invalid", "The SMB target must be a fixed UNC share root.");
         var parts = value[2..].Split('\\');
         if (parts.Length != 2 || !IPAddress.TryParse(parts[0], out var address) ||
-            address.AddressFamily != AddressFamily.InterNetwork || !IsPrivateOverlayIpv4(address) ||
+            address.AddressFamily != AddressFamily.InterNetwork || IPAddress.IsLoopback(address) ||
+            address.GetAddressBytes()[0] is 0 or >= 224 ||
+            address.GetAddressBytes()[0] == 169 && address.GetAddressBytes()[1] == 254 ||
             string.IsNullOrWhiteSpace(parts[1]) || parts[1].Length > 80 ||
             parts[1] is "." or ".." || parts[1].Any(char.IsControl) ||
             parts[1].IndexOfAny(['/', ':', '$']) >= 0 || ReservedShareNames.Contains(parts[1]))
-            throw Error("smb_unc_invalid", "The SMB target must use a literal private IPv4 address and one safe share name.");
+            throw Error("smb_unc_invalid", "The SMB target must use a literal unicast IPv4 address and one safe share name.");
         return (address, parts[1], $@"\\{address}\{parts[1]}");
     }
 

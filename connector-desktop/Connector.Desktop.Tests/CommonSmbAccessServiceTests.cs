@@ -16,6 +16,69 @@ public sealed class CommonSmbAccessServiceTests
 {
     private static readonly DateTimeOffset Now = new(2026, 10, 2, 12, 0, 0, TimeSpan.Zero);
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Routed_compatibility_unc_still_requires_the_authorized_native_overlay_route(bool routeAllowed)
+    {
+        using var fixture = new Fixture(destinationAllowed: address => address.Equals(IPAddress.Parse("62.113.36.107")));
+        fixture.Receipt = fixture.Receipt with
+        {
+            Resources = [fixture.Receipt.Resources[0] with { ShareUnc = @"\\62.113.36.107\BIM_Models" }]
+        };
+        fixture.Port.RouteAllowed = routeAllowed;
+        if (routeAllowed)
+        {
+            await fixture.Service.RefreshAndMountAsync();
+            Assert.Equal(@"\\62.113.36.107\BIM_Models", Assert.Single(fixture.Port.Mounts).ShareUnc);
+        }
+        else
+        {
+            await Assert.ThrowsAsync<CommonSmbAccessException>(() => fixture.Service.RefreshAndMountAsync());
+            Assert.Empty(fixture.Port.Mounts);
+        }
+    }
+
+    [Fact]
+    public async Task Public_unc_outside_the_fixed_administrator_policy_is_rejected()
+    {
+        using var fixture = new Fixture();
+        fixture.Receipt = fixture.Receipt with
+        {
+            Resources = [fixture.Receipt.Resources[0] with { ShareUnc = @"\\8.8.8.8\Projects" }]
+        };
+        var error = await Assert.ThrowsAsync<CommonSmbAccessException>(() => fixture.Service.RefreshAndMountAsync());
+        Assert.Equal("smb_destination_denied", error.Code);
+        Assert.Empty(fixture.Port.Mounts);
+    }
+
+    [Fact]
+    public async Task Refresh_uses_local_overlay_evidence_from_the_same_smb_request()
+    {
+        using var fixture = new Fixture(overlayAwareTransport: true);
+        fixture.Port.LiveOverlay = () => throw new InvalidOperationException("No separate health route is permitted.");
+
+        var folders = await fixture.Service.RefreshAndMountAsync();
+
+        Assert.Single(folders);
+        Assert.Equal(1, fixture.Transport.Calls);
+        Assert.Equal(0, fixture.Port.LiveOverlayReads);
+        Assert.Single(fixture.Port.Mounts);
+    }
+
+    [Fact]
+    public async Task Refresh_rejects_nonready_local_evidence_without_mounting()
+    {
+        using var fixture = new Fixture(overlayAwareTransport: true);
+        fixture.Overlay = fixture.Overlay! with { SignalConnected = false };
+
+        var error = await Assert.ThrowsAsync<CommonSmbAccessException>(() => fixture.Service.RefreshAndMountAsync());
+
+        Assert.Equal("smb_overlay_not_ready", error.Code);
+        Assert.Empty(fixture.Port.Mounts);
+        Assert.False(fixture.Service.IsAuthorizationAdmissionOpen);
+    }
+
     [Fact]
     public async Task Refresh_rejects_unapplied_profile_before_http_or_mapping()
     {
@@ -88,11 +151,10 @@ public sealed class CommonSmbAccessServiceTests
 
     [Theory]
     [InlineData("\\\\files.internal\\Projects")]
-    [InlineData("\\\\8.8.8.8\\Projects")]
     [InlineData("\\\\100.64.1.20\\Projects\\Child")]
     [InlineData("\\\\100.64.1.20\\admin$")]
     [InlineData("\\\\127.0.0.1\\Projects")]
-    public async Task Refresh_rejects_nonliteral_public_nested_or_reserved_unc(string unc)
+    public async Task Refresh_rejects_nonliteral_nested_or_reserved_unc(string unc)
     {
         var fixture = new Fixture();
         fixture.Receipt = fixture.Receipt with
@@ -614,6 +676,25 @@ public sealed class CommonSmbAccessServiceTests
     }
 
     [Fact]
+    public async Task Recovery_profile_identity_changed_by_final_probe_cannot_open_admission()
+    {
+        using var fixture = new Fixture();
+        var session = new CommonConnectionActivation();
+        session.BeginSession(_ => { });
+        fixture.Service.InvalidateAuthorization();
+        var original = new CommonRecoveryIdentity("device-a", "user-a", "company-a");
+        var attempt = new CommonRecoveryAttempt(1, original, default);
+        foreach (var replacement in new[] { original with { UserId = "user-b" }, original with { CompanyId = "company-b" } })
+        {
+            var current = original;
+            await Assert.ThrowsAsync<InvalidOperationException>(() => session.ActivateAsync(fixture.Service,
+                _ => { current = replacement; return Task.CompletedTask; }, () => true, default,
+                () => CommonConnectionRecovery.RequireIdentity(attempt, current)));
+            Assert.False(fixture.Service.IsAuthorizationAdmissionOpen);
+        }
+    }
+
+    [Fact]
     public async Task Route_change_during_final_proof_requires_a_second_fresh_proof()
     {
         using var fixture = new Fixture();
@@ -740,13 +821,16 @@ public sealed class CommonSmbAccessServiceTests
 
         public Fixture(
             Func<IPAddress, bool>? destinationAllowed = null,
-            Func<TimeSpan, CancellationToken, Task>? delay = null)
+            Func<TimeSpan, CancellationToken, Task>? delay = null,
+            bool overlayAwareTransport = false)
         {
             _destinationAllowed = destinationAllowed ?? (address => address.Equals(IPAddress.Parse("100.64.1.20")));
             Profile = CreateProfile();
             Overlay = CreateOverlay();
             Receipt = CreateReceipt();
-            Transport = new FakeTransport(() => Receipt);
+            Transport = overlayAwareTransport
+                ? new OverlayTransport(() => Receipt, () => Overlay!)
+                : new FakeTransport(() => Receipt);
             Port = new FakePort();
             Port.LiveOverlay = () => Overlay;
             Service = new CommonSmbAccessService(
@@ -805,7 +889,7 @@ public sealed class CommonSmbAccessServiceTests
         public override DateTimeOffset GetUtcNow() => now;
     }
 
-    private sealed class FakeTransport(Func<ConnectorSmbAccess> receipt) : ICommonConnectorRequestTransport
+    private class FakeTransport(Func<ConnectorSmbAccess> receipt) : ICommonConnectorRequestTransport
     {
         public int Calls => Requests.Count;
         public List<Request> Requests { get; } = [];
@@ -832,6 +916,14 @@ public sealed class CommonSmbAccessServiceTests
             string RelativeUri,
             object? Body,
             IReadOnlyDictionary<string, string> Headers);
+    }
+
+    private sealed class OverlayTransport(Func<ConnectorSmbAccess> receipt, Func<NetworkOverlaySnapshot> overlay)
+        : FakeTransport(receipt), IOverlayAwareConnectorRequestTransport
+    {
+        public async Task<ProtectedConnectorResponse> SendWithOverlayAsync(HttpMethod method, string relativeUri,
+            object? body, IReadOnlyDictionary<string, string> managedHeaders, CancellationToken cancellationToken)
+            => new(await SendAsync(method, relativeUri, body, managedHeaders, cancellationToken), overlay());
     }
 
     private sealed class FakePort : IWindowsSmbMappingPort

@@ -4,10 +4,11 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <PackageId>Connector.Access.Smb</PackageId>
-    <Version>0.2.9</Version>
+    <Version>0.2.12</Version>
     <Authors>Structura</Authors>
   </PropertyGroup>
   <ItemGroup>
+    <InternalsVisibleTo Include="Connector.Access.Smb.Tests" />
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <ProjectReference Include="..\Connector.Access\Connector.Access.csproj" />
     <ProjectReference Include="..\Connector.Access.Contracts\Connector.Access.Contracts.csproj" />

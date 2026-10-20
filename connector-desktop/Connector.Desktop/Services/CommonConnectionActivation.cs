@@ -27,7 +27,7 @@ internal sealed class CommonConnectionActivation
 
     public async Task<bool> ActivateAsync(CommonSmbAccessService folders,
         Func<CancellationToken, Task> validateRoute, Func<bool> isReady,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken, Action? validateIdentity = null)
     {
         long generation;
         lock (_sync) generation = _generation;
@@ -45,6 +45,7 @@ internal sealed class CommonConnectionActivation
                 {
                     cancellationToken.ThrowIfCancellationRequested();
                     if (generation != _generation || !isReady()) return false;
+                    validateIdentity?.Invoke();
                     folders.EnableAuthorization(routeEpoch);
                     _activeRouteEpoch = routeEpoch;
                     _active = true;

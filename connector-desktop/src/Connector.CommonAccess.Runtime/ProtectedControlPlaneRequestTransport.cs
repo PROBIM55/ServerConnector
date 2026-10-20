@@ -8,12 +8,16 @@ namespace Connector.CommonAccess.Runtime;
 /// <summary>Bounded requests through the already authenticated private control-plane route.</summary>
 public sealed class ProtectedControlPlaneRequestTransport(
     Func<string, string, CancellationToken, ValueTask<ProtectedServiceRoute>> openRoute)
-    : ICommonConnectorRequestTransport
+    : ICommonConnectorRequestTransport, IOverlayAwareConnectorRequestTransport
 {
     private const int MaximumBodyBytes = 2 * 1024 * 1024;
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     public async Task<HttpResponseMessage> SendAsync(HttpMethod method, string relativeUri, object? body,
+        IReadOnlyDictionary<string, string> managedHeaders, CancellationToken cancellationToken)
+        => (await SendWithOverlayAsync(method, relativeUri, body, managedHeaders, cancellationToken).ConfigureAwait(false)).Response;
+
+    public async Task<ProtectedConnectorResponse> SendWithOverlayAsync(HttpMethod method, string relativeUri, object? body,
         IReadOnlyDictionary<string, string> managedHeaders, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(openRoute);
@@ -47,6 +51,6 @@ public sealed class ProtectedControlPlaneRequestTransport(
         var detached = new HttpResponseMessage(response.StatusCode) { Content = new ByteArrayContent(buffer.ToArray()) };
         foreach (var header in response.Content.Headers)
             detached.Content.Headers.TryAddWithoutValidation(header.Key, header.Value);
-        return detached;
+        return new ProtectedConnectorResponse(detached, route.Overlay);
     }
 }

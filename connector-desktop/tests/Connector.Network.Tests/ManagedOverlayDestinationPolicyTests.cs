@@ -6,6 +6,25 @@ namespace Connector.Network.Tests;
 public sealed class ManagedOverlayDestinationPolicyTests
 {
     [Fact]
+    public void Routed_compatibility_address_requires_explicit_exact_selection()
+    {
+        var policy = new ManagedOverlayDestinationPolicy(["100.90.1.8"], ["62.113.36.107"]);
+        Assert.True(policy.Contains(IPAddress.Parse("62.113.36.107")));
+        Assert.False(policy.Contains(IPAddress.Parse("62.113.36.108")));
+        Assert.False(policy.Contains(IPAddress.Parse("8.8.8.8")));
+    }
+
+    [Theory]
+    [InlineData("0.0.0.0")]
+    [InlineData("127.0.0.1")]
+    [InlineData("169.254.1.2")]
+    [InlineData("224.0.0.1")]
+    [InlineData("62.113.36.0/24")]
+    [InlineData("server.example")]
+    public void Routed_destinations_reject_special_addresses_ranges_and_names(string value)
+        => Assert.Throws<ArgumentException>(() => new ManagedOverlayDestinationPolicy([], [value]));
+
+    [Fact]
     public void ExactManagedPeerDoesNotAllowOtherPrivateOrPublicAddresses()
     {
         var policy = new ManagedOverlayDestinationPolicy(["100.90.1.8"]);

@@ -76,6 +76,16 @@ public interface IProtectedServiceProbe
     ValueTask<bool> IsOnlineAsync(HttpClient client, Uri healthUri, CancellationToken cancellationToken);
 }
 
+// Optional port for callers that need local route evidence from the same
+// authenticated request. Metadata never comes from response headers or a server body.
+public sealed record ProtectedConnectorResponse(HttpResponseMessage Response, NetworkOverlaySnapshot Overlay);
+
+public interface IOverlayAwareConnectorRequestTransport
+{
+    Task<ProtectedConnectorResponse> SendWithOverlayAsync(HttpMethod method, string relativeUri, object? body,
+        IReadOnlyDictionary<string, string> managedHeaders, CancellationToken cancellationToken);
+}
+
 public interface IProtectedServiceNetworkGate
 {
     ValueTask<ProtectedServiceRoute> ResolveAndProbeAsync(

@@ -75,6 +75,9 @@ public sealed class SmbProviderOptions
     public TimeSpan RequestTimeout { get; init; } = TimeSpan.FromSeconds(30);
     public TimeSpan AccessReceiptLifetime { get; init; } = TimeSpan.FromMinutes(2);
     public IReadOnlyList<SmbResourceBinding> ResourceBindings { get; init; } = [];
+    // Explicit fixed compatibility addresses routed through the managed VPN.
+    // The client must still prove its OS route uses its authorized overlay source.
+    public IReadOnlyList<string> RoutedDestinationAddresses { get; init; } = [];
 
     internal ValidatedSmbProviderOptions Validate(bool requireCertificate = true)
     {
@@ -108,9 +111,21 @@ public sealed class SmbProviderOptions
             throw new ArgumentOutOfRangeException(nameof(RequestTimeout));
         if (AccessReceiptLifetime <= TimeSpan.Zero || AccessReceiptLifetime > TimeSpan.FromMinutes(5))
             throw new ArgumentOutOfRangeException(nameof(AccessReceiptLifetime));
+        if (RoutedDestinationAddresses.Count > 16)
+            throw new ArgumentException("Too many routed SMB destinations.");
+        var routed = RoutedDestinationAddresses.Select(value =>
+        {
+            if (!IPAddress.TryParse(value, out var address) || address.ToString() != value ||
+                address.AddressFamily != System.Net.Sockets.AddressFamily.InterNetwork || IPAddress.IsLoopback(address))
+                throw new ArgumentException("A routed SMB destination must be one canonical IPv4 address.");
+            var bytes = address.GetAddressBytes();
+            if (bytes[0] is 0 or >= 224 || bytes[0] == 169 && bytes[1] == 254)
+                throw new ArgumentException("A routed SMB destination must be unicast.");
+            return address;
+        }).ToHashSet();
         var bindings = ResourceBindings.Select(binding => new ValidatedSmbResourceBinding(
             Required(binding.ResourceId, 256), Required(binding.ResourceKind, 128), Required(binding.HelperResourceId, 256),
-            ValidateClientShareUnc(binding.ClientShareUnc))).ToArray();
+            ValidateClientShareUnc(binding.ClientShareUnc, routed))).ToArray();
         if (bindings.Length == 0 || bindings.Select(binding => (binding.ResourceKind, binding.ResourceId)).Distinct().Count() != bindings.Length ||
             bindings.Select(binding => binding.HelperResourceId).Distinct(StringComparer.Ordinal).Count() != bindings.Length ||
             bindings.Select(binding => binding.ClientShareUnc).Distinct(StringComparer.OrdinalIgnoreCase).Count() != bindings.Length)
@@ -124,14 +139,14 @@ public sealed class SmbProviderOptions
         !string.IsNullOrWhiteSpace(value) && value.Length <= maximum ? value.Trim() :
         throw new ArgumentException("SMB resource binding contains an invalid identifier.");
 
-    private static string ValidateClientShareUnc(string value)
+    private static string ValidateClientShareUnc(string value, IReadOnlySet<IPAddress> routed)
     {
         if (string.IsNullOrWhiteSpace(value) || value.Length > 512 || !value.StartsWith(@"\\", StringComparison.Ordinal))
             throw new ArgumentException("SMB client share must be a fixed UNC root.");
         var parts = value[2..].Split('\\', StringSplitOptions.RemoveEmptyEntries);
         if (parts.Length != 2 || !IPAddress.TryParse(parts[0], out var address) ||
-            !IsPrivate(address) || parts[1] is "." or ".." || parts[1].IndexOfAny(['/', ':']) >= 0)
-            throw new ArgumentException("SMB client share must use a literal private overlay IP and a single share name.");
+            !(IsPrivate(address) || routed.Contains(address)) || parts[1] is "." or ".." || parts[1].IndexOfAny(['/', ':']) >= 0)
+            throw new ArgumentException("SMB client share must use a private overlay IP or an explicitly routed destination and a single share name.");
         return $@"\\{address}\{parts[1]}";
     }
 

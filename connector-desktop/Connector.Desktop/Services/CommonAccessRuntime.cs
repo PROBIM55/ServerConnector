@@ -11,13 +11,13 @@ namespace Connector.Desktop.Services;
 
 // Deployment configuration belongs to the machine-protected admin bundle,
 // never the per-user app or WebView. Enrollment credentials remain separate.
-public sealed class CommonAccessRuntime : ICommonConnectorRequestTransport
+public sealed class CommonAccessRuntime : ICommonConnectorRequestTransport, IOverlayAwareConnectorRequestTransport
 {
     private readonly CommonConnectorConnectionCoordinator? _coordinator;
     private readonly IConnectorEnrollmentClient? _enrollmentClient;
     private readonly INetworkOverlayClient? _overlayClient;
     private readonly IProtectedServiceNetworkGate? _protectedNetworkGate;
-    private readonly ICommonConnectorRequestTransport _requestTransport;
+    private readonly ProtectedControlPlaneRequestTransport _requestTransport;
     private readonly string _statePath;
     private readonly Uri? _controlPlaneBaseUri;
     private readonly Uri? _netBirdManagementUri;
@@ -220,6 +220,10 @@ public sealed class CommonAccessRuntime : ICommonConnectorRequestTransport
     public Task<HttpResponseMessage> SendAsync(HttpMethod method, string relativeUri, object? body,
         IReadOnlyDictionary<string, string> managedHeaders, CancellationToken cancellationToken)
         => _requestTransport.SendAsync(method, relativeUri, body, managedHeaders, cancellationToken);
+
+    public Task<ProtectedConnectorResponse> SendWithOverlayAsync(HttpMethod method, string relativeUri, object? body,
+        IReadOnlyDictionary<string, string> managedHeaders, CancellationToken cancellationToken)
+        => _requestTransport.SendWithOverlayAsync(method, relativeUri, body, managedHeaders, cancellationToken);
 
     private CommonConnectorConnectionCoordinator RequireCoordinator() => _coordinator ??
         throw new InvalidOperationException("Подключение нового типа ещё не настроено администратором.");

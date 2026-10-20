@@ -14,7 +14,7 @@ jobs:
   build-and-install:
     runs-on: windows-latest
     environment: production
-    timeout-minutes: 45
+    timeout-minutes: 60
     defaults:
       run:
         shell: pwsh
@@ -26,13 +26,17 @@ jobs:
       - uses: actions/checkout@v4
         with: {persist-credentials: false}
       - uses: actions/setup-dotnet@v4
-        with: {dotnet-version: '8.0.x'}
+        with: {dotnet-version: '8.0.426'}
+      - name: Assert exact SDK
+        run: |
+          if ((dotnet --version) -cne '8.0.426') { throw 'Unexpected release SDK.' }
+          dotnet --info
       - name: Targeted account-session and desktop tests
         run: |
           $ErrorActionPreference='Stop'
           node --test connector-desktop/design/tests/connection-ui.test.cjs
           if ($LASTEXITCODE -ne 0) { throw 'Connection screen regression tests failed.' }
-          foreach ($project in @('connector-access/tests/Connector.Access.Client.Tests','connector-desktop/tests/Connector.Network.Tests','connector-desktop/Connector.Desktop.Tests')) {
+          foreach ($project in @('connector-access/tests/Connector.Access.Client.Tests','connector-access/tests/Connector.Access.Smb.Tests','connector-desktop/tests/Connector.Network.Tests','connector-desktop/Connector.Desktop.Tests')) {
             dotnet test $project -c Release -p:RestoreLockedMode=true -m:1 -nodeReuse:false -p:BuildInParallel=false -p:UseSharedCompilation=false
             if ($LASTEXITCODE -ne 0) { throw "Targeted tests failed: $project" }
           }
@@ -44,10 +48,12 @@ jobs:
           if ($env:RELEASE_VERSION -cnotmatch '^\d+\.\d+\.\d+$' -or [string]::IsNullOrWhiteSpace($env:ACCESS_CONFIGURATION)) { throw 'Missing version or protected access configuration.' }
           $assets=Join-Path $env:RUNNER_TEMP 'clean-assets'; New-Item -ItemType Directory -Path $assets | Out-Null
           $access=Join-Path $assets 'connector-access.json'
-          [IO.File]::WriteAllText($access,$env:ACCESS_CONFIGURATION,[Text.UTF8Encoding]::new($false)); Remove-Item Env:ACCESS_CONFIGURATION
+          $accessConfig=$env:ACCESS_CONFIGURATION|ConvertFrom-Json
+          $accessConfig|Add-Member -Force -NotePropertyName smbRoutedDestinations -NotePropertyValue @('62.113.36.107')
+          [IO.File]::WriteAllText($access,($accessConfig|ConvertTo-Json -Depth 16),[Text.UTF8Encoding]::new($false)); Remove-Item Env:ACCESS_CONFIGURATION
           $client=[Net.Http.HttpClient]::new()
           try {
-            foreach ($asset in @(@($env:IFC_WORKER_URL,'ifc.exe'),@($env:NETBIRD_MSI_URL,'netbird.msi'),@('https://go.microsoft.com/fwlink/?linkid=2124701','webview2.exe'))) {
+            foreach ($asset in @(@($env:IFC_WORKER_URL,'ifc.exe'),@($env:NETBIRD_MSI_URL,'netbird.msi'),@('https://go.microsoft.com/fwlink/?linkid=2124701','webview2.exe'),@('https://github.com/PROBIM55/ServerConnector/releases/download/platform-connector-v1.1.9/PlatformConnector-1.1.9.exe','accepted-1.1.9.exe'))) {
               $uri=[Uri]$asset[0]; if ($uri.Scheme -cne 'https' -or $uri.UserInfo) { throw 'Dependency must use HTTPS.' }
               $response=$client.GetAsync($uri,[Net.Http.HttpCompletionOption]::ResponseHeadersRead).GetAwaiter().GetResult()
               try {
@@ -58,9 +64,12 @@ jobs:
               } finally { $response.Dispose() }
             }
           } finally { $client.Dispose() }
-          & connector-desktop/scripts/build_clean_connector_release.ps1 -Version $env:RELEASE_VERSION -IfcWorkerPath (Join-Path $assets 'ifc.exe') -NetBirdMsiPath (Join-Path $assets 'netbird.msi') -WebView2InstallerPath (Join-Path $assets 'webview2.exe') -ConnectorAccessConfigurationPath $access -OutputDirectory (Join-Path $env:RUNNER_TEMP 'clean-output')
-          dotnet publish connector-desktop/installer/Connector.Clean.InstallProbe -c Release -r win-x64 --self-contained true -o (Join-Path $env:RUNNER_TEMP 'clean-probe') -m:1 -nodeReuse:false -p:BuildInParallel=false -p:UseSharedCompilation=false
+          & connector-desktop/scripts/prepare_accepted_desktop_predecessor.ps1 -SetupExecutable (Join-Path $assets 'accepted-1.1.9.exe') -OutputDirectory (Join-Path $env:RUNNER_TEMP 'accepted-predecessor')
+          & connector-desktop/scripts/build_clean_connector_release.ps1 -Version $env:RELEASE_VERSION -IfcWorkerPath (Join-Path $assets 'ifc.exe') -NetBirdMsiPath (Join-Path $assets 'netbird.msi') -WebView2InstallerPath (Join-Path $assets 'webview2.exe') -ConnectorAccessConfigurationPath $access -AcceptedPredecessorManifest (Join-Path $env:RUNNER_TEMP 'accepted-predecessor/accepted-1.1.9-image.json') -OutputDirectory (Join-Path $env:RUNNER_TEMP 'clean-output')
+          dotnet publish connector-desktop/installer/Connector.Clean.InstallProbe -c Release -r win-x64 --self-contained true -p:RuntimeFrameworkVersion=8.0.32 -p:TargetLatestRuntimePatch=false -o (Join-Path $env:RUNNER_TEMP 'clean-probe') -m:1 -nodeReuse:false -p:BuildInParallel=false -p:UseSharedCompilation=false
           if ($LASTEXITCODE -ne 0) { throw 'Native probe did not compile.' }
+          dotnet pack connector-access/src/Connector.Access.Smb -c Release --no-build -p:PackageVersion=0.2.12 -o (Join-Path $env:RUNNER_TEMP 'smb-packages')
+          if ($LASTEXITCODE -ne 0) { throw 'Reviewed SMB SDK package was not produced.' }
       - name: Retain compiled EXE and probe before native verification
         uses: actions/upload-artifact@v4
         with:
@@ -68,12 +77,20 @@ jobs:
           path: |
             ${{ runner.temp }}/clean-output/release/PlatformConnector-*.exe
             ${{ runner.temp }}/clean-output/release/release.json
+            ${{ runner.temp }}/clean-output/release/desktop-image-manifest.json
             ${{ runner.temp }}/clean-probe/*
           if-no-files-found: error
           retention-days: 7
       - name: Verify final EXE and actual ordinary-user application
         run: |
-          & connector-desktop/scripts/invoke_hosted_clean_install_fixture.ps1 -SetupExecutable (Join-Path $env:RUNNER_TEMP "clean-output/release/PlatformConnector-$env:RELEASE_VERSION.exe") -ProbeExecutable (Join-Path $env:RUNNER_TEMP 'clean-probe/Connector.Clean.InstallProbe.exe') -EvidenceDirectory (Join-Path $env:RUNNER_TEMP 'clean-output/release/evidence')
+          & connector-desktop/scripts/invoke_hosted_clean_install_fixture.ps1 -SetupExecutable (Join-Path $env:RUNNER_TEMP "clean-output/release/PlatformConnector-$env:RELEASE_VERSION.exe") -ProbeExecutable (Join-Path $env:RUNNER_TEMP 'clean-probe/Connector.Clean.InstallProbe.exe') -ImageManifest (Join-Path $env:RUNNER_TEMP 'clean-output/release/desktop-image-manifest.json') -EvidenceDirectory (Join-Path $env:RUNNER_TEMP 'clean-output/release/evidence')
+          & connector-desktop/scripts/invoke_hosted_clean_install_fixture.ps1 -SetupExecutable (Join-Path $env:RUNNER_TEMP "clean-output/release/PlatformConnector-$env:RELEASE_VERSION.exe") -ProbeExecutable (Join-Path $env:RUNNER_TEMP 'clean-probe/Connector.Clean.InstallProbe.exe') -ImageManifest (Join-Path $env:RUNNER_TEMP 'clean-output/release/desktop-image-manifest.json') -PredecessorSetupExecutable (Join-Path $env:RUNNER_TEMP 'clean-assets/accepted-1.1.9.exe') -PredecessorImageManifest (Join-Path $env:RUNNER_TEMP 'accepted-predecessor/accepted-1.1.9-image.json') -EvidenceDirectory (Join-Path $env:RUNNER_TEMP 'clean-output/release/evidence/upgrade119')
+      - name: Retain reviewed SMB SDK
+        uses: actions/upload-artifact@v4
+        with:
+          name: connector-smb-0.2.12
+          path: ${{ runner.temp }}/smb-packages/*.nupkg
+          if-no-files-found: error
       - name: Upload cloud-tested unsigned candidate
         uses: actions/upload-artifact@v4
         with:
@@ -81,7 +98,9 @@ jobs:
           path: |
             ${{ runner.temp }}/clean-output/release/PlatformConnector-*.exe
             ${{ runner.temp }}/clean-output/release/release.json
+            ${{ runner.temp }}/clean-output/release/desktop-image-manifest.json
             ${{ runner.temp }}/clean-output/release/evidence/*.json
+            ${{ runner.temp }}/clean-output/release/evidence/upgrade119/*.json
           if-no-files-found: error
       - name: Upload bounded failure diagnostics
         if: failure()
@@ -91,4 +110,6 @@ jobs:
           path: |
             ${{ runner.temp }}/clean-output/release/evidence/*.log
             ${{ runner.temp }}/clean-output/release/evidence/*.json
+            ${{ runner.temp }}/clean-output/release/evidence/upgrade119/*.log
+            ${{ runner.temp }}/clean-output/release/evidence/upgrade119/*.json
           if-no-files-found: ignore
