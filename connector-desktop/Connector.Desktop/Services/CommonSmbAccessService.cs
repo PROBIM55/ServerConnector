@@ -144,6 +144,31 @@ public sealed class CommonSmbAccessService : IDisposable
     public Task CleanupOwnedMappingsAfterDrainAsync(CancellationToken cancellationToken = default) =>
         CleanupMappingsAfterDrainAsync(onlyUnsafeRoutes: false, routeEpoch: null, cancellationToken);
 
+    /// <summary>Lists authorized folders without creating Windows drives.</summary>
+    public async Task<IReadOnlyList<CommonSmbFolder>> RefreshAvailableAsync(
+        CancellationToken cancellationToken = default)
+    {
+        await _serial.WaitAsync(cancellationToken).ConfigureAwait(false);
+        long? admission = null;
+        try
+        {
+            admission = RequireAuthorizationAdmission();
+            EnsureNoPendingCleanup();
+            await RefreshAuthorizationCoreAsync(admission.Value, cancellationToken).ConfigureAwait(false);
+            return Folders;
+        }
+        catch
+        {
+            ClearAuthorization();
+            throw;
+        }
+        finally
+        {
+            if (admission.HasValue && !IsAuthorizationAdmissionCurrent(admission.Value)) ClearAuthorization();
+            _serial.Release();
+        }
+    }
+
     public async Task<IReadOnlyList<CommonSmbFolder>> RefreshAndMountAsync(
         CancellationToken cancellationToken = default)
     {
@@ -291,8 +316,17 @@ public sealed class CommonSmbAccessService : IDisposable
             EnsureNoPendingCleanup();
             var access = await RefreshAuthorizationCoreAsync(admission.Value, cancellationToken).ConfigureAwait(false);
             var resource = FindResource(access, resourceId);
-            var drive = FindOwnedDrive(resource.ShareUnc) ??
-                throw Error("smb_mapping_not_owned", "The folder is not mounted by this connector process.");
+            var drive = FindOwnedDrive(resource.ShareUnc);
+            if (drive is null)
+            {
+                // Do not create another drive for an earlier-process or foreign
+                // mapping. UNC equality cannot prove its credentials or ownership.
+                for (var letter = 'D'; letter <= 'Z'; letter++)
+                    if (SameTarget(await _port.GetTargetAsync($"{letter}:", cancellationToken).ConfigureAwait(false), resource.ShareUnc))
+                        throw Error("smb_mapping_not_owned", "This folder already has a mapping outside this connector process.");
+                drive = await FindFreeDriveAsync(cancellationToken).ConfigureAwait(false);
+                await MountCoreAsync(access, resource, drive, cancellationToken).ConfigureAwait(false);
+            }
             if (!_ownedMappings.TryGetValue(drive, out var owned) ||
                 !SameTarget(await _port.GetTargetAsync(drive, cancellationToken).ConfigureAwait(false), resource.ShareUnc))
                 throw Error("smb_mapping_changed", "The mounted folder no longer matches the authorized target.");

@@ -167,17 +167,17 @@ public sealed class ConnectorRuntimeServices : IAsyncDisposable
                     }
                     try
                     {
-                        progress?.Invoke("Подключаем общие папки…");
-                        await CommonFolders.RefreshAndMountAsync(cancellationToken);
+                        progress?.Invoke("Проверяем доступные папки…");
+                        await CommonFolders.RefreshAvailableAsync(cancellationToken);
                         SetCommonFolderStatus(CommonAccess.IsReady
-                            ? CommonFolders.Folders.Count == 0 ? "Папки не назначены" : "Папки подключены"
+                            ? CommonFolders.Folders.Count == 0 ? "Папки не назначены" : "Папки доступны"
                             : "Папки не подключены");
                     }
                     catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
                     catch (Exception)
                     {
                         SetCommonFolderStatus(CommonAccess.IsReady
-                            ? "Не удалось подключить папки. Попробуйте подключить диск вручную."
+                            ? "Не удалось получить список папок. Повторите проверку подключения."
                             : "Папки не подключены");
                     }
                 }

@@ -16,6 +16,65 @@ public sealed class CommonSmbAccessServiceTests
 {
     private static readonly DateTimeOffset Now = new(2026, 10, 2, 12, 0, 0, TimeSpan.Zero);
 
+    [Fact]
+    public async Task Listing_ten_company_folders_never_mounts_drives_and_opening_one_reuses_only_that_mapping()
+    {
+        using var fixture = new Fixture();
+        fixture.Receipt = fixture.Receipt with
+        {
+            Resources = Enumerable.Range(0, 10).Select(index => fixture.Receipt.Resources[0] with
+            {
+                ResourceId = $"company-{index}", ShareUnc = $@"\\100.64.1.20\Company{index}"
+            }).ToArray()
+        };
+        fixture.Profile = fixture.Profile with
+        {
+            Resources = fixture.Receipt.Resources.Select(resource => new ResourceGrant(
+                resource.ResourceId, resource.ResourceKind, resource.ProjectId, resource.Permissions)).ToArray()
+        };
+
+        for (var attempt = 0; attempt < 2; attempt++)
+        {
+            var folders = await fixture.Service.RefreshAvailableAsync();
+            Assert.Equal(10, folders.Count);
+            Assert.All(folders, folder => Assert.Null(folder.Drive));
+            Assert.Empty(fixture.Port.Mounts);
+        }
+
+        Assert.Equal("Z:\\", await fixture.Service.GetFolderToOpenAsync("company-7"));
+        Assert.Equal(@"\\100.64.1.20\Company7", Assert.Single(fixture.Port.Mounts).ShareUnc);
+        Assert.Equal("Z:\\", await fixture.Service.GetFolderToOpenAsync("company-7"));
+        Assert.Single(fixture.Port.Mounts);
+        var refreshed = await fixture.Service.RefreshAvailableAsync();
+        Assert.Single(refreshed.Where(folder => folder.Drive is not null));
+        Assert.Equal("company-7", refreshed.Single(folder => folder.Drive is not null).ResourceId);
+    }
+
+    [Fact]
+    public async Task On_demand_open_never_duplicates_or_adopts_an_existing_foreign_target()
+    {
+        using var fixture = new Fixture();
+        fixture.Port.Targets["Q:"] = fixture.Receipt.Resources[0].ShareUnc;
+
+        var error = await Assert.ThrowsAsync<CommonSmbAccessException>(
+            () => fixture.Service.GetFolderToOpenAsync("docs"));
+
+        Assert.Equal("smb_mapping_not_owned", error.Code);
+        Assert.Empty(fixture.Port.Mounts);
+        Assert.Empty(fixture.Port.Unmounts);
+        Assert.Equal(fixture.Receipt.Resources[0].ShareUnc, fixture.Port.Targets["Q:"]);
+    }
+
+    [Fact]
+    public async Task On_demand_open_cannot_mount_a_folder_outside_the_current_grant()
+    {
+        using var fixture = new Fixture();
+        var error = await Assert.ThrowsAsync<CommonSmbAccessException>(
+            () => fixture.Service.GetFolderToOpenAsync("unassigned-company"));
+        Assert.Equal("smb_resource_not_granted", error.Code);
+        Assert.Empty(fixture.Port.Mounts);
+    }
+
     [Theory]
     [InlineData(true)]
     [InlineData(false)]

@@ -27,6 +27,8 @@ $tests=@(
  @{project='connector-desktop/Connector.Desktop.Tests';name='Connector.Desktop.Tests';filter='FullyQualifiedName~CommonConnection|FullyQualifiedName~CommonAccessRuntime|FullyQualifiedName~CommonSmbAccess|FullyQualifiedName~LegacyEncryptedSmb|FullyQualifiedName~ConnectorBrowserSignIn'}
 )
 if((dotnet --version) -cne '8.0.426'){throw 'Unexpected service runtime SDK.'}
+& node --test connector-desktop/design/tests/connection-ui.test.cjs
+if($LASTEXITCODE-ne0){throw 'Connection and folder UI scenarios failed.'}
 $manifestName='dev-runtime-manifest.json'
 if($replay -eq0){
  Remove-Item Env:GH_ARTIFACT_TOKEN

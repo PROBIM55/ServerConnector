@@ -40,3 +40,27 @@ test('ready account retains logout and does not offer another restore',()=>{
   assert.match(html,/<button data-act="signout" >Выйти<\/button>/);
   assert.doesNotMatch(html,/data-act="reconnect"/);
 });
+
+const renderFolders=fields=>{
+  const state={mode:'structura',fields,commonAccessSelected:true,connectionStatus:'Подключено',
+    assignedFolders:[{resourceId:'company-empty',displayName:'Company_empty',drive:null},
+      {resourceId:'brigada-models',displayName:'BIM_Models',drive:null}]};
+  return context.window.CONNECTOR_REVIEW_PAGES({state,
+    button:(text,style,attributes='')=>`<button ${attributes}>${text}</button>`,
+    escape:value=>String(value),notice:()=>'',row:(title,detail,actions='')=>`${title}: ${detail}${actions}`,
+    select:()=>'',fieldKey:id=>id,runtime:true}).folders();
+};
+
+test('multiple company folders require a choice instead of silently opening the first empty folder',()=>{
+  const html=renderFolders({});
+  assert.match(html,/<option value="" selected disabled>Выберите папку<\/option>/);
+  assert.match(html,/<button data-act="models-open" disabled>Открыть папку<\/button>/);
+  assert.doesNotMatch(html,/<option value="company-empty" selected>/);
+});
+
+test('selected BIM folder can be opened on demand before it has a drive',()=>{
+  const html=renderFolders({'share-resource':'brigada-models'});
+  assert.match(html,/<option value="brigada-models" selected>BIM_Models<\/option>/);
+  assert.match(html,/<button data-act="models-open">Открыть папку<\/button>/);
+  assert.match(html,/<button data-act="models-unmount" disabled>Отключить диск<\/button>/);
+});
