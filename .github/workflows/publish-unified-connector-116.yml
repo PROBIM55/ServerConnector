@@ -130,9 +130,9 @@ jobs:
           $releases=gh api "repos/$repository/releases?per_page=100" | ConvertFrom-Json
           if ($LASTEXITCODE -ne 0 -or @($releases | Where-Object tag_name -CEQ 'platform-connector-v1.1.11').Count) { throw 'Release already exists; do not overwrite.' }
           $refs=gh api "repos/$repository/git/matching-refs/tags/platform-connector-v1.1.11" | ConvertFrom-Json
-          if ($LASTEXITCODE -ne 0 -or @($refs | Where-Object ref -CEQ 'refs/tags/platform-connector-v1.1.11').Count) { throw 'Release tag already exists; do not reuse.' }
-          $createdTag=gh api --method POST "repos/$repository/git/refs" -f ref=refs/tags/platform-connector-v1.1.11 -f "sha=$env:RUNTIME_SHA" | ConvertFrom-Json
-          if ($LASTEXITCODE -ne 0 -or $createdTag.object.type -cne 'commit' -or $createdTag.object.sha -cne $env:RUNTIME_SHA) { throw 'Exact release tag creation unresolved.' }
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot verify the precreated exact release tag.' }
+          $exactTag=@($refs | Where-Object ref -CEQ 'refs/tags/platform-connector-v1.1.11')
+          if ($exactTag.Count -ne 1 -or $exactTag[0].object.type -cne 'commit' -or $exactTag[0].object.sha -cne $env:RUNTIME_SHA) { throw 'Precreated release tag does not bind the verified runtime.' }
           $notes=@'
           Платформа Коннектор 1.1.11. Улучшены автоматическое восстановление подключения, выход из учётной записи и защищённое подключение общих папок.
           Новый пакет устанавливает приложение, NetBird и необходимые компоненты. Старые установщики и настройки не переносятся. Blender устанавливается по запросу из коннектора.
