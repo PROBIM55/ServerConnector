@@ -11,9 +11,26 @@ $plain=[Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::
 $secure=ConvertTo-SecureString $plain -AsPlainText -Force
 $user=$null;$mapping=$null;$child=$null;$steps=[Collections.Generic.List[string]]::new();$orphanAcl=$false
 $primaryFailure=$null;$cleanupFailures=[Collections.Generic.List[string]]::new();$proofPassed=$false
+$ownerMarkerVerified=$false
 try{
     if((Get-SmbClientConfiguration).RequireEncryption){throw 'Fixture requires an initially optional encryption client to prove plain rejection.'}
-    $user=New-LocalUser -Name $name -Password $secure -PasswordNeverExpires
+    $runner=Join-Path $PWD.Path 'connector-access/smb-helper/SmbAclReconcile.ps1'
+    $tokens=$null;$errors=$null
+    $ast=[Management.Automation.Language.Parser]::ParseFile($runner,[ref]$tokens,[ref]$errors)
+    if($errors.Count){throw 'Actual helper runner has parser errors.'}
+    $assignment=@($ast.FindAll({param($node) $node -is [Management.Automation.Language.AssignmentStatementAst] -and
+      $node.Left -is [Management.Automation.Language.VariableExpressionAst] -and $node.Left.VariablePath.UserPath -ceq 'ownerMarker'},$true))
+    if($assignment.Count-ne1){throw 'Actual owner-marker assignment is not unique.'}
+    $ownerBytes=[Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes('fixture-device-'+$suffix))
+    . ([scriptblock]::Create($assignment[0].Extent.Text))
+    if($ownerMarker.Length-ne47 -or $ownerMarker-cnotmatch '^cnb:[A-Za-z0-9_-]{43}$'){throw 'Full-digest owner marker exceeds the Windows description contract.'}
+    $oldRejected=$false
+    try{$null=New-LocalUser -Name $name -NoPassword -Disabled -Description ('Structura Connector SMB '+('0'*64)) -WhatIf -ErrorAction Stop}
+    catch{if($_.FullyQualifiedErrorId -notlike 'ParameterArgumentValidationError,*'){throw};$oldRejected=$true}
+    if(!$oldRejected){throw 'Original oversized-description regression was not reproduced.'}
+    $user=New-LocalUser -Name $name -Description $ownerMarker -Password $secure -PasswordNeverExpires
+    if((Get-LocalUser -Name $name).Description-cne$ownerMarker){throw 'Actual Windows owner-marker readback differs.'}
+    $ownerMarkerVerified=$true
     Add-LocalGroupMember -SID 'S-1-5-32-545' -Member $user
     New-Item -ItemType Directory -Path $root | Out-Null
     $dataRoot=Join-Path $root 'data';New-Item -ItemType Directory -Path $dataRoot | Out-Null
@@ -122,4 +139,4 @@ if($cleanupFailures.Count -or $primaryFailure -or !$proofPassed){
 if($cleanupFailures.Count){throw ('Native SMB fixture cleanup incomplete: '+($cleanupFailures.ToArray() -join ','))}
 if($primaryFailure){throw $primaryFailure}
 if(!$proofPassed){throw 'Native SMB proof incomplete.'}
-[IO.File]::WriteAllText([IO.Path]::GetFullPath($EvidencePath),(@{schemaVersion=1;ordinaryUser=$true;mandatoryCreationFlags='0x18';actualPrivacyVerified=$true;incrementalOrphanAceCleanup=$orphanAcl;steps=$steps.ToArray();cleanup='confirmed';productionTouched=$false;utc=[datetime]::UtcNow.ToString('o')}|ConvertTo-Json -Depth 6))
+[IO.File]::WriteAllText([IO.Path]::GetFullPath($EvidencePath),(@{schemaVersion=1;ordinaryUser=$true;mandatoryCreationFlags='0x18';actualPrivacyVerified=$true;incrementalOrphanAceCleanup=$orphanAcl;managedOwnerMarkerNativeReadback=$ownerMarkerVerified;steps=$steps.ToArray();cleanup='confirmed';productionTouched=$false;utc=[datetime]::UtcNow.ToString('o')}|ConvertTo-Json -Depth 6))

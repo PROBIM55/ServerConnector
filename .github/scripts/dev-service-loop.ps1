@@ -63,9 +63,23 @@ if($replay -eq0){
   $firstRuntime=($replay -eq39485812064 -and $producer.head_sha -ceq '684c29c0aff1e78b4ae1b3d278d83b2f0883d29b' -and
    $producerDriver -ceq 'c0b5399b97ef47ab4dbe8438f7e00c0ddbdbfbba' -and $producerWorkflow -ceq '8e6e46c5f0484a6bb1af8833bab33e4fc01064bf')
   if($firstRuntime){
-   $allowedHarness=@($driverPath,$workflowPath,'connector-desktop/scripts/invoke_hosted_encrypted_smb_fixture.ps1','connector-desktop/docs/DEV_SERVICES_RU.md')
+   $runnerPath='connector-access/smb-helper/SmbAclReconcile.ps1'
+   $allowedHarness=@($driverPath,$workflowPath,'connector-desktop/scripts/invoke_hosted_encrypted_smb_fixture.ps1','connector-desktop/docs/DEV_SERVICES_RU.md',$runnerPath)
    $changed=@(& git diff --no-renames --name-only $producer.head_sha $source)
    if($LASTEXITCODE-ne0 -or @($changed|Where-Object{$_ -cnotin $allowedHarness}).Count){throw 'First runtime managed inputs changed.'}
+   if($runnerPath -cin $changed){
+    if((GitBlob $source $runnerPath) -cne 'c5c44aeb60985cb57c76d219742755bdd2d6c329'){throw 'Interpreted runner overlay is not the reviewed blob.'}
+    # The runner is interpreted PowerShell, not a compiled DLL input. Permit
+    # only this exact ownership-marker correction on the immutable first run.
+    $original=(& git show ($producer.head_sha+':'+$runnerPath)) -join "`n"
+    if($LASTEXITCODE-ne0){throw 'Original interpreted runner unavailable.'}
+    $current=(& git show ($source+':'+$runnerPath)) -join "`n"
+    if($LASTEXITCODE-ne0){throw 'Current interpreted runner unavailable.'}
+    $oldMarker='$ownerMarker = ''Structura Connector SMB '' + [BitConverter]::ToString($ownerBytes).Replace(''-'', '''').ToLowerInvariant()'
+    $newMarker='$ownerMarker = ''cnb:'' + [Convert]::ToBase64String($ownerBytes).TrimEnd(''='').Replace(''+'', ''-'').Replace(''/'', ''_'')'
+    if(!$original.Contains($oldMarker) -or $original.IndexOf($oldMarker) -ne $original.LastIndexOf($oldMarker) -or
+       $original.Replace($oldMarker,$newMarker) -cne $current){throw 'Interpreted runner overlay is outside the exact marker fix.'}
+   }
   }elseif($producerDriver -cne $driver -or $producerWorkflow -cne $workflow -or $producerCodeHash -cne $codeHash){throw 'Producer source inputs differ.'}
   $artifacts=($client.GetStringAsync($url+'/artifacts').GetAwaiter().GetResult()|ConvertFrom-Json).artifacts
   $artifact=@($artifacts|Where-Object{$_.name -ceq 'connector-dev-service-runtime' -and !$_.expired})

@@ -332,7 +332,7 @@ try {
     $ownerHasher = [Security.Cryptography.SHA256]::Create()
     try {
         $ownerBytes = $ownerHasher.ComputeHash([Text.Encoding]::UTF8.GetBytes([string]$request.deviceId))
-        $ownerMarker = 'Structura Connector SMB ' + [BitConverter]::ToString($ownerBytes).Replace('-', '').ToLowerInvariant()
+        $ownerMarker = 'cnb:' + [Convert]::ToBase64String($ownerBytes).TrimEnd('=').Replace('+', '-').Replace('/', '_')
     } finally { $ownerHasher.Dispose() }
 
     $user = Get-LocalUser -Name $userName -ErrorAction SilentlyContinue
