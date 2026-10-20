@@ -18,20 +18,22 @@ $inventory=[Collections.Generic.List[object]]::new()
 # Burn containers can name embedded payloads by their IDs rather than their
 # original extensions. Identify MSI compound files by content, then by the
 # package's own UpgradeCode; filenames are not an identity boundary.
-$matches=@(Get-ChildItem -LiteralPath (Join-Path $out 'payload') -Recurse -File -Force|Where-Object {
-    $header=New-Object byte[] 8;$stream=[IO.File]::OpenRead($_.FullName)
+$matchingMsi=[Collections.Generic.List[IO.FileInfo]]::new()
+foreach($payloadFile in Get-ChildItem -LiteralPath (Join-Path $out 'payload') -Recurse -File -Force){
+    $header=New-Object byte[] 8;$stream=[IO.File]::OpenRead($payloadFile.FullName)
     try{$read=$stream.Read($header,0,8)}finally{$stream.Dispose()}
-    if($read -ne 8 -or [BitConverter]::ToString($header) -cne 'D0-CF-11-E0-A1-B1-1A-E1'){return $false}
-    $db=$installer.OpenDatabase($_.FullName,0)
-    $view=$db.OpenView('SELECT `Value` FROM `Property` WHERE `Property` = ''UpgradeCode''');$view.Execute();$row=$view.Fetch();$value=if($row){$row.StringData(1)}else{''};$view.Close()
-    $inventory.Add(@{payload=[IO.Path]::GetRelativePath($out,$_.FullName);bytes=$_.Length;upgradeCode=$value})
-    $value -ieq '{67B43FCD-4FE8-4D29-9F64-6F190FCD6E51}'
-})
+    if($read -ne 8 -or [BitConverter]::ToString($header) -cne 'D0-CF-11-E0-A1-B1-1A-E1'){continue}
+    $db=$installer.OpenDatabase($payloadFile.FullName,0)
+    $view=$db.OpenView('SELECT `Value` FROM `Property` WHERE `Property` = ''UpgradeCode''')
+    [void]$view.Execute();$row=$view.Fetch();$value=if($row){[string]$row.StringData(1)}else{''};[void]$view.Close()
+    $inventory.Add(@{payload=[IO.Path]::GetRelativePath($out,$payloadFile.FullName);bytes=$payloadFile.Length;upgradeCode=$value})
+    if($value -ieq '{67B43FCD-4FE8-4D29-9F64-6F190FCD6E51}'){$matchingMsi.Add($payloadFile)}
+}
 $inventory.ToArray()|ConvertTo-Json -Depth 4|Set-Content -LiteralPath (Join-Path $out 'msi-inventory.json') -Encoding utf8
-if($matches.Count -ne 1){throw 'Expected exactly one accepted application MSI.'}
+if($matchingMsi.Count -ne 1){throw "Expected exactly one accepted application MSI; matched $($matchingMsi.Count)."}
 $applicationMsi=Join-Path $out 'accepted-application.msi'
-Copy-Item -LiteralPath $matches[0].FullName -Destination $applicationMsi
-if((Get-FileHash -LiteralPath $applicationMsi).Hash -cne (Get-FileHash -LiteralPath $matches[0].FullName).Hash){throw 'Extracted application MSI copy changed.'}
+Copy-Item -LiteralPath $matchingMsi[0].FullName -Destination $applicationMsi
+if((Get-FileHash -LiteralPath $applicationMsi).Hash -cne (Get-FileHash -LiteralPath $matchingMsi[0].FullName).Hash){throw 'Extracted application MSI copy changed.'}
 $admin=Join-Path $out 'administrative-image'
 $log=Join-Path $out 'extract.log'
 $process=Start-Process -FilePath msiexec.exe -ArgumentList @('/a',('"'+$applicationMsi+'"'),'/qn',('TARGETDIR="'+$admin+'"'),'/l*v',('"'+$log+'"')) -WindowStyle Hidden -PassThru

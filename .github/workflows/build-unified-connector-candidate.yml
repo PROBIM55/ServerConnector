@@ -45,6 +45,16 @@ jobs:
           dotnet publish connector-desktop/installer/Connector.Smb.NativeProbe -c Release -r win-x64 --self-contained true -p:RuntimeFrameworkVersion=8.0.32 -p:TargetLatestRuntimePatch=false -o (Join-Path $env:RUNNER_TEMP 'smb-probe') -m:1 -nodeReuse:false -p:BuildInParallel=false -p:UseSharedCompilation=false
           if ($LASTEXITCODE -ne 0) { throw 'Native SMB probe did not compile.' }
           & connector-desktop/scripts/invoke_hosted_encrypted_smb_fixture.ps1 -ProbeExecutable (Join-Path $env:RUNNER_TEMP 'smb-probe/Connector.Smb.NativeProbe.exe') -EvidencePath (Join-Path $env:RUNNER_TEMP 'encrypted-smb-native.json')
+          dotnet pack connector-access/src/Connector.Access.Smb -c Release --no-build -p:PackageVersion=0.2.12 -o (Join-Path $env:RUNNER_TEMP 'smb-packages')
+          if ($LASTEXITCODE -ne 0) { throw 'Reviewed SMB SDK package was not produced.' }
+      - name: Retain verified SMB SDK
+        uses: actions/upload-artifact@v4
+        with:
+          name: connector-smb-0.2.12
+          path: |
+            ${{ runner.temp }}/smb-packages/*.nupkg
+            ${{ runner.temp }}/encrypted-smb-native.json
+          if-no-files-found: error
       - name: Download pinned dependencies and build final EXE
         env:
           ACCESS_CONFIGURATION: ${{ secrets.UNIFIED_CONNECTOR_ACCESS_CONFIGURATION_JSON }}
@@ -73,8 +83,6 @@ jobs:
           & connector-desktop/scripts/build_clean_connector_release.ps1 -Version $env:RELEASE_VERSION -IfcWorkerPath (Join-Path $assets 'ifc.exe') -NetBirdMsiPath (Join-Path $assets 'netbird.msi') -WebView2InstallerPath (Join-Path $assets 'webview2.exe') -ConnectorAccessConfigurationPath $access -AcceptedPredecessorManifest (Join-Path $env:RUNNER_TEMP 'accepted-predecessor/accepted-1.1.9-image.json') -OutputDirectory (Join-Path $env:RUNNER_TEMP 'clean-output')
           dotnet publish connector-desktop/installer/Connector.Clean.InstallProbe -c Release -r win-x64 --self-contained true -p:RuntimeFrameworkVersion=8.0.32 -p:TargetLatestRuntimePatch=false -o (Join-Path $env:RUNNER_TEMP 'clean-probe') -m:1 -nodeReuse:false -p:BuildInParallel=false -p:UseSharedCompilation=false
           if ($LASTEXITCODE -ne 0) { throw 'Native probe did not compile.' }
-          dotnet pack connector-access/src/Connector.Access.Smb -c Release --no-build -p:PackageVersion=0.2.12 -o (Join-Path $env:RUNNER_TEMP 'smb-packages')
-          if ($LASTEXITCODE -ne 0) { throw 'Reviewed SMB SDK package was not produced.' }
       - name: Retain compiled EXE and probe before native verification
         uses: actions/upload-artifact@v4
         with:
@@ -90,12 +98,6 @@ jobs:
         run: |
           & connector-desktop/scripts/invoke_hosted_clean_install_fixture.ps1 -SetupExecutable (Join-Path $env:RUNNER_TEMP "clean-output/release/PlatformConnector-$env:RELEASE_VERSION.exe") -ProbeExecutable (Join-Path $env:RUNNER_TEMP 'clean-probe/Connector.Clean.InstallProbe.exe') -ImageManifest (Join-Path $env:RUNNER_TEMP 'clean-output/release/desktop-image-manifest.json') -EvidenceDirectory (Join-Path $env:RUNNER_TEMP 'clean-output/release/evidence')
           & connector-desktop/scripts/invoke_hosted_clean_install_fixture.ps1 -SetupExecutable (Join-Path $env:RUNNER_TEMP "clean-output/release/PlatformConnector-$env:RELEASE_VERSION.exe") -ProbeExecutable (Join-Path $env:RUNNER_TEMP 'clean-probe/Connector.Clean.InstallProbe.exe') -ImageManifest (Join-Path $env:RUNNER_TEMP 'clean-output/release/desktop-image-manifest.json') -PredecessorSetupExecutable (Join-Path $env:RUNNER_TEMP 'clean-assets/accepted-1.1.9.exe') -PredecessorImageManifest (Join-Path $env:RUNNER_TEMP 'accepted-predecessor/accepted-1.1.9-image.json') -EvidenceDirectory (Join-Path $env:RUNNER_TEMP 'clean-output/release/evidence/upgrade119')
-      - name: Retain reviewed SMB SDK
-        uses: actions/upload-artifact@v4
-        with:
-          name: connector-smb-0.2.12
-          path: ${{ runner.temp }}/smb-packages/*.nupkg
-          if-no-files-found: error
       - name: Upload cloud-tested unsigned candidate
         uses: actions/upload-artifact@v4
         with:
@@ -120,4 +122,5 @@ jobs:
             ${{ runner.temp }}/clean-output/release/evidence/upgrade119/*.json
             ${{ runner.temp }}/accepted-predecessor/msi-inventory.json
             ${{ runner.temp }}/accepted-predecessor/extract.log
+            ${{ runner.temp }}/encrypted-smb-native.json
           if-no-files-found: ignore
