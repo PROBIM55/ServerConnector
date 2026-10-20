@@ -74,6 +74,7 @@ try {
     Copy-Item -LiteralPath $result -Destination (Join-Path $EvidenceDirectory 'native.json')
     $proof=Get-Content -LiteralPath $result -Raw | ConvertFrom-Json
     if ($probe.ExitCode -ne 0 -or !$proof.success -or !$proof.actualDesktopWebView -or !$proof.ordinaryUser -or !$proof.protectedNetworkReady -or
+        !$proof.singleInstance -or !$proof.trayReactivation -or
         $proof.credentialCreated -or $proof.legacyImport -or $proof.blenderIncluded) { throw 'The actual installed application failed ordinary-user verification.' }
     $complete=$true
 } catch {

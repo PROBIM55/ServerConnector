@@ -68,6 +68,7 @@ public sealed class ConnectorRuntimeServices : IAsyncDisposable
     public IAgrPartConverter LegacyPartConverter { get; }
     public CommonAccessRuntime CommonAccess { get; }
     public CommonSmbAccessService CommonFolders { get; }
+    public CommonConnectionOperations CommonOperations { get; } = new();
     public string CommonFolderStatus => Volatile.Read(ref _commonFolderStatus);
 
     private async ValueTask<NetworkOverlaySnapshot> ProbeCommonOverlayAsync(CancellationToken cancellationToken)
@@ -79,11 +80,13 @@ public sealed class ConnectorRuntimeServices : IAsyncDisposable
         return route.Overlay;
     }
 
-    public async Task ConnectCommonAsync(string? token, bool reconnect, CancellationToken cancellationToken)
+    public async Task ConnectCommonAsync(string? token, bool reconnect, CancellationToken cancellationToken,
+        Action<string>? progress = null)
     {
         await _commonLifecycle.WaitAsync(cancellationToken);
         try
         {
+            progress?.Invoke("Завершаем текущую работу…");
             await StopForConnectionChangeAsync(cancellationToken);
             // Do not advance the ownership epoch until the old worker is
             // actually drained.  A cancelled queued/takeover request must
@@ -94,10 +97,12 @@ public sealed class ConnectorRuntimeServices : IAsyncDisposable
                 await CommonFolders.ClearAuthorizationAsync(cancellationToken);
                 SetCommonFolderStatus("Папки не подключены");
                 var routeEpoch = CommonFolders.RouteEpoch;
-                await CommonAccess.ConnectAsync(token, reconnect, cancellationToken);
+                await CommonAccess.ConnectAsync(token, reconnect, cancellationToken, progress);
                 if (!CommonAccess.IsReady) return;
                 CommonFolders.EnableAuthorization(routeEpoch);
                 var profile = CommonAccess.Current!.AccessProfile!;
+                cancellationToken.ThrowIfCancellationRequested();
+                progress?.Invoke("Запускаем фоновую работу…");
                 Host.Resume();
                 await Host.StartAsync(new ConnectorRuntimeOptions
                 {
@@ -114,6 +119,7 @@ public sealed class ConnectorRuntimeServices : IAsyncDisposable
                 {
                     try
                     {
+                        progress?.Invoke("Подключаем общие папки…");
                         await CommonFolders.RefreshAndMountAsync(cancellationToken);
                         SetCommonFolderStatus(CommonAccess.IsReady
                             ? CommonFolders.Folders.Count == 0 ? "Папки не назначены" : "Папки подключены"
@@ -127,6 +133,17 @@ public sealed class ConnectorRuntimeServices : IAsyncDisposable
                             : "Папки не подключены");
                     }
                 }
+            }
+            catch
+            {
+                // A completed handshake is not a completed native connection.
+                // Close admission if host startup/folder setup is cancelled or
+                // fails after Ready. Existing invalidation owns safe CAD drain;
+                // never force-stop accepted work here or delete the credential.
+                CommonFolders.InvalidateAuthorization();
+                if (CommonAccess.IsReady)
+                    await CommonAccess.DisconnectAsync(CancellationToken.None);
+                throw;
             }
             finally
             {
@@ -310,6 +327,7 @@ public sealed class ConnectorRuntimeServices : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+        await CommonOperations.DisposeAsync();
         CommonAccess.ReadyInvalidated -= OnCommonAccessInvalidated;
         CommonFolders.RouteInvalidated -= OnCommonRouteInvalidated;
         CommonFolders.InvalidateAuthorization();

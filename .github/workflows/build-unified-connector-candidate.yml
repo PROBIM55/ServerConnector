@@ -30,6 +30,8 @@ jobs:
       - name: Targeted account-session and desktop tests
         run: |
           $ErrorActionPreference='Stop'
+          node --test connector-desktop/design/tests/connection-ui.test.cjs
+          if ($LASTEXITCODE -ne 0) { throw 'Connection screen regression tests failed.' }
           foreach ($project in @('connector-access/tests/Connector.Access.Client.Tests','connector-desktop/tests/Connector.Network.Tests','connector-desktop/Connector.Desktop.Tests')) {
             dotnet test $project -c Release -p:RestoreLockedMode=true -m:1 -nodeReuse:false -p:BuildInParallel=false -p:UseSharedCompilation=false
             if ($LASTEXITCODE -ne 0) { throw "Targeted tests failed: $project" }

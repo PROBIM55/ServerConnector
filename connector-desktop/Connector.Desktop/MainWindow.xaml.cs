@@ -931,7 +931,17 @@ public partial class MainWindow : Window, IShellHost, IConnectorHost
         {
             if (_runtimeServices.CommonAccess.IsSelected)
             {
-                await _runtimeServices.ConnectCommonAsync(null, true, CancellationToken.None);
+                if (!_runtimeServices.CommonAccess.HasStoredCredential) return;
+                var attempt = _runtimeServices.CommonOperations.Start(CommonConnectionOperation.Restore,
+                    (owner, ct) => _runtimeServices.ConnectCommonAsync(null, true, ct, owner.Report),
+                    CancellationToken.None);
+                try { await attempt.Completion; }
+                catch (OperationCanceledException) { /* Explicit sign-in/sign-out took ownership. */ }
+                catch (Exception ex)
+                {
+                    if (_runtimeServices.CommonOperations.IsLatest(attempt.Generation))
+                        AppendLog($"Не удалось восстановить подключение ({ex.GetType().Name}).");
+                }
                 return;
             }
             var token = SettingsService.DecryptToken(_settings.TokenCipherBase64).Trim();
@@ -1725,7 +1735,10 @@ public partial class MainWindow : Window, IShellHost, IConnectorHost
     {
         if (_runtimeServices.CommonAccess.ShouldUse(token))
         {
-            await _runtimeServices.ConnectCommonAsync(token, false, CancellationToken.None);
+            var attempt = _runtimeServices.CommonOperations.Start(CommonConnectionOperation.SignIn,
+                (owner, ct) => _runtimeServices.ConnectCommonAsync(token, false, ct, owner.Report),
+                CancellationToken.None);
+            await attempt.Completion;
             return;
         }
         var serverUrl = FixedServerUrl;

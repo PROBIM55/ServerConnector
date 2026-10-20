@@ -25,7 +25,9 @@ try
     var userRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Platform Connector");
     var deployment = CommonAccessDeploymentFactory.OpenProduction(Path.Combine(userRoot, "Agent"));
     if (!deployment.IsConfigured) throw new InvalidOperationException("Protected production configuration was rejected.");
+    var networkTimer = Stopwatch.StartNew();
     await deployment.Coordinator!.EnsureOverlayAvailableAsync(deployment.NetBirdManagementUri).AsTask().WaitAsync(TimeSpan.FromSeconds(120));
+    var protectedNetworkCheckSeconds = networkTimer.Elapsed.TotalSeconds;
     if (File.Exists(deployment.StateFilePath)) throw new InvalidOperationException("Installer created an account credential.");
     Progress("bundled-runtime-and-shortcuts");
     var git = Path.Combine(appRoot, "tools", "git", "cmd", "git.exe");
@@ -39,6 +41,8 @@ try
         { UseShellExecute = true, WorkingDirectory = appRoot })).WaitAsync(TimeSpan.FromSeconds(30));
     Process? app = null;
     var ready = false;
+    var singleInstance = false;
+    var trayReactivation = false;
     try
     {
         var timer = Stopwatch.StartNew();
@@ -77,6 +81,32 @@ try
             await Task.Delay(500);
         }
         if (!ready) throw new InvalidOperationException("Actual installed WebView did not expose the signed-out login screen.");
+        Progress("single-instance-and-tray-reactivation");
+        var originalWindow = app!.MainWindowHandle;
+        var closePattern = (WindowPattern)AutomationElement.FromHandle(originalWindow).GetCurrentPattern(WindowPattern.Pattern);
+        closePattern.Close(); // Normal Close must hide the owner in its tray.
+        var hiddenBudget = Stopwatch.StartNew();
+        while (Native.IsWindowVisible(originalWindow) && hiddenBudget.Elapsed < TimeSpan.FromSeconds(5))
+            await Task.Delay(100);
+        if (app.HasExited || Native.IsWindowVisible(originalWindow)) throw new InvalidOperationException("The owner did not remain in its tray.");
+        using (var second = Process.Start(new ProcessStartInfo(desktop) { UseShellExecute = false, WorkingDirectory = appRoot })!)
+        {
+            try { await second.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(15)); }
+            catch { if (!second.HasExited) { second.Kill(true); second.WaitForExit(10000); } throw; }
+            if (second.ExitCode != 0 || app.HasExited) throw new InvalidOperationException("The duplicate launch did not exit successfully.");
+        }
+        var activationBudget = Stopwatch.StartNew();
+        while (!Native.IsWindowVisible(originalWindow) && activationBudget.Elapsed < TimeSpan.FromSeconds(5))
+            await Task.Delay(100);
+        trayReactivation = Native.IsWindowVisible(originalWindow);
+        var ownedProcesses = 0;
+        foreach (var candidate in Process.GetProcessesByName("Connector.Desktop"))
+        {
+            using (candidate)
+                if (string.Equals(candidate.MainModule?.FileName, desktop, StringComparison.OrdinalIgnoreCase)) ownedProcesses++;
+        }
+        singleInstance = ownedProcesses == 1;
+        if (!singleInstance || !trayReactivation) throw new InvalidOperationException("Single-instance/tray activation verification failed.");
     }
     finally
     {
@@ -89,7 +119,8 @@ try
     if (File.Exists(deployment.StateFilePath)) throw new InvalidOperationException("Opening the app silently enrolled an account.");
     File.WriteAllText(output, JsonSerializer.Serialize(new { success = true, ordinaryUser = true, actualDesktopWebView = ready,
         shortcuts = true, shortcutLaunched = true, msiProductRegistered = true, shortcutProof = shortcuts,
-        bundledGit = true, protectedNetworkReady = true, tokenRequired = false, credentialCreated = false,
+        bundledGit = true, protectedNetworkReady = true, protectedNetworkCheckSeconds, singleInstance, trayReactivation,
+        tokenRequired = false, credentialCreated = false,
         legacyImport = false, blenderIncluded = false }));
 }
 catch (Exception error)
@@ -100,6 +131,9 @@ catch (Exception error)
 
 internal static class Native
 {
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool IsWindowVisible(IntPtr window);
     internal sealed record ShortcutProof(string Path, string Resolution, uint MsiResult, string IconPath, string ShellTarget);
     internal static Task<T> OnStaAsync<T>(Func<T> action)
     {

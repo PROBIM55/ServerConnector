@@ -257,6 +257,9 @@
     if(typeof snapshot.commonAccessNeedsSignIn==='boolean')state.commonAccessNeedsSignIn=snapshot.commonAccessNeedsSignIn;
     if(typeof snapshot.signInPending==='boolean')state.signInPending=snapshot.signInPending;
     if(typeof snapshot.connectPending==='boolean')state.connectPending=snapshot.connectPending;
+    if(typeof snapshot.signOutPending==='boolean')state.signOutPending=snapshot.signOutPending;
+    if(typeof snapshot.connectionProgress==='string')state.connectionProgress=snapshot.connectionProgress;
+    if(snapshot.commonAccessSelected===true&&snapshot.notice===null)delete state.notices.connect;
     if(Array.isArray(snapshot.assignedFolders))state.assignedFolders=snapshot.assignedFolders.filter(folder=>folder&&typeof folder==='object').map(folder=>({resourceId:String(folder.resourceId??''),displayName:String(folder.displayName??''),drive:typeof folder.drive==='string'?folder.drive:null}));
     if(typeof snapshot.folderStatus==='string')state.folderStatus=snapshot.folderStatus;
     if(snapshot.status&&typeof snapshot.status==='string')state.connectionStatus=snapshot.status;

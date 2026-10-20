@@ -68,7 +68,6 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
     private bool _firstSnapshot = true;
     private bool _disposed;
     private int _browserSignInPending;
-    private int _commonConnectPending;
     private string? _converterSubmissionMode;
     private IReadOnlyList<PlatformAutoCadSession> _cadSessions = Array.Empty<PlatformAutoCadSession>();
 
@@ -89,6 +88,7 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
         _platformTools = platformTools ?? throw new ArgumentNullException(nameof(platformTools));
         _platformConnection = platformConnection ?? runtimeServices.Platform;
         _commonAccess = runtimeServices.CommonAccess;
+        _runtimeServices.CommonOperations.Changed += OnCommonOperationChanged;
         _confirmFolderDisconnect = confirmFolderDisconnect;
         _runtimeServices.Platform.SnapshotChanged += OnPlatformSnapshotChanged;
         _converterWorkspace = converterWorkspace ?? throw new ArgumentNullException(nameof(converterWorkspace));
@@ -205,6 +205,16 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
             ["libraries-version"] = _connectorHost.Settings.TeklaLibrariesInstalledVersion ?? "Не синхронизировано"
         };
 
+        var connectionProgress = _runtimeServices.CommonOperations.Progress;
+        var commonBusy = connectionProgress.Operation is not null;
+        var commonStatus = commonBusy ? connectionProgress.Message : _commonAccess.DisplayStatus;
+        if (notice?.ConnectionGeneration is { } noticeGeneration && noticeGeneration != connectionProgress.Generation)
+            notice = null;
+        if (_commonAccess.IsSelected && commonBusy)
+        {
+            moduleFields["vpn-status"] = commonStatus;
+            moduleFields["agent-status"] = commonStatus;
+        }
         var snapshot = new Dictionary<string, object?>
         {
             ["reset"] = reset,
@@ -220,7 +230,9 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
             ["commonAccessNeedsSignIn"] = _commonAccess.Current?.Status is
                 CommonConnectorConnectionStatus.EnrollmentRequired or CommonConnectorConnectionStatus.Revoked,
             ["signInPending"] = Volatile.Read(ref _browserSignInPending) != 0,
-            ["connectPending"] = Volatile.Read(ref _commonConnectPending) != 0,
+            ["connectPending"] = commonBusy,
+            ["signOutPending"] = connectionProgress.Operation == CommonConnectionOperation.SignOut,
+            ["connectionProgress"] = connectionProgress.Message,
             ["assignedFolders"] = _commonAccess.IsSelected && _commonAccess.HasPermission(mode, "folders", ConnectorPermission.Read)
                 ? _runtimeServices.CommonFolders.Folders : Array.Empty<CommonSmbFolder>(),
             ["folderStatus"] = _runtimeServices.CommonFolderStatus,
@@ -238,13 +250,13 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
             } : null,
             ["updateAvailable"] = _connectorHost.HasPendingUpdate,
             ["agrInstalling"] = _platformTools.IsBusy && _platformTools.InstallAgrCommand.IsRunning,
-            ["status"] = _commonAccess.IsSelected ? _commonAccess.DisplayStatus : _connectorHost.IsConnected ? "Подключено" : "Не подключено",
+            ["status"] = _commonAccess.IsSelected ? commonStatus : _connectorHost.IsConnected ? "Подключено" : "Не подключено",
             ["hasSavedCredential"] = _commonAccess.IsSelected ? _commonAccess.HasStoredCredential : !string.IsNullOrWhiteSpace(_connectorHost.Settings.TokenCipherBase64),
             ["connections"] = new
             {
-                structura = new { status = _commonAccess.IsSelected ? _commonAccess.DisplayStatus : _connectorHost.IsConnected ? "Подключено" : "Не подключено",
+                structura = new { status = _commonAccess.IsSelected ? commonStatus : _connectorHost.IsConnected ? "Подключено" : "Не подключено",
                     hasSavedCredential = _commonAccess.IsSelected ? _commonAccess.HasStoredCredential : !string.IsNullOrWhiteSpace(_connectorHost.Settings.TokenCipherBase64) },
-                platform = new { status = PlatformStatus(), hasSavedCredential = _commonAccess.IsSelected ? _commonAccess.HasStoredCredential : _platformConnection.Connection.HasStoredCredential }
+                platform = new { status = _commonAccess.IsSelected ? commonStatus : PlatformStatus(), hasSavedCredential = _commonAccess.IsSelected ? _commonAccess.HasStoredCredential : _platformConnection.Connection.HasStoredCredential }
             },
             ["cadSessions"] = _cadSessions,
             ["job"] = job,
@@ -274,7 +286,7 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
         switch (request.Command)
         {
             case "signout":
-                StartOperation(() => _runtimeServices.SignOutCommonAsync(cancellationToken), "connect-common", cancellationToken);
+                StartCommonSignOut(cancellationToken);
                 break;
             case "connect":
                 if (_commonAccess.ShouldUse()) StartCommonConnect(null, false, cancellationToken);
@@ -627,41 +639,76 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
     }
 
     private void StartCommonConnect(string? token, bool reconnect, CancellationToken cancellationToken)
-        => StartOperation(async () =>
+        => StartCommonOperation(reconnect ? CommonConnectionOperation.Restore : CommonConnectionOperation.SignIn,
+            async (attempt, ct) =>
         {
-            if (Interlocked.CompareExchange(ref _commonConnectPending, 1, 0) != 0)
-                throw new ConnectorSignInException("Подключение уже выполняется.");
-            PublishSnapshot();
-            try
+            _commonAccess.Select();
+            if (!reconnect)
             {
-                _commonAccess.Select();
-                if (!reconnect)
-                {
-                    Volatile.Write(ref _browserSignInPending, 1);
-                    PublishSnapshot();
-                    try
-                    {
-                        token = await _browserSignIn.SignInAsync(message =>
-                        {
-                            lock (_gate) _notice = new SafeNotice("connect-common", message);
-                            PublishSnapshot();
-                        }, cancellationToken);
-                    }
-                    finally
-                    {
-                        Volatile.Write(ref _browserSignInPending, 0);
-                        PublishSnapshot();
-                    }
-                }
-                if (_connectorHost.IsConnected) await _connectorHost.DisconnectAsync();
-                await _runtimeServices.ConnectCommonAsync(token, reconnect, cancellationToken);
-            }
-            finally
-            {
-                Volatile.Write(ref _commonConnectPending, 0);
+                Volatile.Write(ref _browserSignInPending, 1);
                 PublishSnapshot();
+                try
+                {
+                    token = await _browserSignIn.SignInAsync(attempt.Report, ct);
+                }
+                finally
+                {
+                    Volatile.Write(ref _browserSignInPending, 0);
+                    PublishSnapshot();
+                }
             }
+            ct.ThrowIfCancellationRequested();
+            if (_connectorHost.IsConnected) await _connectorHost.DisconnectAsync();
+            await _runtimeServices.ConnectCommonAsync(token, reconnect, ct, attempt.Report);
         }, "connect-common", cancellationToken);
+
+    private void StartCommonSignOut(CancellationToken cancellationToken)
+        => StartCommonOperation(CommonConnectionOperation.SignOut, async (attempt, ct) =>
+        {
+            if (_commonAccess.HasStoredCredential)
+                await _runtimeServices.SignOutCommonAsync(ct);
+            // Cancelling a browser request before enrollment has no device to revoke.
+        }, "signout", cancellationToken);
+
+    private void StartCommonOperation(CommonConnectionOperation operation,
+        Func<CommonConnectionAttempt, CancellationToken, Task> execute, string name, CancellationToken cancellationToken)
+    {
+        var linked = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token, cancellationToken);
+        CommonConnectionAttempt attempt;
+        try { attempt = _runtimeServices.CommonOperations.Start(operation, execute, linked.Token); }
+        catch { linked.Dispose(); throw; }
+        lock (_gate) _notice = null;
+        PublishSnapshot();
+        var task = ObserveCommonOperationAsync(attempt, name, linked);
+        TrackOperation(task);
+    }
+
+    private async Task ObserveCommonOperationAsync(CommonConnectionAttempt attempt, string name, IDisposable lifetime)
+    {
+        var started = System.Diagnostics.Stopwatch.StartNew();
+        string message;
+        try
+        {
+            await attempt.Completion;
+            message = attempt.Operation == CommonConnectionOperation.SignOut ? "Вы вышли из учётной записи." :
+                _commonAccess.IsReady ? "Подключено." : _commonAccess.DisplayStatus;
+        }
+        catch (OperationCanceledException) when (attempt.Token.IsCancellationRequested) { message = "Действие отменено."; }
+        catch (ConnectorSignInException ex) { message = ex.Message; }
+        catch (Exception ex)
+        {
+            message = attempt.Operation == CommonConnectionOperation.SignOut ?
+                "Выход не завершён. Проверьте соединение и повторите попытку." :
+                _commonAccess.DisplayStatus == "Требуется вход" ? "Войдите через Платформу повторно." :
+                "Не удалось завершить подключение. Повторите попытку.";
+            _connectorHost.Log($"Common connection {attempt.Operation} failed ({ex.GetType().Name}).");
+        }
+        finally { lifetime.Dispose(); }
+        if (_runtimeServices.CommonOperations.IsLatest(attempt.Generation))
+            lock (_gate) _notice = new SafeNotice(name, message, attempt.Generation);
+        _connectorHost.Log($"Common connection {attempt.Operation} finished in {started.Elapsed.TotalSeconds:F1}s.");
+        PublishSnapshot();
+    }
 
     // New enrollment cannot reuse legacy web passwords, SMB credentials or
     // direct HTTP transports. Those adapters require typed resource grants.
@@ -875,6 +922,11 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
         if (_lifetime.IsCancellationRequested) throw new OperationCanceledException(_lifetime.Token);
         lock (_gate) _notice = new SafeNotice(name, "Действие запущено.");
         Task task = ObserveAsync(operation, name);
+        TrackOperation(task);
+    }
+
+    private void TrackOperation(Task task)
+    {
         lock (_gate) _pending.Add(task);
         _ = task.ContinueWith(completed =>
         {
@@ -1035,6 +1087,7 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
 
     private void OnPropertyChanged(object? sender, PropertyChangedEventArgs args) => PublishSnapshot();
     private void OnPlatformSnapshotChanged(ConnectorRuntimeSnapshot snapshot) => PublishSnapshot();
+    private void OnCommonOperationChanged() => PublishSnapshot();
     private void Subscribe(INotifyPropertyChanged? source) { if (source is not null) source.PropertyChanged += OnPropertyChanged; }
     private void Unsubscribe(INotifyPropertyChanged? source) { if (source is not null) source.PropertyChanged -= OnPropertyChanged; }
 
@@ -1055,6 +1108,7 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
         if (_disposed) return;
         _disposed = true;
         _lifetime.Cancel();
+        await _runtimeServices.CommonOperations.DisposeAsync();
         if (_converterWorkspace.CancelCommand.CanExecute(null)) _converterWorkspace.CancelCommand.Execute(null);
         if (_platformTools.CancelCommand.CanExecute(null)) _platformTools.CancelCommand.Execute(null);
 
@@ -1066,6 +1120,7 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
         Unsubscribe(_vpn);
         Unsubscribe(_structura);
         _runtimeServices.Platform.SnapshotChanged -= OnPlatformSnapshotChanged;
+        _runtimeServices.CommonOperations.Changed -= OnCommonOperationChanged;
         foreach (ConverterWorkspaceJob job in _converterWorkspace.Jobs) Unsubscribe(job);
 
         Task[] pending;
@@ -1185,5 +1240,5 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
         }
     }
 
-    private sealed record SafeNotice(string Command, string Message);
+    private sealed record SafeNotice(string Command, string Message, long? ConnectionGeneration = null);
 }

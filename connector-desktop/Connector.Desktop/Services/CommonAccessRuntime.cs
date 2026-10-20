@@ -134,7 +134,8 @@ public sealed class CommonAccessRuntime : ICommonConnectorRequestTransport
             _enrollmentClient, _overlayClient, _protectedNetworkGate, this, _smbDestinations));
     }
 
-    public async Task ConnectAsync(string? token, bool reconnect, CancellationToken cancellationToken)
+    public async Task ConnectAsync(string? token, bool reconnect, CancellationToken cancellationToken,
+        Action<string>? progress = null)
     {
         Select();
         var coordinator = RequireCoordinator();
@@ -145,6 +146,7 @@ public sealed class CommonAccessRuntime : ICommonConnectorRequestTransport
                 // Older machine deployments have no URI pin. They can resume the
                 // server-bound device identity, but a new one-time token is accepted
                 // only while the local daemon is known to be unregistered.
+                progress?.Invoke("Проверяем сетевые компоненты…");
                 await coordinator.EnsureOverlayAvailableAsync(_netBirdManagementUri,
                     allowUnpinnedRegistered: reconnect, cancellationToken: cancellationToken);
                 Volatile.Write(ref _vpnSetupRequired, 0);
@@ -154,6 +156,8 @@ public sealed class CommonAccessRuntime : ICommonConnectorRequestTransport
                 Volatile.Write(ref _vpnSetupRequired, 1);
                 throw;
             }
+            progress?.Invoke(reconnect ? "Восстанавливаем вход и защищённое соединение…" :
+                "Вход подтверждён. Настраиваем защищённое соединение…");
             if (reconnect)
                 await coordinator.ResumeAndConnectAsync(cancellationToken);
             else
@@ -165,6 +169,9 @@ public sealed class CommonAccessRuntime : ICommonConnectorRequestTransport
             // First sign-in schedules provider work asynchronously. Continue with
             // the same durable device; never consume the browser token a second
             // time or claim Ready before all providers have confirmed its grants.
+            if (coordinator.Current.Status is CommonConnectorConnectionStatus.AccessPending or
+                CommonConnectorConnectionStatus.AwaitingVpnAuthorization)
+                progress?.Invoke("Ожидаем подтверждения доступа от сервера…");
             var completed = await CommonConnectorProvisioningWaiter.WaitAsync(coordinator.Current,
                 ct => coordinator.ResumeAndConnectAsync(ct),
                 async ct => { await coordinator.DisconnectAsync(ct); }, cancellationToken);
