@@ -1,4 +1,4 @@
-name: Publish exact cloud-verified Platform Connector 1.1.11
+name: Publish exact cloud-verified Platform Connector 1.1.12
 on:
   workflow_dispatch:
 permissions:
@@ -17,14 +17,16 @@ jobs:
       actions: read
     env:
       GH_TOKEN: ${{ github.token }}
-      VERIFIED_RUN: '39481669515'
+      VERIFIED_RUN: '39506863411'
       VERIFIED_ATTEMPT: '1'
-      VERIFIED_SHA: 'b38baa5f4fa5c86ba88e0a24e823abd86b216283'
-      RUNTIME_SHA: 'b38baa5f4fa5c86ba88e0a24e823abd86b216283'
-      RUNTIME_RUN: '39481669515'
-      ARTIFACT_ID: '12292681211'
-      ARTIFACT_DIGEST: '75dfcd52540ae996e25568bec35c228c0676b045db63e5c07a3e22f2f1ca4b7d'
-      ARTIFACT_SIZE: '416177148'
+      VERIFIED_SHA: '8f3c99b9d4cc10fba9c5f91b496fed4f3ad1588e'
+      RUNTIME_SHA: '8f3c99b9d4cc10fba9c5f91b496fed4f3ad1588e'
+      RUNTIME_RUN: '39506863411'
+      ARTIFACT_ID: '12304641711'
+      ARTIFACT_DIGEST: '30899c29e95a05cd05c200308c2d39d96ce1d32df69dd5073efdce5b3372c389'
+      ARTIFACT_SIZE: '416149466'
+      DRAFT_RELEASE_ID: '418947162'
+      DRAFT_AUTHOR_ID: '223092409'
       VERIFIED_WORKFLOW: '.github/workflows/build-unified-connector-candidate.yml'
     steps:
       - name: Verify original artifact and publish unchanged EXE
@@ -49,13 +51,18 @@ jobs:
           if ($LASTEXITCODE -ne 0 -or $attempt.status -cne 'completed' -or $attempt.conclusion -cne 'success' -or
               $attempt.head_sha -cne $env:VERIFIED_SHA -or $attempt.run_attempt -ne [int]$env:VERIFIED_ATTEMPT) { throw 'Accepted attempt differs.' }
           $jobs=gh api "repos/$repository/actions/runs/$env:VERIFIED_RUN/jobs?per_page=100" | ConvertFrom-Json
-          if ($LASTEXITCODE -ne 0 -or $jobs.total_count -ne 1 -or $jobs.jobs[0].conclusion -cne 'success') { throw 'Accepted job differs.' }
+          $buildJobs=@($jobs.jobs|Where-Object { $_.name -ceq 'build-and-install' })
+          $serviceJobs=@($jobs.jobs|Where-Object { $_.name -ceq 'services' })
+          $metadataJobs=@($jobs.jobs|Where-Object { $_.name -ceq 'package-metadata' })
+          if ($LASTEXITCODE -ne 0 -or $jobs.total_count -ne 3 -or $buildJobs.Count -ne 1 -or
+              $buildJobs[0].conclusion -cne 'success' -or $serviceJobs.Count -ne 1 -or $metadataJobs.Count -ne 1 -or
+              $serviceJobs[0].conclusion -cne 'skipped' -or $metadataJobs[0].conclusion -cne 'skipped') { throw 'Accepted jobs differ.' }
           foreach($stepName in @('Targeted account-session and desktop tests','Verify native encrypted SMB as an ordinary user','Download pinned dependencies and build final EXE','Retain compiled EXE and probe before native verification','Verify final EXE and actual ordinary-user application','Upload cloud-tested unsigned candidate')) {
-            $steps=@($jobs.jobs[0].steps | Where-Object name -CEQ $stepName)
+            $steps=@($buildJobs[0].steps | Where-Object name -CEQ $stepName)
             if ($steps.Count -ne 1 -or $steps[0].conclusion -cne 'success') { throw "Accepted gate differs: $stepName" }
           }
           $artifact=gh api "repos/$repository/actions/artifacts/$env:ARTIFACT_ID" | ConvertFrom-Json
-          if ($LASTEXITCODE -ne 0 -or $artifact.expired -or $artifact.name -cne 'platform-connector-1.1.11-cloud-tested-unsigned' -or
+          if ($LASTEXITCODE -ne 0 -or $artifact.expired -or $artifact.name -cne 'platform-connector-1.1.12-cloud-tested-unsigned' -or
               $artifact.workflow_run.id -ne [long]$env:VERIFIED_RUN -or $artifact.workflow_run.head_sha -cne $env:VERIFIED_SHA -or
               $artifact.digest -cne ('sha256:'+$env:ARTIFACT_DIGEST) -or $artifact.size_in_bytes -ne [long]$env:ARTIFACT_SIZE) { throw 'Verified artifact differs.' }
           $archive=Join-Path $env:RUNNER_TEMP 'accepted-connector.zip'
@@ -66,7 +73,7 @@ jobs:
           # Validate the archive's complete name set before extracting any path.
           $zip=[IO.Compression.ZipFile]::OpenRead($archive)
           try {
-            $expected=@('clean-output/release/PlatformConnector-1.1.11.exe','clean-output/release/release.json','clean-output/release/desktop-image-manifest.json','clean-output/release/evidence/native.json','clean-output/release/evidence/installation.json','clean-output/release/evidence/upgrade119/native.json','clean-output/release/evidence/upgrade119/installation.json','encrypted-smb-native.json')
+            $expected=@('clean-output/release/PlatformConnector-1.1.12.exe','clean-output/release/release.json','clean-output/release/desktop-image-manifest.json','clean-output/release/evidence/native.json','clean-output/release/evidence/installation.json','clean-output/release/evidence/upgrade119/native.json','clean-output/release/evidence/upgrade119/installation.json','encrypted-smb-native.json')
             $names=@($zip.Entries | ForEach-Object { $_.FullName.Replace('\','/') })
             if ($names.Count -ne $expected.Count -or @($names | Select-Object -Unique).Count -ne $expected.Count -or
                 @($names | Where-Object { $_ -cnotin $expected }).Count -ne 0) { throw 'Unexpected artifact entries.' }
@@ -83,9 +90,9 @@ jobs:
           $manifest=Get-Content -LiteralPath (Join-Path $root 'release.json') -Raw | ConvertFrom-Json
           $native=Get-Content -LiteralPath (Join-Path $root 'evidence/native.json') -Raw | ConvertFrom-Json
           $installation=Get-Content -LiteralPath (Join-Path $root 'evidence/installation.json') -Raw | ConvertFrom-Json
-          if ($manifest.schemaVersion -ne 1 -or $manifest.version -cne '1.1.11' -or $manifest.sourceSha -cne $env:RUNTIME_SHA -or
+          if ($manifest.schemaVersion -ne 1 -or $manifest.version -cne '1.1.12' -or $manifest.sourceSha -cne $env:RUNTIME_SHA -or
               [string]$manifest.sourceRun -cne $env:RUNTIME_RUN -or
-              $manifest.fileName -cne 'PlatformConnector-1.1.11.exe' -or $manifest.artifactKind -cne 'unsigned-cloud-candidate' -or
+              $manifest.fileName -cne 'PlatformConnector-1.1.12.exe' -or $manifest.artifactKind -cne 'unsigned-cloud-candidate' -or
               $manifest.authenticodeStatus -cne 'NotSigned' -or $manifest.freshInstallation -isnot [bool] -or
               !$manifest.freshInstallation) { throw 'Fresh package identity differs.' }
           foreach($flag in @('legacyPayloads','legacyImport','blenderIncluded')) {
@@ -121,59 +128,62 @@ jobs:
           foreach($flag in @('tokenRequired','credentialCreated','legacyImport','blenderIncluded')) {
             if ($upgradeNative.$flag -isnot [bool] -or $upgradeNative.$flag) { throw "Upgraded application negative proof differs: $flag" }
           }
-          $exe=Join-Path $root 'PlatformConnector-1.1.11.exe'
+          $exe=Join-Path $root 'PlatformConnector-1.1.12.exe'
           $hash=(Get-FileHash -LiteralPath $exe).Hash.ToLowerInvariant()
           if ($manifest.sha256 -cne $hash -or $manifest.bytes -ne (Get-Item -LiteralPath $exe).Length -or
               (Get-AuthenticodeSignature -LiteralPath $exe).Status -ne 'NotSigned') { throw 'EXE identity differs.' }
           $latest=gh api "repos/$repository/releases/latest" | ConvertFrom-Json
           if ($LASTEXITCODE -ne 0) { throw 'Cannot read existing latest release.' }
-          $releases=gh api "repos/$repository/releases?per_page=100" | ConvertFrom-Json
-          if ($LASTEXITCODE -ne 0 -or @($releases | Where-Object tag_name -CEQ 'platform-connector-v1.1.11').Count) { throw 'Release already exists; do not overwrite.' }
-          $refs=gh api "repos/$repository/git/matching-refs/tags/platform-connector-v1.1.11" | ConvertFrom-Json
-          if ($LASTEXITCODE -ne 0 -or @($refs | Where-Object ref -CEQ 'refs/tags/platform-connector-v1.1.11').Count) { throw 'Release tag already exists; do not reuse.' }
-          $createdTag=gh api --method POST "repos/$repository/git/refs" -f ref=refs/tags/platform-connector-v1.1.11 -f "sha=$env:RUNTIME_SHA" | ConvertFrom-Json
-          if ($LASTEXITCODE -ne 0 -or $createdTag.object.type -cne 'commit' -or $createdTag.object.sha -cne $env:RUNTIME_SHA) { throw 'Exact release tag creation unresolved.' }
+          $release=gh api "repos/$repository/releases/$env:DRAFT_RELEASE_ID" | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0 -or $release.id -ne [long]$env:DRAFT_RELEASE_ID -or
+              $release.author.id -ne [long]$env:DRAFT_AUTHOR_ID -or !$release.draft -or !$release.prerelease -or
+              $release.tag_name -cne 'platform-connector-v1.1.12' -or $release.target_commitish -cne $env:RUNTIME_SHA -or
+              $release.name -cne 'Платформа Коннектор 1.1.12' -or @($release.assets).Count -ne 0) { throw 'Precreated empty draft differs; do not overwrite.' }
+          $refs=gh api "repos/$repository/git/matching-refs/tags/platform-connector-v1.1.12" | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot verify the precreated exact release tag.' }
+          $exactTag=@($refs | Where-Object ref -CEQ 'refs/tags/platform-connector-v1.1.12')
+          if ($exactTag.Count -ne 1 -or $exactTag[0].object.type -cne 'commit' -or $exactTag[0].object.sha -cne $env:RUNTIME_SHA) { throw 'Precreated release tag does not bind the verified runtime.' }
           $notes=@'
-          Платформа Коннектор 1.1.11. Улучшены автоматическое восстановление подключения, выход из учётной записи и защищённое подключение общих папок.
+          Платформа Коннектор 1.1.12. Вход больше не создаёт сетевые диски для каждой доступной компании. Общие папки подключаются по выбору; повторное открытие использует подключение коннектора.
           Новый пакет устанавливает приложение, NetBird и необходимые компоненты. Старые установщики и настройки не переносятся. Blender устанавливается по запросу из коннектора.
           Чистая установка, обновление с 1.1.9, восстановление, удаление, ярлыки и открытие приложения обычным пользователем проверены на облачной Windows. Проверено SMB3-шифрование и отзыв доступа. Пакет пока не имеет цифровой подписи издателя.
           '@
-          $request=@{tag_name='platform-connector-v1.1.11';target_commitish=$env:RUNTIME_SHA;name='Платформа Коннектор 1.1.11';body=$notes;draft=$true;prerelease=$true;make_latest='false'}
-          $requestPath=Join-Path $env:RUNNER_TEMP 'release-request.json'
-          $request | ConvertTo-Json | Set-Content -LiteralPath $requestPath -Encoding utf8
-          $release=gh api --method POST "repos/$repository/releases" --input $requestPath | ConvertFrom-Json
-          if ($LASTEXITCODE -ne 0 -or !$release.draft -or !$release.prerelease) { throw 'Draft creation unresolved.' }
+          if ($release.body.Replace("`r`n","`n").Trim() -cne $notes.Replace("`r`n","`n").Trim()) { throw 'Precreated draft notes differ.' }
           $delivery=Join-Path $env:RUNNER_TEMP 'delivery'
           New-Item -ItemType Directory -Path $delivery | Out-Null
           Copy-Item -LiteralPath $exe -Destination $delivery
           Copy-Item -LiteralPath (Join-Path $root 'release.json') -Destination $delivery
-          "$hash  PlatformConnector-1.1.11.exe" | Set-Content -LiteralPath (Join-Path $delivery 'checksums.sha256') -Encoding ascii
+          "$hash  PlatformConnector-1.1.12.exe" | Set-Content -LiteralPath (Join-Path $delivery 'checksums.sha256') -Encoding ascii
           @{verificationRun=[long]$env:VERIFIED_RUN;verificationAttempt=[int]$env:VERIFIED_ATTEMPT;verificationSha=$env:VERIFIED_SHA;
             runtimeSourceSha=$env:RUNTIME_SHA;artifactId=[long]$env:ARTIFACT_ID;artifactDigest=$env:ARTIFACT_DIGEST;verificationKind='full-hosted-build-and-native-install';native=$native;installation=$installation;upgradeFrom119=$upgrade;upgradedApplication=$upgradeNative;encryptedSmb=$encrypted} |
             ConvertTo-Json -Depth 10 | Set-Content -LiteralPath (Join-Path $delivery 'cloud-install-proof.json') -Encoding utf8
-          $deliveryExe=Join-Path $delivery 'PlatformConnector-1.1.11.exe'
-          gh release upload platform-connector-v1.1.11 $deliveryExe (Join-Path $delivery 'checksums.sha256') (Join-Path $delivery 'release.json') (Join-Path $delivery 'cloud-install-proof.json') --repo $repository
+          $deliveryExe=Join-Path $delivery 'PlatformConnector-1.1.12.exe'
+          gh release upload platform-connector-v1.1.12 $deliveryExe (Join-Path $delivery 'checksums.sha256') (Join-Path $delivery 'release.json') (Join-Path $delivery 'cloud-install-proof.json') --repo $repository
           if ($LASTEXITCODE -ne 0) { throw 'Draft upload failed; leave unpublished.' }
           $assets=gh api "repos/$repository/releases/$($release.id)/assets" | ConvertFrom-Json
           if ($LASTEXITCODE -ne 0 -or @($assets).Count -ne 4) { throw 'Release assets differ.' }
-          $asset=@($assets | Where-Object name -CEQ 'PlatformConnector-1.1.11.exe')
+          $asset=@($assets | Where-Object name -CEQ 'PlatformConnector-1.1.12.exe')
           if ($asset.Count -ne 1 -or $asset[0].size -ne $manifest.bytes -or $asset[0].digest -cne ('sha256:'+$hash)) { throw 'Uploaded EXE differs.' }
-          $tag=gh api "repos/$repository/git/ref/tags/platform-connector-v1.1.11" | ConvertFrom-Json
+          $tag=gh api "repos/$repository/git/ref/tags/platform-connector-v1.1.12" | ConvertFrom-Json
           if ($LASTEXITCODE -ne 0 -or $tag.object.type -cne 'commit' -or $tag.object.sha -cne $env:RUNTIME_SHA) { throw 'Release tag changed; leave unpublished.' }
-          $published=gh api --method PATCH "repos/$repository/releases/$($release.id)" -F draft=false -F prerelease=true -f make_latest=false | ConvertFrom-Json
-          if ($LASTEXITCODE -ne 0 -or $published.draft -or !$published.prerelease) { throw 'Publication unresolved.' }
+          $ready=gh api "repos/$repository/releases/$($release.id)" | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0 -or !$ready.draft -or !$ready.prerelease -or
+              $ready.author.id -ne [long]$env:DRAFT_AUTHOR_ID -or $ready.tag_name -cne 'platform-connector-v1.1.12' -or
+              $ready.target_commitish -cne $env:RUNTIME_SHA) { throw 'Draft changed; leave unpublished.' }
           $after=gh api "repos/$repository/releases/latest" | ConvertFrom-Json
           if ($LASTEXITCODE -ne 0 -or $after.tag_name -cne $latest.tag_name) { throw 'Latest release changed unexpectedly.' }
-          @{releaseUrl=$published.html_url;downloadUrl=$asset[0].browser_download_url;installerSha256=$hash;installerSize=$asset[0].size;
+          @{releaseId=$ready.id;draftReady=$true;published=$false;authorId=$ready.author.id;tag=$ready.tag_name;
+            downloadUrl=$asset[0].browser_download_url;installerSha256=$hash;installerSize=$asset[0].size;
             runtimeSourceSha=$env:RUNTIME_SHA;verificationSourceSha=$env:VERIFIED_SHA;verificationRun=$env:VERIFIED_RUN;
-            verificationAttempt=$env:VERIFIED_ATTEMPT;legacyLatest=$after.tag_name} |
-            ConvertTo-Json | Set-Content -LiteralPath (Join-Path $delivery 'publication-proof.json') -Encoding utf8
+            verificationAttempt=$env:VERIFIED_ATTEMPT;legacyLatest=$after.tag_name;
+            assets=@($assets | Select-Object id,name,size,digest)} |
+            ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $delivery 'publication-proof.json') -Encoding utf8
           Get-Content -LiteralPath (Join-Path $delivery 'publication-proof.json')
       - name: Retain publication receipt
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: connector-1.1.11-publication-receipt
+          name: connector-1.1.12-publication-receipt
           path: ${{ runner.temp }}/delivery/publication-proof.json
           if-no-files-found: warn
           retention-days: 14
