@@ -50,6 +50,7 @@ public sealed class CommonSmbAccessService : IDisposable
     private readonly CancellationTokenSource _monitorLifetime = new();
     private readonly Task _mappingMonitor;
     private readonly SemaphoreSlim _serial = new(1, 1);
+    private readonly object _routeSync = new();
     private readonly Dictionary<string, OwnedMapping> _ownedMappings = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, OwnedMapping> _pendingMappings = new(StringComparer.OrdinalIgnoreCase);
     private IReadOnlyList<CommonSmbFolder> _folders = Array.Empty<CommonSmbFolder>();
@@ -84,19 +85,19 @@ public sealed class CommonSmbAccessService : IDisposable
     }
 
     public IReadOnlyList<CommonSmbFolder> Folders => Volatile.Read(ref _folders);
-    public long RouteEpoch => Volatile.Read(ref _routeEpoch);
+    public long RouteEpoch { get { lock (_routeSync) return _routeEpoch; } }
     public bool IsAuthorizationAdmissionOpen => Volatile.Read(ref _authorizationAdmission) != 0;
     public event Action<CommonSmbRouteInvalidation>? RouteInvalidated;
 
     public void EnableAuthorization(long expectedRouteEpoch)
     {
-        if (expectedRouteEpoch != RouteEpoch)
-            throw Error("smb_route_changed", "The network route changed while access was being established.");
-        Interlocked.Increment(ref _authorizationEpoch);
-        Volatile.Write(ref _authorizationAdmission, 1);
-        if (expectedRouteEpoch == RouteEpoch) return;
-        InvalidateAuthorization();
-        throw Error("smb_route_changed", "The network route changed while access was being established.");
+        lock (_routeSync)
+        {
+            if (expectedRouteEpoch != _routeEpoch)
+                throw Error("smb_route_changed", "The network route changed while access was being established.");
+            Interlocked.Increment(ref _authorizationEpoch);
+            Volatile.Write(ref _authorizationAdmission, 1);
+        }
     }
 
     public void InvalidateAuthorization()
@@ -676,8 +677,14 @@ public sealed class CommonSmbAccessService : IDisposable
     private void SignalRouteInvalidation()
     {
         if (Volatile.Read(ref _disposed) != 0) return;
-        var routeEpoch = Interlocked.Increment(ref _routeEpoch);
-        InvalidateAuthorization();
+        long routeEpoch;
+        lock (_routeSync)
+        {
+            // Publish the epoch together with closed admission. A connection
+            // must not capture the new epoch before this invalidation finishes.
+            routeEpoch = checked(++_routeEpoch);
+            InvalidateAuthorization();
+        }
         var handlers = RouteInvalidated;
         if (handlers is null) return;
         var invalidation = new CommonSmbRouteInvalidation(routeEpoch);

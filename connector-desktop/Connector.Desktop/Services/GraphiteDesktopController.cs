@@ -659,7 +659,27 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
             }
             ct.ThrowIfCancellationRequested();
             if (_connectorHost.IsConnected) await _connectorHost.DisconnectAsync();
-            await _runtimeServices.ConnectCommonAsync(token, reconnect, ct, attempt.Report);
+            var nativeStarted = System.Diagnostics.Stopwatch.StartNew();
+            void ReportNativePhase(string text)
+            {
+                attempt.Report(text);
+                var phase = text switch
+                {
+                    "Завершаем текущую работу…" => "drain",
+                    "Проверяем сетевые компоненты…" => "network-components",
+                    "Восстанавливаем вход и защищённое соединение…" => "restore",
+                    "Вход подтверждён. Настраиваем защищённое соединение…" => "enroll",
+                    "Ожидаем подтверждения доступа от сервера…" => "providers",
+                    "Проверяем защищённое соединение…" => "final-route",
+                    "Запускаем фоновую работу…" => "start-worker",
+                    "Подключаем общие папки…" => "folders",
+                    _ => null
+                };
+                if (phase is not null)
+                    _connectorHost.Log($"Common connection native phase {phase} at {nativeStarted.Elapsed.TotalSeconds:F1}s.");
+            }
+            await _runtimeServices.ConnectCommonAsync(token, reconnect, ct, ReportNativePhase);
+            _connectorHost.Log($"Common connection native completed in {nativeStarted.Elapsed.TotalSeconds:F1}s.");
         }, "connect-common", cancellationToken);
 
     private void StartCommonSignOut(CancellationToken cancellationToken)
@@ -690,7 +710,10 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
         try
         {
             await attempt.Completion;
-            message = attempt.Operation == CommonConnectionOperation.SignOut ? "Вы вышли из учётной записи." :
+            message = attempt.Operation == CommonConnectionOperation.SignOut ?
+                _runtimeServices.CommonFolderCleanupPending
+                    ? "Вы вышли из учётной записи. Некоторые сетевые папки заняты — закройте открытые файлы."
+                    : "Вы вышли из учётной записи." :
                 _commonAccess.IsReady ? "Подключено." : _commonAccess.DisplayStatus;
         }
         catch (OperationCanceledException) when (attempt.Token.IsCancellationRequested) { message = "Действие отменено."; }
@@ -701,7 +724,16 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
                 "Выход не завершён. Проверьте соединение и повторите попытку." :
                 _commonAccess.DisplayStatus == "Требуется вход" ? "Войдите через Платформу повторно." :
                 "Не удалось завершить подключение. Повторите попытку.";
-            _connectorHost.Log($"Common connection {attempt.Operation} failed ({ex.GetType().Name}).");
+            // Codes are defined locally; never log an exception message/body,
+            // which can carry server credentials or transport identifiers.
+            var code = ex switch
+            {
+                CommonSmbAccessException smb when smb.Code is "smb_route_changed" or
+                    "smb_route_cleanup_incomplete" or "smb_cleanup_pending" => smb.Code,
+                Connector.Network.NetworkGateException => "network_gate",
+                _ => "unspecified"
+            };
+            _connectorHost.Log($"Common connection {attempt.Operation} failed ({ex.GetType().Name}, {code}).");
         }
         finally { lifetime.Dispose(); }
         if (_runtimeServices.CommonOperations.IsLatest(attempt.Generation))

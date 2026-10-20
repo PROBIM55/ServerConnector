@@ -577,6 +577,162 @@ public sealed class CommonSmbAccessServiceTests
         Assert.False(fixture.Service.IsAuthorizationAdmissionOpen);
     }
 
+    [Fact]
+    public async Task Cold_vpn_changes_are_revalidated_and_do_not_stop_the_new_connection()
+    {
+        using var fixture = new Fixture();
+        var session = new CommonConnectionActivation();
+        var invalidations = new List<long>();
+        fixture.Service.RouteInvalidated += value => session.InvalidateRoute(value.RouteEpoch, invalidations.Add);
+        session.BeginSession(_ => { });
+        fixture.Service.InvalidateAuthorization();
+
+        // VPN establishment changes Windows addresses while no host is admitted.
+        fixture.Port.RaiseNetworkChanged();
+        Assert.False(fixture.Service.IsAuthorizationAdmissionOpen);
+        var proofCalls = 0;
+        var ready = await session.ActivateAsync(fixture.Service, _ =>
+        {
+            proofCalls++;
+            return Task.CompletedTask;
+        }, () => true, default);
+
+        Assert.True(ready);
+        Assert.Equal(1, proofCalls);
+        Assert.True(fixture.Service.IsAuthorizationAdmissionOpen);
+        Assert.Empty(invalidations);
+        // A delayed callback for the establishment epoch cannot stop the host.
+        session.InvalidateRoute(fixture.Service.RouteEpoch, invalidations.Add);
+        Assert.Empty(invalidations);
+
+        await fixture.Service.RefreshAndMountAsync();
+        fixture.Port.RaiseNetworkChanged();
+        Assert.False(fixture.Service.IsAuthorizationAdmissionOpen);
+        Assert.Single(invalidations);
+        await fixture.Service.CleanupUnsafeMappingsAfterDrainAsync(fixture.Service.RouteEpoch);
+        Assert.Null(fixture.Port.Targets["Z:"]);
+    }
+
+    [Fact]
+    public async Task Route_change_during_final_proof_requires_a_second_fresh_proof()
+    {
+        using var fixture = new Fixture();
+        var session = new CommonConnectionActivation();
+        session.BeginSession(_ => { });
+        fixture.Service.InvalidateAuthorization();
+        var calls = 0;
+
+        Assert.True(await session.ActivateAsync(fixture.Service, _ =>
+        {
+            if (++calls == 1) fixture.Port.RaiseNetworkChanged();
+            return Task.CompletedTask;
+        }, () => true, default));
+
+        Assert.Equal(2, calls);
+        Assert.True(fixture.Service.IsAuthorizationAdmissionOpen);
+    }
+
+    [Fact]
+    public async Task Unstable_route_cannot_be_admitted_by_repeated_retries()
+    {
+        using var fixture = new Fixture();
+        var session = new CommonConnectionActivation();
+        session.BeginSession(_ => { });
+        var calls = 0;
+        var error = await Assert.ThrowsAsync<CommonSmbAccessException>(() =>
+            session.ActivateAsync(fixture.Service, _ =>
+            {
+                calls++;
+                fixture.Port.RaiseNetworkChanged();
+                return Task.CompletedTask;
+            }, () => true, default));
+
+        Assert.Equal("smb_route_changed", error.Code);
+        Assert.Equal(2, calls);
+        Assert.False(fixture.Service.IsAuthorizationAdmissionOpen);
+    }
+
+    [Fact]
+    public async Task Replaced_or_cancelled_session_cannot_reopen_admission()
+    {
+        using var fixture = new Fixture();
+        var session = new CommonConnectionActivation();
+        session.BeginSession(_ => { });
+        fixture.Service.InvalidateAuthorization();
+        Assert.False(await session.ActivateAsync(fixture.Service, _ =>
+        {
+            session.BeginSession(value => { });
+            return Task.CompletedTask;
+        }, () => true, default));
+        Assert.False(fixture.Service.IsAuthorizationAdmissionOpen);
+
+        using var cancellation = new CancellationTokenSource();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            session.ActivateAsync(fixture.Service, _ =>
+            {
+                cancellation.Cancel();
+                return Task.CompletedTask;
+            }, () => true, cancellation.Token));
+        Assert.False(fixture.Service.IsAuthorizationAdmissionOpen);
+    }
+
+    [Fact]
+    public async Task Revocation_before_admission_and_old_session_events_cannot_activate_a_new_host()
+    {
+        using var fixture = new Fixture();
+        var session = new CommonConnectionActivation();
+        long first = 0;
+        long second = 0;
+        var invalidations = new List<long>();
+        session.BeginSession(value => first = value);
+        fixture.Service.InvalidateAuthorization();
+        Assert.False(await session.ActivateAsync(fixture.Service, _ => Task.CompletedTask, () => false, default));
+        Assert.False(fixture.Service.IsAuthorizationAdmissionOpen);
+        session.BeginSession(value => second = value);
+        Assert.True(await session.ActivateAsync(fixture.Service, _ => Task.CompletedTask, () => true, default));
+        session.InvalidateAccess(first, invalidations.Add);
+        Assert.Empty(invalidations);
+        session.InvalidateAccess(second, invalidations.Add);
+        Assert.Equal(second, Assert.Single(invalidations));
+    }
+
+    [Fact]
+    public async Task Account_change_cleanup_removes_only_owned_targets_without_a_network_event()
+    {
+        using var fixture = new Fixture();
+        await fixture.Service.RefreshAndMountAsync();
+        fixture.Port.Targets["Y:"] = @"\\100.64.1.99\Foreign";
+
+        await fixture.Service.CleanupOwnedMappingsAfterDrainAsync();
+
+        Assert.False(fixture.Service.IsAuthorizationAdmissionOpen);
+        Assert.Null(fixture.Port.Targets["Z:"]);
+        Assert.Equal(@"\\100.64.1.99\Foreign", fixture.Port.Targets["Y:"]);
+        Assert.Equal("Z:", Assert.Single(fixture.Port.Unmounts));
+    }
+
+    [Fact]
+    public async Task Busy_account_cleanup_stays_closed_until_an_exact_nonforce_retry_finishes()
+    {
+        using var fixture = new Fixture();
+        await fixture.Service.RefreshAndMountAsync();
+        fixture.Port.ExactUnmountFailure = new Win32Exception(2404);
+
+        await Assert.ThrowsAsync<CommonSmbAccessException>(() => fixture.Service.CleanupOwnedMappingsAfterDrainAsync());
+        Assert.False(fixture.Service.IsAuthorizationAdmissionOpen);
+        fixture.Service.EnableAuthorization(fixture.Service.RouteEpoch);
+        var calls = fixture.Transport.Calls;
+        var denied = await Assert.ThrowsAsync<CommonSmbAccessException>(() => fixture.Service.RefreshAndMountAsync());
+        Assert.Equal("smb_cleanup_pending", denied.Code);
+        Assert.Equal(calls, fixture.Transport.Calls);
+
+        fixture.Port.ExactUnmountFailure = null;
+        await fixture.Service.CleanupOwnedMappingsAfterDrainAsync();
+        fixture.Service.EnableAuthorization(fixture.Service.RouteEpoch);
+        Assert.Single(await fixture.Service.RefreshAndMountAsync());
+        Assert.Equal(2, fixture.Port.Mounts.Count);
+    }
+
     private sealed class Fixture : IDisposable
     {
         private readonly FixedTimeProvider _time = new(Now);
