@@ -102,7 +102,8 @@ internal sealed class NetBirdManagementClient
     public async ValueTask RevokeSetupKeysNamedAsync(string name, CancellationToken cancellationToken)
     {
         var keys = await GetAsync<List<NetBirdSetupKey>>("api/setup-keys", cancellationToken);
-        foreach (var key in keys.Where(key => string.Equals(key.Name, name, StringComparison.Ordinal) && !key.Revoked))
+        foreach (var key in keys.Where(key => string.Equals(key.Name, name, StringComparison.Ordinal) &&
+                     (!key.Revoked || key.AutoGroups.Count != 0)))
         {
             await RevokeSetupKeyAsync(key.Id, cancellationToken);
         }
@@ -111,11 +112,17 @@ internal sealed class NetBirdManagementClient
     public async ValueTask RevokeSetupKeyAsync(string id, CancellationToken cancellationToken)
     {
         var existing = await GetOptionalAsync<NetBirdSetupKey>("api/setup-keys/" + Uri.EscapeDataString(id), cancellationToken);
-        if (existing is null || existing.Revoked) return;
+        if (existing is null || existing.Revoked && existing.AutoGroups.Count == 0) return;
+        // Even revoked setup keys pin their auto-groups in NetBird. This key
+        // belongs to this device; clearing future enrollment assignments does
+        // not remove the already enrolled peer from its groups.
         var revoked = await SendJsonAsync<NetBirdSetupKey>(HttpMethod.Put, "api/setup-keys/" + Uri.EscapeDataString(id),
-            new NetBirdSetupKeyUpdate(true, existing.AutoGroups), cancellationToken);
-        if (!revoked.Revoked)
-            throw new InvalidOperationException("NetBird did not confirm setup-key revocation.");
+            new NetBirdSetupKeyUpdate(true, []), cancellationToken);
+        if (!revoked.Revoked || revoked.AutoGroups.Count != 0)
+            throw new InvalidOperationException("NetBird did not confirm setup-key revocation and group cleanup.");
+        var confirmed = await GetSetupKeyAsync(id, cancellationToken);
+        if (confirmed is null || !confirmed.Revoked || confirmed.AutoGroups.Count != 0)
+            throw new InvalidOperationException("NetBird did not retain setup-key revocation and group cleanup.");
     }
 
     public ValueTask<NetBirdPeer?> GetPeerAsync(string id, CancellationToken cancellationToken) =>

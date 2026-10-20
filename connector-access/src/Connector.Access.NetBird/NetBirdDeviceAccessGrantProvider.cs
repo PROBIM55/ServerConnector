@@ -158,6 +158,16 @@ public sealed class NetBirdDeviceAccessGrantProvider : IDeviceAccessGrantProvide
         }
 
 
+        NetBirdPolicyWrite policyWrite;
+        try { policyWrite = BuildPolicy(command, group.Id); }
+        catch (InvalidOperationException)
+        {
+            // A newer unsupported grant must not leave the previous revision's
+            // wire policy active, even though local admission is already closed.
+            await RevokeOwnedPolicyAsync(locked, state, cancellationToken);
+            throw;
+        }
+
         try
         {
             await _management.AssertBootstrapIsolationAsync(cancellationToken);
@@ -191,7 +201,6 @@ public sealed class NetBirdDeviceAccessGrantProvider : IDeviceAccessGrantProvide
         }
 
         var peer = await RequireReadyPeerAsync(state.PeerId, cancellationToken);
-        var policyWrite = BuildPolicy(command, group.Id);
         var policy = await _management.UpsertPolicyAsync(state.PolicyId, policyWrite, cancellationToken);
         state.PolicyId = policy.Id;
         await locked.SaveAsync(cancellationToken);
@@ -329,16 +338,32 @@ public sealed class NetBirdDeviceAccessGrantProvider : IDeviceAccessGrantProvide
         if (matched.Length == 0)
             throw new InvalidOperationException("No NetBird access binding matches the current device grants.");
 
-        var rules = matched.Select((binding, index) => new NetBirdPolicyRuleWrite(
-            "grant-" + (index + 1),
+        // NetBird 0.79 persists only the first rule of a policy. Combining
+        // authorized ports is equivalent only for the same destination,
+        // protocol and direction; never form a cross-product of destinations
+        // and ports or silently discard another matched binding.
+        var binding = matched[0];
+        if (matched.Any(candidate =>
+                !string.Equals(candidate.DestinationGroupId, binding.DestinationGroupId, StringComparison.Ordinal) ||
+                !string.Equals(candidate.Protocol, binding.Protocol, StringComparison.Ordinal) ||
+                candidate.Bidirectional != binding.Bidirectional))
+            throw new InvalidOperationException("NetBird requires separate policies for different destinations, protocols or directions.");
+        // An empty port set means every port for this protocol. Preserve that
+        // existing grant if present, otherwise union only the matched ports.
+        var ports = matched.Any(candidate => candidate.Ports.Count == 0)
+            ? Array.Empty<string>()
+            : matched.SelectMany(candidate => candidate.Ports).Distinct().Order()
+                .Select(port => port.ToString(System.Globalization.CultureInfo.InvariantCulture)).ToArray();
+        var rules = new[] { new NetBirdPolicyRuleWrite(
+            "grant-1",
             "Connector-managed least-privilege destination.",
             true,
             "accept",
             binding.Bidirectional,
             binding.Protocol,
-            binding.Ports.Select(port => port.ToString(System.Globalization.CultureInfo.InvariantCulture)).ToArray(),
+            ports,
             [sourceGroupId],
-            [binding.DestinationGroupId])).ToArray();
+            [binding.DestinationGroupId]) };
         var name = ResourceName("connector-policy", command.DeviceId);
         return new NetBirdPolicyWrite(name, "Connector-managed device access; revision " + command.DesiredRevision, true, [], rules);
     }
@@ -426,6 +451,25 @@ public sealed class NetBirdDeviceAccessGrantProvider : IDeviceAccessGrantProvide
                 return false;
         }
         return true;
+    }
+
+    private async ValueTask RevokeOwnedPolicyAsync(
+        LockedNetBirdState locked,
+        NetBirdProviderState state,
+        CancellationToken cancellationToken)
+    {
+        var policy = state.PolicyId is null
+            ? await _management.FindPolicyByNameAsync(ResourceName("connector-policy", state.DeviceId), cancellationToken)
+            : await _management.GetPolicyAsync(state.PolicyId, cancellationToken);
+        if (policy is not null)
+        {
+            await _management.DeletePolicyAsync(policy.Id, cancellationToken);
+            if (await _management.GetPolicyAsync(policy.Id, cancellationToken) is not null)
+                throw new InvalidOperationException("NetBird policy revoke was not confirmed.");
+        }
+        state.PolicyId = null;
+        state.AppliedPolicy = null;
+        await locked.SaveAsync(cancellationToken);
     }
 
     private async ValueTask ReconcileRevokeAsync(

@@ -257,7 +257,8 @@ public sealed class NetBirdProviderTests : IDisposable
         var policy = JsonNode.Parse(fixture.AppliedPolicyJson!)!;
         var sources = policy["rules"]![0]!["sources"]!.AsArray().Select(node => node!.GetValue<string>()).ToArray();
         Assert.Equal(new[] { "g1" }, sources);
-        Assert.Equal(new[] { "g1", "gdns" }, fixture.RevokedSetupKeyAutoGroups);
+        Assert.Empty(fixture.RevokedSetupKeyAutoGroups);
+        Assert.Empty(fixture.SetupKeyAutoGroups);
     }
 
     [Theory]
@@ -297,7 +298,158 @@ public sealed class NetBirdProviderTests : IDisposable
         Assert.Equal(0, fixture.SetupKeyCreateCount);
     }
 
-    private NetBirdDeviceAccessGrantProvider CreateProvider(HttpMessageHandler handler, string? dnsDistributionGroupId = null)
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task SharedGatewayProducts_UseOneRuleAndOnlyAuthorizedPorts(bool includeSmbResource)
+    {
+        var fixture = new NetBirdFixtureHandler { PeerExists = true, PeerConnected = true };
+        var provider = CreateProvider(fixture, bindings:
+        [
+            new() { Product = ConnectorProduct.Structura, DestinationGroupId = "gateway", Ports = [24444, 24443] },
+            new() { Product = ConnectorProduct.Platform, DestinationGroupId = "gateway", Ports = [24443, 24444] },
+            new() { ResourceId = "models", ResourceKind = "smb", DestinationGroupId = "gateway", Ports = [445, 24443, 24444] },
+        ]);
+        var command = Apply(1) with
+        {
+            Modules = [new(ConnectorProduct.Structura, "sync", [ConnectorPermission.Read]),
+                new(ConnectorProduct.Platform, "tekla", [ConnectorPermission.Read])],
+            Resources = includeSmbResource ? [new("models", "smb", null, [ConnectorPermission.Read])] : [],
+        };
+
+        await provider.ApplyAsync(command, default);
+        var state = await provider.GetStateAsync(Device(1), default);
+
+        Assert.Equal("ready", state.Value!.Status);
+        Assert.Equal(1, fixture.MaximumSubmittedRules);
+        var rules = JsonNode.Parse(fixture.AppliedPolicyJson!)!["rules"]!.AsArray();
+        var rule = Assert.Single(rules)!;
+        Assert.Equal(new[] { "gateway" }, rule["destinations"]!.AsArray().Select(n => n!.GetValue<string>()));
+        Assert.Equal(includeSmbResource ? new[] { "445", "24443", "24444" } : new[] { "24443", "24444" },
+            rule["ports"]!.AsArray().Select(n => n!.GetValue<string>()));
+        Assert.False(rule["bidirectional"]!.GetValue<bool>());
+    }
+
+    [Theory]
+    [InlineData("destination")]
+    [InlineData("protocol")]
+    [InlineData("direction")]
+    public async Task DifferentNetworkTuples_CannotBecomeAnIncompleteSinglePolicy(string difference)
+    {
+        var fixture = new NetBirdFixtureHandler { PeerExists = true, PeerConnected = true };
+        var provider = CreateProvider(fixture, bindings:
+        [
+            new() { Product = ConnectorProduct.Structura, DestinationGroupId = "gateway", Ports = [443] },
+            new() { Product = ConnectorProduct.Platform, DestinationGroupId = difference == "destination" ? "other" : "gateway",
+                Protocol = difference == "protocol" ? "udp" : "tcp", Bidirectional = difference == "direction", Ports = [8443] },
+        ]);
+        var command = Apply(1) with { Modules = [new(ConnectorProduct.Structura, "sync", [ConnectorPermission.Read]),
+            new(ConnectorProduct.Platform, "tekla", [ConnectorPermission.Read])] };
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => provider.ApplyAsync(command, default).AsTask());
+
+        Assert.Equal(0, fixture.PolicyWriteCount);
+        Assert.False(fixture.PolicyExists);
+    }
+
+    [Fact]
+    public async Task UncoveredProduct_StillPreventsPolicyWrite()
+    {
+        var fixture = new NetBirdFixtureHandler { PeerExists = true, PeerConnected = true };
+        var provider = CreateProvider(fixture);
+        var command = Apply(1) with { Modules = [new(ConnectorProduct.Structura, "sync", [ConnectorPermission.Read]),
+            new(ConnectorProduct.Platform, "tekla", [ConnectorPermission.Read])] };
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => provider.ApplyAsync(command, default).AsTask());
+        Assert.Equal(0, fixture.PolicyWriteCount);
+    }
+
+    [Theory]
+    [InlineData("destination")]
+    [InlineData("protocol")]
+    [InlineData("direction")]
+    public async Task NewUnsupportedGrant_RemovesPreviousWirePolicyBeforeReportingFailure(string difference)
+    {
+        var fixture = new NetBirdFixtureHandler { PeerExists = true, PeerConnected = true };
+        var provider = CreateProvider(fixture, bindings:
+        [
+            new() { Product = ConnectorProduct.Structura, DestinationGroupId = "gateway", Ports = [443] },
+            new() { Product = ConnectorProduct.Platform, DestinationGroupId = difference == "destination" ? "other" : "gateway",
+                Protocol = difference == "protocol" ? "udp" : "tcp", Bidirectional = difference == "direction", Ports = [8443] },
+        ]);
+        await provider.ApplyAsync(Apply(1), default);
+        Assert.True(fixture.PolicyExists);
+        var next = Apply(2) with { Modules = [new(ConnectorProduct.Structura, "sync", [ConnectorPermission.Read]),
+            new(ConnectorProduct.Platform, "tekla", [ConnectorPermission.Read])] };
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => provider.ApplyAsync(next, default).AsTask());
+
+        Assert.False(fixture.PolicyExists);
+        Assert.Equal(1, fixture.PolicyWriteCount);
+        Assert.NotEqual("ready", (await provider.GetStateAsync(Device(2), default)).Value!.Status);
+    }
+
+    [Fact]
+    public async Task AllPortsGrant_IsNotNarrowedToOtherBindingsPortList()
+    {
+        var fixture = new NetBirdFixtureHandler { PeerExists = true, PeerConnected = true };
+        var provider = CreateProvider(fixture, bindings:
+        [
+            new() { Product = ConnectorProduct.Structura, DestinationGroupId = "gateway", Ports = [] },
+            new() { Product = ConnectorProduct.Platform, DestinationGroupId = "gateway", Ports = [443] },
+        ]);
+        var command = Apply(1) with { Modules = [new(ConnectorProduct.Structura, "sync", [ConnectorPermission.Read]),
+            new(ConnectorProduct.Platform, "tekla", [ConnectorPermission.Read])] };
+
+        await provider.ApplyAsync(command, default);
+
+        Assert.Empty(JsonNode.Parse(fixture.AppliedPolicyJson!)!["rules"]![0]!["ports"]!.AsArray());
+        Assert.Equal("ready", (await provider.GetStateAsync(Device(1), default)).Value!.Status);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Revoke_UnpinsOnlyOwnedKeyEvenWhenAlreadyRevoked(bool alreadyRevoked)
+    {
+        var fixture = new NetBirdFixtureHandler { IncludeUnrelatedSetupKey = true };
+        var provider = CreateProvider(fixture);
+        await Assert.ThrowsAsync<NetBirdPeerNotReadyException>(() => provider.ApplyAsync(Apply(1), default).AsTask());
+        fixture.PeerExists = true;
+        if (alreadyRevoked) fixture.RevokeKeyWithoutClearingGroups();
+
+        var receipt = await provider.RevokeAsync(Revoke(2), default);
+
+        Assert.Equal(2, receipt.AppliedRevision);
+        Assert.True(fixture.SetupKeyRevoked);
+        Assert.Empty(fixture.SetupKeyAutoGroups);
+        Assert.False(fixture.GroupExists);
+        Assert.False(fixture.PeerExists);
+        Assert.Equal(0, fixture.UnrelatedKeyRequests);
+        Assert.Equal("revoked", (await provider.GetStateAsync(Device(2), default)).Value!.Status);
+    }
+
+    [Fact]
+    public async Task OptimisticKeyUpdateWithoutDurableGroupCleanup_CannotConfirmApplyOrRevoke()
+    {
+        var fixture = new NetBirdFixtureHandler { OptimisticSetupKeyUpdate = true };
+        var provider = CreateProvider(fixture);
+        await Assert.ThrowsAsync<NetBirdPeerNotReadyException>(() => provider.ApplyAsync(Apply(1), default).AsTask());
+        fixture.PeerExists = true;
+        fixture.PeerConnected = true;
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => provider.ApplyAsync(Apply(1), default).AsTask());
+        await Assert.ThrowsAsync<InvalidOperationException>(() => provider.RevokeAsync(Revoke(2), default).AsTask());
+
+        Assert.True(fixture.GroupExists);
+        Assert.True(fixture.PeerExists);
+        Assert.NotEmpty(fixture.SetupKeyAutoGroups);
+        using var state = JsonDocument.Parse(await File.ReadAllTextAsync(Assert.Single(Directory.GetFiles(_root, "*.json"))));
+        Assert.Equal(0, state.RootElement.GetProperty("appliedRevision").GetInt64());
+    }
+
+    private NetBirdDeviceAccessGrantProvider CreateProvider(HttpMessageHandler handler, string? dnsDistributionGroupId = null,
+        IReadOnlyList<NetBirdAccessBinding>? bindings = null)
     {
         Directory.CreateDirectory(_root);
         var options = new NetBirdOptions
@@ -305,7 +457,7 @@ public sealed class NetBirdProviderTests : IDisposable
             ManagementUri = new Uri("https://netbird.test/"),
             AccessToken = "fixture-service-token",
             StateDirectory = _root,
-            AccessBindings =
+            AccessBindings = bindings ??
             [
                 new NetBirdAccessBinding
                 {
@@ -375,6 +527,9 @@ public sealed class NetBirdProviderTests : IDisposable
         public string ResponsePeerId { get; set; } = "peer-1";
         public bool SetupKeyExists { get; private set; }
         public bool SetupKeyRevoked { get; private set; }
+        public bool IncludeUnrelatedSetupKey { get; set; }
+        public bool OptimisticSetupKeyUpdate { get; set; }
+        public int UnrelatedKeyRequests { get; private set; }
         public IReadOnlyList<string> RevokedSetupKeyAutoGroups { get; private set; } = [];
         public bool PolicyExists { get; private set; }
         public bool UnsafeAllPolicy { get; set; }
@@ -387,6 +542,9 @@ public sealed class NetBirdProviderTests : IDisposable
         public string? AppliedPolicyJson => _policyJson;
         public int SetupKeyCreateCount { get; private set; }
         public int PolicyWriteCount { get; private set; }
+        public int MaximumSubmittedRules { get; private set; }
+
+        public void RevokeKeyWithoutClearingGroups() => SetupKeyRevoked = true;
 
         public void MutatePolicy(string mutation)
         {
@@ -448,11 +606,24 @@ public sealed class NetBirdProviderTests : IDisposable
                 return DnsGroupAvailable ? Json(DnsGroup()) : Missing();
             if (path == "/api/groups/g1" && method == HttpMethod.Delete)
             {
+                if (SetupKeyExists && _setupAutoGroups.Contains("g1"))
+                    return new HttpResponseMessage(HttpStatusCode.BadRequest) { Content = new StringContent("group is linked to a setup key") };
                 GroupExists = false;
                 return Empty();
             }
             if (method == HttpMethod.Get && path == "/api/setup-keys")
-                return Json(SetupKeyExists ? new[] { SetupKey(masked: true) } : Array.Empty<object>());
+            {
+                var keys = new List<object>();
+                if (SetupKeyExists) keys.Add(SetupKey(masked: true));
+                if (IncludeUnrelatedSetupKey) keys.Add(new { id = "foreign-key", name = "unrelated-key", expires = DateTimeOffset.UtcNow.AddDays(1),
+                    valid = true, revoked = false, used_times = 0, auto_groups = new[] { "foreign-group" }, key = "********" });
+                return Json(keys);
+            }
+            if (path == "/api/setup-keys/foreign-key")
+            {
+                UnrelatedKeyRequests++;
+                throw new InvalidOperationException("Unrelated setup keys must not be read or modified.");
+            }
             if (method == HttpMethod.Post && path == "/api/setup-keys")
             {
                 var body = JsonNode.Parse(await request.Content!.ReadAsStringAsync(cancellationToken))!.AsObject();
@@ -470,6 +641,13 @@ public sealed class NetBirdProviderTests : IDisposable
                 var body = JsonNode.Parse(await request.Content!.ReadAsStringAsync(cancellationToken))!.AsObject();
                 RevokedSetupKeyAutoGroups = body["auto_groups"]!.AsArray().Select(node => node!.GetValue<string>()).ToArray();
                 SetupKeyRevoked = true;
+                if (!OptimisticSetupKeyUpdate) _setupAutoGroups = RevokedSetupKeyAutoGroups.ToArray();
+                else
+                {
+                    var optimistic = JsonSerializer.SerializeToNode(SetupKey(masked: true), JsonOptions)!;
+                    optimistic["auto_groups"] = JsonSerializer.SerializeToNode(RevokedSetupKeyAutoGroups, JsonOptions);
+                    return Json(optimistic);
+                }
                 return Json(SetupKey(masked: true));
             }
             if (path == "/api/peers/peer-1" && method == HttpMethod.Get)
@@ -508,6 +686,10 @@ public sealed class NetBirdProviderTests : IDisposable
                 (method == HttpMethod.Put && path == "/api/policies/p1"))
             {
                 var policy = JsonNode.Parse(await request.Content!.ReadAsStringAsync(cancellationToken))!.AsObject();
+                var rules = policy["rules"]!.AsArray();
+                MaximumSubmittedRules = Math.Max(MaximumSubmittedRules, rules.Count);
+                // NetBird 0.79 silently retains only the first policy rule.
+                if (rules.Count > 1) policy["rules"] = new JsonArray(rules[0]!.DeepClone());
                 policy["id"] = "p1";
                 _policyJson = policy.ToJsonString(JsonOptions);
                 PolicyExists = true;

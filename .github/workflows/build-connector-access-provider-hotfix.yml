@@ -1,10 +1,10 @@
-name: Build Connector access provider hotfix
+name: Build Connector NetBird API compatibility
 
 on:
   workflow_dispatch:
     inputs:
       source_sha:
-        description: Exact merged source commit to build
+        description: Exact public source commit
         required: true
         type: string
 
@@ -12,13 +12,13 @@ permissions:
   contents: read
 
 concurrency:
-  group: connector-access-provider-hotfix
+  group: connector-netbird-api-compat
   cancel-in-progress: false
 
 jobs:
-  build:
+  verify-package:
     runs-on: windows-latest
-    timeout-minutes: 45
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
@@ -29,65 +29,35 @@ jobs:
         env:
           EXPECTED_SHA: ${{ inputs.source_sha }}
         run: |
-          $actual = (git rev-parse HEAD).Trim()
-          if ($actual -cne $env:EXPECTED_SHA -or $actual -notmatch '^[a-f0-9]{40}$') {
-            throw "Source commit does not match the requested SHA."
-          }
-      - name: Test changed providers sequentially
+          $actual=(git rev-parse HEAD).Trim()
+          if($actual -cne $env:EXPECTED_SHA -or $actual -cnotmatch '^[a-f0-9]{40}$'){throw 'Source commit differs'}
+      - name: Test affected provider and endpoint consumer sequentially
         shell: pwsh
         run: |
-          $projects = @(
+          foreach($project in @(
             'connector-access/tests/Connector.Access.NetBird.Tests/Connector.Access.NetBird.Tests.csproj',
-            'connector-access/tests/Connector.Access.Smb.Tests/Connector.Access.Smb.Tests.csproj'
-          )
-          foreach ($project in $projects) {
-            dotnet test $project --configuration Release -p:UseSharedCompilation=false -p:BuildInParallel=false --verbosity minimal
-            if ($LASTEXITCODE -ne 0) { throw "Provider tests failed: $project" }
+            'connector-access/tests/Connector.Access.NetBird.AspNetCore.Tests/Connector.Access.NetBird.AspNetCore.Tests.csproj'
+          )) {
+            dotnet test $project --configuration Release -p:UseSharedCompilation=false -p:BuildInParallel=false --logger trx --results-directory netbird-api-compat/tests --verbosity minimal
+            if($LASTEXITCODE -ne 0){throw "Affected tests failed: $project"}
           }
-      - name: Build release packages and SMB helper
+      - name: Pack exact NetBird provider only
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Path 'provider-hotfix/packages','provider-hotfix/helper' | Out-Null
-          $projects = @(
-            'connector-access/src/Connector.Access.NetBird/Connector.Access.NetBird.csproj',
-            'connector-access/src/Connector.Access.Smb/Connector.Access.Smb.csproj'
-          )
-          foreach ($project in $projects) {
-            dotnet pack $project --configuration Release --output provider-hotfix/packages -p:UseSharedCompilation=false -p:BuildInParallel=false --verbosity minimal
-            if ($LASTEXITCODE -ne 0) { throw "Provider package failed: $project" }
-          }
-          dotnet publish connector-access/smb-helper/Connector.Access.Smb.Helper.csproj --configuration Release --runtime win-x64 --self-contained true --output provider-hotfix/helper -p:UseSharedCompilation=false -p:BuildInParallel=false --verbosity minimal
-          if ($LASTEXITCODE -ne 0) { throw 'SMB helper publish failed' }
-          $expected = @('Connector.Access.NetBird.0.2.10.nupkg','Connector.Access.Smb.0.2.9.nupkg')
-          foreach ($name in $expected) {
-            if (-not (Test-Path -LiteralPath (Join-Path 'provider-hotfix/packages' $name) -PathType Leaf)) {
-              throw "Missing expected package: $name"
-            }
-          }
-          if (-not (Test-Path -LiteralPath 'provider-hotfix/helper/Connector.Access.Smb.Helper.exe' -PathType Leaf)) {
-            throw 'Missing SMB helper executable'
-          }
-      - name: Write exact artifact manifest
+          dotnet pack connector-access/src/Connector.Access.NetBird/Connector.Access.NetBird.csproj --configuration Release --no-build --no-restore --output netbird-api-compat/packages --verbosity minimal
+          if($LASTEXITCODE -ne 0){throw 'NetBird provider pack failed'}
+          if(!(Test-Path -LiteralPath 'netbird-api-compat/packages/Connector.Access.NetBird.0.2.11.nupkg')){throw 'Expected package is missing'}
+      - name: Write source and output manifest
         shell: pwsh
         run: |
-          $root = (Resolve-Path 'provider-hotfix').Path
-          $files = @(Get-ChildItem -LiteralPath $root -File -Recurse | Sort-Object FullName | ForEach-Object {
-            [pscustomobject]@{
-              path = [IO.Path]::GetRelativePath($root, $_.FullName).Replace('\','/')
-              size = $_.Length
-              sha256 = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
-            }
+          $root=(Resolve-Path 'netbird-api-compat').Path
+          $files=@(Get-ChildItem -LiteralPath $root -File -Recurse|Sort-Object FullName|ForEach-Object{
+            @{path=[IO.Path]::GetRelativePath($root,$_.FullName).Replace('\','/');size=$_.Length;sha256=(Get-FileHash -LiteralPath $_.FullName).Hash.ToLowerInvariant()}
           })
-          [pscustomobject]@{
-            repository = $env:GITHUB_REPOSITORY
-            sourceSha = $env:GITHUB_SHA
-            workflowRunId = $env:GITHUB_RUN_ID
-            workflowRunAttempt = $env:GITHUB_RUN_ATTEMPT
-            files = $files
-          } | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath 'provider-hotfix/manifest.json' -Encoding utf8
+          @{repository=$env:GITHUB_REPOSITORY;sourceSha=$env:GITHUB_SHA;workflowRunId=$env:GITHUB_RUN_ID;workflowRunAttempt=$env:GITHUB_RUN_ATTEMPT;files=$files}|ConvertTo-Json -Depth 8|Set-Content -LiteralPath 'netbird-api-compat/manifest.json' -Encoding utf8
       - uses: actions/upload-artifact@v4
         with:
-          name: connector-access-provider-hotfix-${{ github.sha }}
-          path: provider-hotfix/
+          name: connector-netbird-api-compat-${{ github.sha }}
+          path: netbird-api-compat/
           if-no-files-found: error
           retention-days: 14
