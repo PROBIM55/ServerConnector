@@ -42,7 +42,7 @@ if($replay -eq0){
   $destination=Join-Path $runtime ('tests/'+$test.name);New-Item -ItemType Directory -Path $destination|Out-Null
   Copy-Item -Path (Join-Path $test.project 'bin/Release/net8.0-windows/*') -Destination $destination -Recurse
  }
- $files=@(Get-ChildItem -LiteralPath $runtime -Recurse -File|ForEach-Object{@{path=[IO.Path]::GetRelativePath($runtime,$_.FullName).Replace('\','/');bytes=$_.Length;sha256=(Get-FileHash -LiteralPath $_.FullName).Hash.ToLowerInvariant()}})
+ $files=@(Get-ChildItem -LiteralPath $runtime -Recurse -File -Force|ForEach-Object{@{path=[IO.Path]::GetRelativePath($runtime,$_.FullName).Replace('\','/');bytes=$_.Length;sha256=(Get-FileHash -LiteralPath $_.FullName).Hash.ToLowerInvariant()}})
  $manifest=@{schemaVersion=1;sourceSha=$source;runId=[long]$env:GITHUB_RUN_ID;compiledSourceSha=$source;compiledRunId=[long]$env:GITHUB_RUN_ID;codeHash=$codeHash;driverBlob=$driver;workflowBlob=$workflow;purpose='isolated-service-tests-only';files=$files}
  [IO.File]::WriteAllText((Join-Path $runtime $manifestName),($manifest|ConvertTo-Json -Depth 8),[Text.UTF8Encoding]::new($false))
 }else{
@@ -55,11 +55,23 @@ if($replay -eq0){
   if($producer.status -cne 'completed' -or $producer.conclusion -cne 'success' -or $producer.run_attempt -ne1 -or
      $producer.path -cne '.github/workflows/build-unified-connector-candidate.yml' -or $producer.event -cne 'workflow_dispatch'){throw 'Ready runtime producer is not accepted.'}
   & git fetch --no-tags --depth=1 origin $producer.head_sha
-  if($LASTEXITCODE-ne0 -or (GitBlob $producer.head_sha $driverPath) -cne $driver -or
-     (GitBlob $producer.head_sha $workflowPath) -cne $workflow -or (SourceHash $producer.head_sha) -cne $codeHash){throw 'Producer source inputs differ.'}
+  if($LASTEXITCODE-ne0){throw 'Producer source identity unavailable.'}
+  $producerDriver=GitBlob $producer.head_sha $driverPath;$producerWorkflow=GitBlob $producer.head_sha $workflowPath
+  $producerCodeHash=SourceHash $producer.head_sha
+  # One immutable first-run adapter: upload-artifact omitted dot-named coverage
+  # path metadata. Reuse its verified DLLs rather than compiling them again.
+  $firstRuntime=($replay -eq39485812064 -and $producer.head_sha -ceq '684c29c0aff1e78b4ae1b3d278d83b2f0883d29b' -and
+   $producerDriver -ceq 'c0b5399b97ef47ab4dbe8438f7e00c0ddbdbfbba' -and $producerWorkflow -ceq '8e6e46c5f0484a6bb1af8833bab33e4fc01064bf')
+  if($firstRuntime){
+   $allowedHarness=@($driverPath,$workflowPath,'connector-desktop/scripts/invoke_hosted_encrypted_smb_fixture.ps1','connector-desktop/docs/DEV_SERVICES_RU.md')
+   $changed=@(& git diff --no-renames --name-only $producer.head_sha $source)
+   if($LASTEXITCODE-ne0 -or @($changed|Where-Object{$_ -cnotin $allowedHarness}).Count){throw 'First runtime managed inputs changed.'}
+  }elseif($producerDriver -cne $driver -or $producerWorkflow -cne $workflow -or $producerCodeHash -cne $codeHash){throw 'Producer source inputs differ.'}
   $artifacts=($client.GetStringAsync($url+'/artifacts').GetAwaiter().GetResult()|ConvertFrom-Json).artifacts
   $artifact=@($artifacts|Where-Object{$_.name -ceq 'connector-dev-service-runtime' -and !$_.expired})
   if($artifact.Count -ne1 -or $artifact[0].size_in_bytes -gt268435456 -or $artifact[0].digest -cnotmatch '^sha256:[a-f0-9]{64}$'){throw 'Ready runtime artifact differs.'}
+  if($firstRuntime -and ($artifact[0].id -ne12293073927 -or $artifact[0].size_in_bytes -ne89832657 -or
+     $artifact[0].digest -cne 'sha256:885decbb83a1e05fbd9317cd43b9fee3f9b245de535958d261c1a8242aa286a4')){throw 'First runtime artifact differs.'}
   $zip=Join-Path $root 'ready.zip'
   $response=$client.GetAsync(('https://api.github.com/repos/PROBIM55/ServerConnector/actions/artifacts/'+$artifact[0].id+'/zip'),[Net.Http.HttpCompletionOption]::ResponseHeadersRead).GetAwaiter().GetResult()
   try{$response.EnsureSuccessStatusCode()|Out-Null;$read=$response.Content.ReadAsStreamAsync().GetAwaiter().GetResult();$output=[IO.File]::Create($zip)
@@ -83,12 +95,21 @@ if($replay -eq0){
  $manifest=Get-Content (Join-Path $runtime $manifestName) -Raw|ConvertFrom-Json
  if($manifest.schemaVersion -ne1 -or $manifest.sourceSha -cne $producer.head_sha -or $manifest.runId -ne $replay -or
     $manifest.compiledRunId -ne $replay -or $manifest.compiledSourceSha -cne $producer.head_sha -or
-    $manifest.codeHash -cne $codeHash -or $manifest.driverBlob -cne $driver -or $manifest.workflowBlob -cne $workflow -or
+    $manifest.codeHash -cne $producerCodeHash -or $manifest.driverBlob -cne $producerDriver -or $manifest.workflowBlob -cne $producerWorkflow -or
     $manifest.purpose -cne 'isolated-service-tests-only'){throw 'Use the original successful compile run for unchanged source inputs.'}
- $actual=@(Get-ChildItem -LiteralPath $runtime -Recurse -File|Where-Object{$_.Name -cne $manifestName})
- if($actual.Count -ne $manifest.files.Count){throw 'Runtime inventory count differs.'}
+ $expectedFiles=@($manifest.files);$omitted=@()
+ if($firstRuntime){
+  $omitted=@($expectedFiles|Where-Object{! (Test-Path -LiteralPath (Join-Path $runtime $_.path)) -and
+    $_.path -cmatch '^tests/Connector\.(Access\.Client|Access\.Smb|Network|Desktop)\.Tests/\.msCoverageSourceRootsMapping_[A-Za-z0-9_.-]+$'})
+  if($omitted.Count-gt8){throw 'Unexpected first runtime coverage metadata count.'}
+  $omittedPaths=@($omitted|ForEach-Object{$_.path})
+  $expectedFiles=@($expectedFiles|Where-Object{$_.path -cnotin $omittedPaths})
+ }
+ $actual=@(Get-ChildItem -LiteralPath $runtime -Recurse -File -Force|Where-Object{$_.Name -cne $manifestName})
+ [IO.File]::WriteAllText((Join-Path $root 'runtime-inventory.json'),(@{actualCount=$actual.Count;expectedCount=$expectedFiles.Count;omittedCoverageMetadata=@($omitted|ForEach-Object{$_.path});producerRun=$replay}|ConvertTo-Json -Depth 4))
+ if($actual.Count -ne $expectedFiles.Count){throw 'Runtime inventory count differs.'}
  $verified=[Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
- foreach($file in $manifest.files){
+ foreach($file in $expectedFiles){
   $path=[IO.Path]::GetFullPath((Join-Path $runtime $file.path))
   if(!$path.StartsWith($runtime+[IO.Path]::DirectorySeparatorChar,[StringComparison]::OrdinalIgnoreCase) -or
      !$verified.Add($path) -or $file.path.Contains(':') -or $file.path.Contains('..') -or
