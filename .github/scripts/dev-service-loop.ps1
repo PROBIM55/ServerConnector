@@ -117,7 +117,21 @@ if($replay -eq0){
  }
  foreach($file in $actual){if(!$verified.Contains($file.FullName)){throw 'Unverified runtime member.'}}
  foreach($test in $tests){
-  $testArguments=@('vstest',(Join-Path $runtime ('tests/'+$test.name+'/'+$test.name+'.dll')),'/Logger:console;Verbosity=normal')
+  # Existing component tests resolve checked-in fixture scripts relative to
+  # their normal output directory. Restore ready files there, never build them.
+  $destination=[IO.Path]::GetFullPath((Join-Path $test.project 'bin/Release/net8.0-windows'))
+  $checkout=[IO.Path]::GetFullPath($PWD.Path).TrimEnd('\')+'\'
+  if(!$destination.StartsWith($checkout,[StringComparison]::OrdinalIgnoreCase) -or (Test-Path -LiteralPath $destination)){throw 'Ready test output destination is not a new checkout directory.'}
+  New-Item -ItemType Directory -Path $destination -Force|Out-Null
+  foreach($entry in @(Get-ChildItem -LiteralPath (Join-Path $runtime ('tests/'+$test.name)) -Force)){
+   Copy-Item -LiteralPath $entry.FullName -Destination $destination -Recurse
+  }
+  $prefix='tests/'+$test.name+'/'
+  foreach($file in @($expectedFiles|Where-Object{$_.path.StartsWith($prefix,[StringComparison]::Ordinal)})){
+   $copied=Join-Path $destination $file.path.Substring($prefix.Length)
+   if((Get-Item -LiteralPath $copied).Length -ne $file.bytes -or (Get-FileHash -LiteralPath $copied).Hash.ToLowerInvariant() -cne $file.sha256){throw 'Restored ready test bytes differ.'}
+  }
+  $testArguments=@('vstest',(Join-Path $destination ($test.name+'.dll')),'/Logger:console;Verbosity=normal')
   if($test.filter){$testArguments+=('/TestCaseFilter:'+$test.filter)}
   & dotnet @testArguments
   if($LASTEXITCODE-ne0){throw 'Compiled service regression tests failed.'}
