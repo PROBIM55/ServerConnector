@@ -40,7 +40,8 @@ try{
   try{$entryStream.CopyTo($raw);$content=$raw.ToArray()}finally{$entryStream.Dispose();$raw.Dispose()}
   $before=ShaBytes $content
   if($entry.FullName -ceq 'Connector.Access.Smb.nuspec'){
-   [xml]$xml=[Text.Encoding]::UTF8.GetString($content)
+   $xml=[Xml.XmlDocument]::new();$xmlStream=[IO.MemoryStream]::new($content)
+   try{$xml.Load($xmlStream)}finally{$xmlStream.Dispose()}
    if($xml.package.metadata.id -cne 'Connector.Access.Smb' -or $xml.package.metadata.version -cne '0.2.12'){throw 'Package identity changed.'}
    $deps=@($xml.SelectNodes('//*[local-name()="dependency"]'))
    if($deps.Count -ne2 -or @($deps|Where-Object{$_.id -notin @('Connector.Access','Connector.Access.Contracts') -or $_.version -cne '0.2.12'}).Count){throw 'Unexpected original dependency metadata.'}
