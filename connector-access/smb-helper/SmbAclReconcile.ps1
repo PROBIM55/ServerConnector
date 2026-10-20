@@ -117,7 +117,8 @@ function Invoke-SmbLsaRightsOperation {
         [Runtime.InteropServices.Marshal]::Copy($sidBytes, 0, $sidPtr, $sidBytes.Length)
         $attributes = New-Object SmbServiceIdentity.NativeLsa+LSA_OBJECT_ATTRIBUTES
         $attributes.Length = [uint32][Runtime.InteropServices.Marshal]::SizeOf($attributes)
-        $status = [SmbServiceIdentity.NativeLsa]::LsaOpenPolicy([IntPtr]::Zero, [ref]$attributes, 0x800, [ref]$policy)
+        $policyAccess = if ($Operation -eq 'Add') { 0x810 } else { 0x800 }
+        $status = [SmbServiceIdentity.NativeLsa]::LsaOpenPolicy([IntPtr]::Zero, [ref]$attributes, $policyAccess, [ref]$policy)
         if ($status -ne 0) { throw [ComponentModel.Win32Exception]::new([int][SmbServiceIdentity.NativeLsa]::LsaNtStatusToWinError($status)) }
         if ($Operation -eq 'Add') {
             $native = @()
@@ -142,7 +143,7 @@ function Invoke-SmbLsaRightsOperation {
             $entry = [Runtime.InteropServices.Marshal]::PtrToStructure([IntPtr]::Add($buffer, $i * $size), [type][SmbServiceIdentity.NativeLsa+LSA_UNICODE_STRING])
             $observed += [Runtime.InteropServices.Marshal]::PtrToStringUni($entry.Buffer, [int]($entry.Length / 2))
         }
-        return ,$observed
+        return $observed
     } finally {
         if ($buffer -ne [IntPtr]::Zero) { [void][SmbServiceIdentity.NativeLsa]::LsaFreeMemory($buffer) }
         if ($policy -ne [IntPtr]::Zero) { [void][SmbServiceIdentity.NativeLsa]::LsaClose($policy) }

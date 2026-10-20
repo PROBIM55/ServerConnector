@@ -12,6 +12,7 @@ $secure=ConvertTo-SecureString $plain -AsPlainText -Force
 $user=$null;$mapping=$null;$child=$null;$steps=[Collections.Generic.List[string]]::new();$orphanAcl=$false
 $primaryFailure=$null;$cleanupFailures=[Collections.Generic.List[string]]::new();$proofPassed=$false
 $ownerMarkerVerified=$false
+$identityRightsVerified=$false
 try{
     if((Get-SmbClientConfiguration).RequireEncryption){throw 'Fixture requires an initially optional encryption client to prove plain rejection.'}
     $runner=Join-Path $PWD.Path 'connector-access/smb-helper/SmbAclReconcile.ps1'
@@ -24,6 +25,11 @@ try{
     $ownerBytes=[Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes('fixture-device-'+$suffix))
     . ([scriptblock]::Create($assignment[0].Extent.Text))
     if($ownerMarker.Length-ne47 -or $ownerMarker-cnotmatch '^cnb:[A-Za-z0-9_-]{43}$'){throw 'Full-digest owner marker exceeds the Windows description contract.'}
+    $identityProof=& (Join-Path $env:WINDIR 'System32/WindowsPowerShell/v1.0/powershell.exe') -NoProfile -NonInteractive -File (Join-Path $PSScriptRoot 'test_hosted_smb_identity_rights.ps1') -RunnerPath $runner -AccountName ('clsa'+$suffix) -OwnerMarker $ownerMarker
+    if($LASTEXITCODE-ne0){throw 'Actual Windows PowerShell 5.1 identity restrictions failed.'}
+    $identityProof=($identityProof-join"`n")|ConvertFrom-Json
+    if(!$identityProof.exactDenyRightsReadback -or !$identityProof.idempotent -or !$identityProof.ownedSidRightsAndSamCleaned){throw 'Native identity restrictions/readback/cleanup are incomplete.'}
+    $identityRightsVerified=$true
     $oldRejected=$false
     try{$null=New-LocalUser -Name $name -NoPassword -Disabled -Description ('Structura Connector SMB '+('0'*64)) -WhatIf -ErrorAction Stop}
     catch{if($_.FullyQualifiedErrorId -notlike 'ParameterArgumentValidationError,*'){throw};$oldRejected=$true}
@@ -139,4 +145,4 @@ if($cleanupFailures.Count -or $primaryFailure -or !$proofPassed){
 if($cleanupFailures.Count){throw ('Native SMB fixture cleanup incomplete: '+($cleanupFailures.ToArray() -join ','))}
 if($primaryFailure){throw $primaryFailure}
 if(!$proofPassed){throw 'Native SMB proof incomplete.'}
-[IO.File]::WriteAllText([IO.Path]::GetFullPath($EvidencePath),(@{schemaVersion=1;ordinaryUser=$true;mandatoryCreationFlags='0x18';actualPrivacyVerified=$true;incrementalOrphanAceCleanup=$orphanAcl;managedOwnerMarkerNativeReadback=$ownerMarkerVerified;steps=$steps.ToArray();cleanup='confirmed';productionTouched=$false;utc=[datetime]::UtcNow.ToString('o')}|ConvertTo-Json -Depth 6))
+[IO.File]::WriteAllText([IO.Path]::GetFullPath($EvidencePath),(@{schemaVersion=1;ordinaryUser=$true;mandatoryCreationFlags='0x18';actualPrivacyVerified=$true;incrementalOrphanAceCleanup=$orphanAcl;managedOwnerMarkerNativeReadback=$ownerMarkerVerified;managedIdentityDenyRightsReadback=$identityRightsVerified;lsaRuntime='WindowsPowerShell5.1';steps=$steps.ToArray();cleanup='confirmed';productionTouched=$false;utc=[datetime]::UtcNow.ToString('o')}|ConvertTo-Json -Depth 6))

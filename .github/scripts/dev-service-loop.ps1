@@ -64,21 +64,26 @@ if($replay -eq0){
    $producerDriver -ceq 'c0b5399b97ef47ab4dbe8438f7e00c0ddbdbfbba' -and $producerWorkflow -ceq '8e6e46c5f0484a6bb1af8833bab33e4fc01064bf')
   if($firstRuntime){
    $runnerPath='connector-access/smb-helper/SmbAclReconcile.ps1'
-   $allowedHarness=@($driverPath,$workflowPath,'connector-desktop/scripts/invoke_hosted_encrypted_smb_fixture.ps1','connector-desktop/docs/DEV_SERVICES_RU.md',$runnerPath)
+   $allowedHarness=@($driverPath,$workflowPath,'connector-desktop/scripts/invoke_hosted_encrypted_smb_fixture.ps1','connector-desktop/scripts/test_hosted_smb_identity_rights.ps1','connector-desktop/docs/DEV_SERVICES_RU.md',$runnerPath)
    $changed=@(& git diff --no-renames --name-only $producer.head_sha $source)
    if($LASTEXITCODE-ne0 -or @($changed|Where-Object{$_ -cnotin $allowedHarness}).Count){throw 'First runtime managed inputs changed.'}
    if($runnerPath -cin $changed){
-    if((GitBlob $source $runnerPath) -cne 'c5c44aeb60985cb57c76d219742755bdd2d6c329'){throw 'Interpreted runner overlay is not the reviewed blob.'}
+    if((GitBlob $source $runnerPath) -cne '74703b569f31cec7f5d8b0ee2bb0e4b12a3d03a5'){throw 'Interpreted runner overlay is not the reviewed blob.'}
     # The runner is interpreted PowerShell, not a compiled DLL input. Permit
-    # only this exact ownership-marker correction on the immutable first run.
+    # only the exact ownership-marker and LSA API corrections on the first run.
     $original=(& git show ($producer.head_sha+':'+$runnerPath)) -join "`n"
     if($LASTEXITCODE-ne0){throw 'Original interpreted runner unavailable.'}
     $current=(& git show ($source+':'+$runnerPath)) -join "`n"
     if($LASTEXITCODE-ne0){throw 'Current interpreted runner unavailable.'}
     $oldMarker='$ownerMarker = ''Structura Connector SMB '' + [BitConverter]::ToString($ownerBytes).Replace(''-'', '''').ToLowerInvariant()'
     $newMarker='$ownerMarker = ''cnb:'' + [Convert]::ToBase64String($ownerBytes).TrimEnd(''='').Replace(''+'', ''-'').Replace(''/'', ''_'')'
-    if(!$original.Contains($oldMarker) -or $original.IndexOf($oldMarker) -ne $original.LastIndexOf($oldMarker) -or
-       $original.Replace($oldMarker,$newMarker) -cne $current){throw 'Interpreted runner overlay is outside the exact marker fix.'}
+    $oldOpen='        $status = [SmbServiceIdentity.NativeLsa]::LsaOpenPolicy([IntPtr]::Zero, [ref]$attributes, 0x800, [ref]$policy)'
+    $newOpen='        $policyAccess = if ($Operation -eq ''Add'') { 0x810 } else { 0x800 }'+"`n"+'        $status = [SmbServiceIdentity.NativeLsa]::LsaOpenPolicy([IntPtr]::Zero, [ref]$attributes, $policyAccess, [ref]$policy)'
+    $oldReturn='        return ,$observed';$newReturn='        return $observed'
+    foreach($fragment in @($oldMarker,$oldOpen,$oldReturn)){
+     if(!$original.Contains($fragment) -or $original.IndexOf($fragment)-ne$original.LastIndexOf($fragment)){throw 'Original interpreted runner correction is not unique.'}
+    }
+    if($original.Replace($oldMarker,$newMarker).Replace($oldOpen,$newOpen).Replace($oldReturn,$newReturn) -cne $current){throw 'Interpreted runner overlay is outside the exact reviewed fixes.'}
    }
   }elseif($producerDriver -cne $driver -or $producerWorkflow -cne $workflow -or $producerCodeHash -cne $codeHash){throw 'Producer source inputs differ.'}
   $artifacts=($client.GetStringAsync($url+'/artifacts').GetAwaiter().GetResult()|ConvertFrom-Json).artifacts
