@@ -9,7 +9,7 @@ $share='csmb_'+$suffix
 $root=Join-Path $env:PUBLIC $share
 $plain=[Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(32))+'!aA1'
 $secure=ConvertTo-SecureString $plain -AsPlainText -Force
-$user=$null;$mapping=$null;$child=$null;$steps=[Collections.Generic.List[string]]::new()
+$user=$null;$mapping=$null;$child=$null;$steps=[Collections.Generic.List[string]]::new();$orphanAcl=$false
 $primaryFailure=$null;$cleanupFailures=[Collections.Generic.List[string]]::new();$proofPassed=$false
 try{
     if((Get-SmbClientConfiguration).RequireEncryption){throw 'Fixture requires an initially optional encryption client to prove plain rejection.'}
@@ -61,6 +61,25 @@ try{
     $result=$line|ConvertFrom-Json;if(!$result.ok -or $result.step -cne 'revoked-account-denied'){throw 'Revocation proof missing.'}
     $steps.Add($result.step)
     if(!$child.WaitForExit(15000) -or $child.ExitCode -ne 0){throw 'Native SMB fixture did not exit cleanly.'}
+    # Exercise incremental removal of an owned deleted-account ACE. A valid
+    # grant introduced after the original image must survive this operation.
+    Grant-SmbShareAccess -Name $share -AccountName $account -AccessRight Change -Force|Out-Null
+    Remove-LocalUser -Name $name
+    $admins=([Security.Principal.SecurityIdentifier]::new('S-1-5-32-544')).Translate([Security.Principal.NTAccount]).Value
+    Grant-SmbShareAccess -Name $share -AccountName $admins -AccessRight Full -Force|Out-Null
+    $orphan=@(Get-SmbShareAccess -Name $share|Where-Object{$_.AccountName -ceq ('*'+$user.SID.Value)})
+    if($orphan.Count-ne1){throw 'Owned orphan share ACE was not observed.'}
+    Revoke-SmbShareAccess -Name $share -AccountName $orphan[0].AccountName -Force -ErrorAction Stop|Out-Null
+    $remaining=@(Get-SmbShareAccess -Name $share)
+    if($remaining.Count-ne1 -or $remaining[0].AccountName -ine $admins -or $remaining[0].AccessRight -cne 'Full'){throw 'Incremental orphan cleanup changed the valid grant.'}
+    Grant-SmbShareAccess -Name $share -AccountName $orphan[0].AccountName -AccessRight Change -Force -ErrorAction Stop|Out-Null
+    $restored=@(Get-SmbShareAccess -Name $share)
+    if($restored.Count-ne2 -or @($restored|Where-Object{$_.AccountName -ceq $orphan[0].AccountName -and $_.AccessRight -ceq 'Change'}).Count-ne1 -or
+       @($restored|Where-Object{$_.AccountName -ieq $admins -and $_.AccessRight -ceq 'Full'}).Count-ne1){throw 'Incremental orphan rollback did not preserve both grants.'}
+    Revoke-SmbShareAccess -Name $share -AccountName $orphan[0].AccountName -Force -ErrorAction Stop|Out-Null
+    $remaining=@(Get-SmbShareAccess -Name $share)
+    if($remaining.Count-ne1 -or $remaining[0].AccountName -ine $admins -or $remaining[0].AccessRight -cne 'Full'){throw 'Final incremental orphan cleanup differs.'}
+    $orphanAcl=$true
     $proofPassed=$true
 }catch{$primaryFailure=$_}finally{
     $plain=$null
@@ -103,4 +122,4 @@ if($cleanupFailures.Count -or $primaryFailure -or !$proofPassed){
 if($cleanupFailures.Count){throw ('Native SMB fixture cleanup incomplete: '+($cleanupFailures.ToArray() -join ','))}
 if($primaryFailure){throw $primaryFailure}
 if(!$proofPassed){throw 'Native SMB proof incomplete.'}
-[IO.File]::WriteAllText([IO.Path]::GetFullPath($EvidencePath),(@{schemaVersion=1;ordinaryUser=$true;mandatoryCreationFlags='0x18';actualPrivacyVerified=$true;steps=$steps.ToArray();cleanup='confirmed';productionTouched=$false;utc=[datetime]::UtcNow.ToString('o')}|ConvertTo-Json -Depth 6))
+[IO.File]::WriteAllText([IO.Path]::GetFullPath($EvidencePath),(@{schemaVersion=1;ordinaryUser=$true;mandatoryCreationFlags='0x18';actualPrivacyVerified=$true;incrementalOrphanAceCleanup=$orphanAcl;steps=$steps.ToArray();cleanup='confirmed';productionTouched=$false;utc=[datetime]::UtcNow.ToString('o')}|ConvertTo-Json -Depth 6))
