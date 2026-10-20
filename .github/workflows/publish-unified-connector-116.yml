@@ -25,6 +25,8 @@ jobs:
       ARTIFACT_ID: '12292681211'
       ARTIFACT_DIGEST: '75dfcd52540ae996e25568bec35c228c0676b045db63e5c07a3e22f2f1ca4b7d'
       ARTIFACT_SIZE: '416177148'
+      DRAFT_RELEASE_ID: '418836252'
+      DRAFT_AUTHOR_ID: '223092409'
       VERIFIED_WORKFLOW: '.github/workflows/build-unified-connector-candidate.yml'
     steps:
       - name: Verify original artifact and publish unchanged EXE
@@ -127,8 +129,11 @@ jobs:
               (Get-AuthenticodeSignature -LiteralPath $exe).Status -ne 'NotSigned') { throw 'EXE identity differs.' }
           $latest=gh api "repos/$repository/releases/latest" | ConvertFrom-Json
           if ($LASTEXITCODE -ne 0) { throw 'Cannot read existing latest release.' }
-          $releases=gh api "repos/$repository/releases?per_page=100" | ConvertFrom-Json
-          if ($LASTEXITCODE -ne 0 -or @($releases | Where-Object tag_name -CEQ 'platform-connector-v1.1.11').Count) { throw 'Release already exists; do not overwrite.' }
+          $release=gh api "repos/$repository/releases/$env:DRAFT_RELEASE_ID" | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0 -or $release.id -ne [long]$env:DRAFT_RELEASE_ID -or
+              $release.author.id -ne [long]$env:DRAFT_AUTHOR_ID -or !$release.draft -or !$release.prerelease -or
+              $release.tag_name -cne 'platform-connector-v1.1.11' -or $release.target_commitish -cne $env:RUNTIME_SHA -or
+              $release.name -cne 'Платформа Коннектор 1.1.11' -or @($release.assets).Count -ne 0) { throw 'Precreated empty draft differs; do not overwrite.' }
           $refs=gh api "repos/$repository/git/matching-refs/tags/platform-connector-v1.1.11" | ConvertFrom-Json
           if ($LASTEXITCODE -ne 0) { throw 'Cannot verify the precreated exact release tag.' }
           $exactTag=@($refs | Where-Object ref -CEQ 'refs/tags/platform-connector-v1.1.11')
@@ -138,11 +143,7 @@ jobs:
           Новый пакет устанавливает приложение, NetBird и необходимые компоненты. Старые установщики и настройки не переносятся. Blender устанавливается по запросу из коннектора.
           Чистая установка, обновление с 1.1.9, восстановление, удаление, ярлыки и открытие приложения обычным пользователем проверены на облачной Windows. Проверено SMB3-шифрование и отзыв доступа. Пакет пока не имеет цифровой подписи издателя.
           '@
-          $request=@{tag_name='platform-connector-v1.1.11';target_commitish=$env:RUNTIME_SHA;name='Платформа Коннектор 1.1.11';body=$notes;draft=$true;prerelease=$true;make_latest='false'}
-          $requestPath=Join-Path $env:RUNNER_TEMP 'release-request.json'
-          $request | ConvertTo-Json | Set-Content -LiteralPath $requestPath -Encoding utf8
-          $release=gh api --method POST "repos/$repository/releases" --input $requestPath | ConvertFrom-Json
-          if ($LASTEXITCODE -ne 0 -or !$release.draft -or !$release.prerelease) { throw 'Draft creation unresolved.' }
+          if ($release.body.Replace("`r`n","`n").Trim() -cne $notes.Replace("`r`n","`n").Trim()) { throw 'Precreated draft notes differ.' }
           $delivery=Join-Path $env:RUNNER_TEMP 'delivery'
           New-Item -ItemType Directory -Path $delivery | Out-Null
           Copy-Item -LiteralPath $exe -Destination $delivery
@@ -160,14 +161,18 @@ jobs:
           if ($asset.Count -ne 1 -or $asset[0].size -ne $manifest.bytes -or $asset[0].digest -cne ('sha256:'+$hash)) { throw 'Uploaded EXE differs.' }
           $tag=gh api "repos/$repository/git/ref/tags/platform-connector-v1.1.11" | ConvertFrom-Json
           if ($LASTEXITCODE -ne 0 -or $tag.object.type -cne 'commit' -or $tag.object.sha -cne $env:RUNTIME_SHA) { throw 'Release tag changed; leave unpublished.' }
-          $published=gh api --method PATCH "repos/$repository/releases/$($release.id)" -F draft=false -F prerelease=true -f make_latest=false | ConvertFrom-Json
-          if ($LASTEXITCODE -ne 0 -or $published.draft -or !$published.prerelease) { throw 'Publication unresolved.' }
+          $ready=gh api "repos/$repository/releases/$($release.id)" | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0 -or !$ready.draft -or !$ready.prerelease -or
+              $ready.author.id -ne [long]$env:DRAFT_AUTHOR_ID -or $ready.tag_name -cne 'platform-connector-v1.1.11' -or
+              $ready.target_commitish -cne $env:RUNTIME_SHA) { throw 'Draft changed; leave unpublished.' }
           $after=gh api "repos/$repository/releases/latest" | ConvertFrom-Json
           if ($LASTEXITCODE -ne 0 -or $after.tag_name -cne $latest.tag_name) { throw 'Latest release changed unexpectedly.' }
-          @{releaseUrl=$published.html_url;downloadUrl=$asset[0].browser_download_url;installerSha256=$hash;installerSize=$asset[0].size;
+          @{releaseId=$ready.id;draftReady=$true;published=$false;authorId=$ready.author.id;tag=$ready.tag_name;
+            downloadUrl=$asset[0].browser_download_url;installerSha256=$hash;installerSize=$asset[0].size;
             runtimeSourceSha=$env:RUNTIME_SHA;verificationSourceSha=$env:VERIFIED_SHA;verificationRun=$env:VERIFIED_RUN;
-            verificationAttempt=$env:VERIFIED_ATTEMPT;legacyLatest=$after.tag_name} |
-            ConvertTo-Json | Set-Content -LiteralPath (Join-Path $delivery 'publication-proof.json') -Encoding utf8
+            verificationAttempt=$env:VERIFIED_ATTEMPT;legacyLatest=$after.tag_name;
+            assets=@($assets | Select-Object id,name,size,digest)} |
+            ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $delivery 'publication-proof.json') -Encoding utf8
           Get-Content -LiteralPath (Join-Path $delivery 'publication-proof.json')
       - name: Retain publication receipt
         if: always()
