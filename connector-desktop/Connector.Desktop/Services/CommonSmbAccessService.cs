@@ -11,7 +11,8 @@ using Platform.Connector.Core;
 
 namespace Connector.SmbAccess;
 
-public sealed record CommonSmbFolder(string ResourceId, string DisplayName, string? Drive);
+/// <param name="ViaLegacyConnector">The legacy share is opened by the previous Structura Connector on this PC.</param>
+public sealed record CommonSmbFolder(string ResourceId, string DisplayName, string? Drive, bool ViaLegacyConnector = false);
 public sealed record CommonSmbRouteInvalidation(long RouteEpoch);
 
 public sealed class CommonSmbAccessException : Exception
@@ -47,6 +48,7 @@ public sealed class CommonSmbAccessService : IDisposable
     private readonly TimeSpan _mappingLivenessInterval;
     private readonly Func<TimeSpan, CancellationToken, Task> _delay;
     private readonly Func<string, CancellationToken, ValueTask<bool>> _authenticatedRead;
+    private readonly ILegacyConnectorDetector? _legacyConnector;
     private readonly CancellationTokenSource _monitorLifetime = new();
     private readonly Task _mappingMonitor;
     private readonly SemaphoreSlim _serial = new(1, 1);
@@ -54,6 +56,8 @@ public sealed class CommonSmbAccessService : IDisposable
     private readonly Dictionary<string, OwnedMapping> _ownedMappings = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, OwnedMapping> _pendingMappings = new(StringComparer.OrdinalIgnoreCase);
     private IReadOnlyList<CommonSmbFolder> _folders = Array.Empty<CommonSmbFolder>();
+    private LegacyConnectorSnapshot? _legacyConnectorSnapshot;
+    private LegacyConnectorSnapshot? _operationLegacySnapshot; // guarded by _serial
     private ValidatedAccess? _authorization;
     private long _authorizationEpoch;
     private long _routeEpoch;
@@ -68,7 +72,8 @@ public sealed class CommonSmbAccessService : IDisposable
         TimeProvider? timeProvider = null,
         TimeSpan? mappingLivenessInterval = null,
         Func<TimeSpan, CancellationToken, Task>? delay = null,
-        Func<string, CancellationToken, ValueTask<bool>>? authenticatedRead = null)
+        Func<string, CancellationToken, ValueTask<bool>>? authenticatedRead = null,
+        ILegacyConnectorDetector? legacyConnector = null)
     {
         _transport = transport ?? throw new ArgumentNullException(nameof(transport));
         _currentProfile = currentProfile ?? throw new ArgumentNullException(nameof(currentProfile));
@@ -80,6 +85,7 @@ public sealed class CommonSmbAccessService : IDisposable
             throw new ArgumentOutOfRangeException(nameof(mappingLivenessInterval));
         _delay = delay ?? ((interval, cancellationToken) => Task.Delay(interval, _time, cancellationToken));
         _authenticatedRead = authenticatedRead ?? ReadDirectoryMetadataAsync;
+        _legacyConnector = legacyConnector;
         _port.NetworkChanged += OnNetworkChanged;
         _mappingMonitor = MonitorMappingsAsync(_monitorLifetime.Token);
     }
@@ -87,6 +93,8 @@ public sealed class CommonSmbAccessService : IDisposable
     public IReadOnlyList<CommonSmbFolder> Folders => Volatile.Read(ref _folders);
     public long RouteEpoch { get { lock (_routeSync) return _routeEpoch; } }
     public bool IsAuthorizationAdmissionOpen => Volatile.Read(ref _authorizationAdmission) != 0;
+    /// <summary>Latest neighbour-mode evaluation; safe to log (no accounts, paths or credentials).</summary>
+    public LegacyConnectorSnapshot? LegacyConnectorSnapshot => Volatile.Read(ref _legacyConnectorSnapshot);
     public event Action<CommonSmbRouteInvalidation>? RouteInvalidated;
 
     public void EnableAuthorization(long expectedRouteEpoch)
@@ -123,7 +131,7 @@ public sealed class CommonSmbAccessService : IDisposable
         }
         finally
         {
-            _serial.Release();
+            ReleaseSerial();
         }
         cancellationToken.ThrowIfCancellationRequested();
     }
@@ -165,7 +173,7 @@ public sealed class CommonSmbAccessService : IDisposable
         finally
         {
             if (admission.HasValue && !IsAuthorizationAdmissionCurrent(admission.Value)) ClearAuthorization();
-            _serial.Release();
+            ReleaseSerial();
         }
     }
 
@@ -189,6 +197,8 @@ public sealed class CommonSmbAccessService : IDisposable
                     await EnsureLiveRouteAsync(_ownedMappings[alreadyOwned], cancellationToken).ConfigureAwait(false);
                     continue;
                 }
+                // Neighbour mode: the previous connector owns the legacy share; others still mount.
+                if (IsLegacyNeighbourActive(resource)) continue;
 
                 var drive = await FindFreeDriveAsync(cancellationToken).ConfigureAwait(false);
                 await MountCoreAsync(access, resource, drive, cancellationToken).ConfigureAwait(false);
@@ -205,7 +215,7 @@ public sealed class CommonSmbAccessService : IDisposable
         finally
         {
             if (admission.HasValue && !IsAuthorizationAdmissionCurrent(admission.Value)) ClearAuthorization();
-            _serial.Release();
+            ReleaseSerial();
         }
     }
 
@@ -254,7 +264,7 @@ public sealed class CommonSmbAccessService : IDisposable
         finally
         {
             if (admission.HasValue && !IsAuthorizationAdmissionCurrent(admission.Value)) ClearAuthorization();
-            _serial.Release();
+            ReleaseSerial();
         }
 
         try
@@ -292,15 +302,15 @@ public sealed class CommonSmbAccessService : IDisposable
             await MountCoreAsync(access, resource, NormalizeDrive(drive), cancellationToken).ConfigureAwait(false);
             await PublishFoldersAsync(access, admission.Value, cancellationToken).ConfigureAwait(false);
         }
-        catch
+        catch (Exception exception)
         {
-            ClearAuthorization();
+            ClearAuthorization(keepFolders: IsLegacyNeighbourRefusal(exception));
             throw;
         }
         finally
         {
             if (admission.HasValue && !IsAuthorizationAdmissionCurrent(admission.Value)) ClearAuthorization();
-            _serial.Release();
+            ReleaseSerial();
         }
     }
 
@@ -319,6 +329,7 @@ public sealed class CommonSmbAccessService : IDisposable
             var drive = FindOwnedDrive(resource.ShareUnc);
             if (drive is null)
             {
+                EnsureNoLegacyNeighbour(resource);
                 // Do not create another drive for an earlier-process or foreign
                 // mapping. UNC equality cannot prove its credentials or ownership.
                 for (var letter = 'D'; letter <= 'Z'; letter++)
@@ -335,15 +346,15 @@ public sealed class CommonSmbAccessService : IDisposable
             await PublishFoldersAsync(access, admission.Value, cancellationToken).ConfigureAwait(false);
             return drive + Path.DirectorySeparatorChar;
         }
-        catch
+        catch (Exception exception)
         {
-            ClearAuthorization();
+            ClearAuthorization(keepFolders: IsLegacyNeighbourRefusal(exception));
             throw;
         }
         finally
         {
             if (admission.HasValue && !IsAuthorizationAdmissionCurrent(admission.Value)) ClearAuthorization();
-            _serial.Release();
+            ReleaseSerial();
         }
     }
 
@@ -385,7 +396,7 @@ public sealed class CommonSmbAccessService : IDisposable
         }
         finally
         {
-            _serial.Release();
+            ReleaseSerial();
         }
     }
 
@@ -544,6 +555,8 @@ public sealed class CommonSmbAccessService : IDisposable
         CancellationToken cancellationToken)
     {
         EnsureAuthorizationCurrent(access);
+        // Re-evaluated on every native mount: the previous connector can start or stop at any time.
+        if (FindOwnedDrive(resource.ShareUnc) is null) EnsureNoLegacyNeighbour(resource);
         if (_pendingMappings.ContainsKey(drive) || _pendingMappings.Values.Any(mapping => SameTarget(mapping.ShareUnc, resource.ShareUnc)))
             throw Error("smb_cleanup_pending", "A previous SMB mapping cleanup is still unconfirmed.");
         var existingOwnedDrive = FindOwnedDrive(resource.ShareUnc);
@@ -692,7 +705,7 @@ public sealed class CommonSmbAccessService : IDisposable
         }
         finally
         {
-            _serial.Release();
+            ReleaseSerial();
         }
 
         cancellationToken.ThrowIfCancellationRequested();
@@ -737,7 +750,7 @@ public sealed class CommonSmbAccessService : IDisposable
                         if (IsAuthorizationAdmissionOpen) SignalRouteInvalidation();
                     }
                 }
-                finally { _serial.Release(); }
+                finally { ReleaseSerial(); }
             }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { }
@@ -774,7 +787,8 @@ public sealed class CommonSmbAccessService : IDisposable
             if (drive is not null &&
                 !SameTarget(await _port.GetTargetAsync(drive, cancellationToken).ConfigureAwait(false), resource.ShareUnc))
                 drive = null;
-            folders.Add(new CommonSmbFolder(resource.ResourceId, resource.ShareName, drive));
+            folders.Add(new CommonSmbFolder(resource.ResourceId, resource.ShareName, drive,
+                drive is null && IsLegacyNeighbourActive(resource)));
         }
         if (IsAuthorizationAdmissionCurrent(admission))
             Volatile.Write(ref _folders, Array.AsReadOnly(folders.ToArray()));
@@ -850,11 +864,50 @@ public sealed class CommonSmbAccessService : IDisposable
             throw Error("smb_cleanup_pending", "A previous SMB mapping cleanup is still unconfirmed.");
     }
 
-    private void ClearAuthorization()
+    private void ClearAuthorization(bool keepFolders = false)
     {
         _authorization = null;
-        Volatile.Write(ref _folders, Array.Empty<CommonSmbFolder>());
+        if (!keepFolders) Volatile.Write(ref _folders, Array.Empty<CommonSmbFolder>());
     }
+
+    /// <summary>
+    /// Neighbour mode (owner decision 25.10): while the previous Structura Connector is alive on
+    /// this PC it alone talks to the legacy server. Both use the same server name with different
+    /// accounts, so a second session would fail with 1219 and make the old client drop all of its
+    /// sessions to the host. Only the exact legacy share is affected; overlay shares are not.
+    /// </summary>
+    private bool IsLegacyNeighbourActive(ValidatedResource resource)
+    {
+        if (_legacyConnector is null ||
+            !string.Equals(resource.ShareUnc, LegacyEncryptedSmbPolicy.ShareUnc, StringComparison.OrdinalIgnoreCase))
+            return false;
+        // Evaluated once per serialized operation (cleared in ReleaseSerial), fresh on each action.
+        var snapshot = _operationLegacySnapshot;
+        if (snapshot is null)
+        {
+            try { snapshot = _legacyConnector.Detect(); }
+            catch (Exception exception) { snapshot = LegacyConnectorSnapshot.Failed(exception); }
+            _operationLegacySnapshot = snapshot;
+            Volatile.Write(ref _legacyConnectorSnapshot, snapshot);
+        }
+        return snapshot.NeighbourModeActive;
+    }
+
+    private void ReleaseSerial()
+    {
+        _operationLegacySnapshot = null;
+        _serial.Release();
+    }
+
+    private void EnsureNoLegacyNeighbour(ValidatedResource resource)
+    {
+        if (IsLegacyNeighbourActive(resource))
+            throw Error("smb_legacy_client_active",
+                "The legacy share is served by the previous connector on this computer.");
+    }
+
+    private static bool IsLegacyNeighbourRefusal(Exception exception) =>
+        exception is CommonSmbAccessException { Code: "smb_legacy_client_active" };
 
     private long RequireAuthorizationAdmission()
     {

@@ -14,7 +14,8 @@ const check = (condition, name, details = undefined) => {
   if (!condition) failures.push({ check: name, details });
 };
 
-const folder = (resourceId, displayName, drive = null) => ({ resourceId, displayName, drive });
+const folder = (resourceId, displayName, drive = null, viaLegacyConnector = false) =>
+  ({ resourceId, displayName, drive, viaLegacyConnector });
 const baseSnapshot = assignedFolders => ({
   reset: true,
   commonAccessSelected: true,
@@ -63,7 +64,7 @@ const baseSnapshot = assignedFolders => ({
 
     const emit = async snapshot => {
       check(snapshot.assignedFolders.every(item =>
-        Object.keys(item).sort().join(',') === 'displayName,drive,resourceId'),
+        Object.keys(item).sort().join(',') === 'displayName,drive,resourceId,viaLegacyConnector'),
       'snapshot-folder-contract-safe');
       await page.evaluate(value => window.__snapshot(value), snapshot);
       await page.waitForTimeout(30);
@@ -121,6 +122,19 @@ const baseSnapshot = assignedFolders => ({
     await page.locator('[data-act="models-unmount"]').click();
     await noHorizontalOverflow('desktop-two-no-horizontal-overflow');
     await page.screenshot({ path: join(output, 'folders-2-desktop.png'), fullPage: true });
+
+    // Neighbour mode: BIM_Models is served by the previous Structura Connector on this PC.
+    await emit(baseSnapshot([folder('company-a', 'Company_A'), folder('bim-models', 'BIM_Models', null, true)]));
+    await page.locator('#share-resource').selectOption('bim-models');
+    await page.waitForTimeout(30);
+    check((await bodyText()).includes('Доступна через прежний Structura Connector'), 'neighbour-legacy-folder-status');
+    check(await page.locator('[data-act="models-open"]').isDisabled(), 'neighbour-legacy-open-disabled');
+    check(await page.locator('[data-act="models-mount"]').isDisabled(), 'neighbour-legacy-mount-disabled');
+    await page.locator('#share-resource').selectOption('company-a');
+    await page.waitForTimeout(30);
+    check(!await page.locator('[data-act="models-open"]').isDisabled(), 'neighbour-company-open-enabled');
+    check(!await page.locator('[data-act="models-mount"]').isDisabled(), 'neighbour-company-mount-enabled');
+    await page.screenshot({ path: join(output, 'folders-neighbour-desktop.png'), fullPage: true });
 
     await page.setViewportSize({ width: 390, height: 844 });
     await emit(baseSnapshot(twoFolders));

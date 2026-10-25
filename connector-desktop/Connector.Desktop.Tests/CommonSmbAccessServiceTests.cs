@@ -321,6 +321,128 @@ public sealed class CommonSmbAccessServiceTests
     }
 
     [Fact]
+    public async Task Neighbour_mode_refuses_only_the_legacy_share_without_any_native_call()
+    {
+        var detector = new FakeLegacyConnector { NeighbourMode = true };
+        using var fixture = LegacyFixture(detector);
+
+        var open = await Assert.ThrowsAsync<CommonSmbAccessException>(
+            () => fixture.Service.GetFolderToOpenAsync("bim"));
+        var mount = await Assert.ThrowsAsync<CommonSmbAccessException>(
+            () => fixture.Service.MountAsync("bim", "Y:"));
+
+        Assert.All(new[] { open, mount }, error => Assert.Equal("smb_legacy_client_active", error.Code));
+        Assert.Empty(fixture.Port.Mounts);
+        Assert.Empty(fixture.Port.Unmounts);
+        // The folder list stays available and marks the legacy share as served by the old client.
+        Assert.Contains(fixture.Service.Folders, folder => folder is { ResourceId: "bim", ViaLegacyConnector: true });
+        Assert.Contains(fixture.Service.Folders, folder => folder is { ResourceId: "docs", ViaLegacyConnector: false });
+        Assert.True(fixture.Service.LegacyConnectorSnapshot!.NeighbourModeActive);
+
+        // Company overlay folders keep working in neighbour mode.
+        Assert.Equal("Z:\\", await fixture.Service.GetFolderToOpenAsync("docs"));
+        Assert.Equal(@"\\100.64.1.20\Projects", Assert.Single(fixture.Port.Mounts).ShareUnc);
+    }
+
+    [Fact]
+    public async Task Neighbour_mode_bulk_mount_skips_legacy_share_and_mounts_overlay_shares()
+    {
+        using var fixture = LegacyFixture(new FakeLegacyConnector { NeighbourMode = true });
+
+        var folders = await fixture.Service.RefreshAndMountAsync();
+
+        Assert.Equal(@"\\100.64.1.20\Projects", Assert.Single(fixture.Port.Mounts).ShareUnc);
+        Assert.Null(folders.Single(folder => folder.ResourceId == "bim").Drive);
+        Assert.True(folders.Single(folder => folder.ResourceId == "bim").ViaLegacyConnector);
+    }
+
+    [Fact]
+    public async Task Neighbour_mode_is_reevaluated_on_each_action_and_transfer_allows_legacy_mount()
+    {
+        var detector = new FakeLegacyConnector { NeighbourMode = true };
+        using var fixture = LegacyFixture(detector);
+        await Assert.ThrowsAsync<CommonSmbAccessException>(() => fixture.Service.GetFolderToOpenAsync("bim"));
+        // One detection per locked operation, although listing and mounting both consult it.
+        Assert.Equal(1, detector.Calls);
+        Assert.Equal("Z:\\", await fixture.Service.GetFolderToOpenAsync("docs"));
+        Assert.Equal(2, detector.Calls);
+
+        detector.Transferred = true; // K5 transfer marker: neighbour mode is off even if the old process runs.
+        Assert.Equal("Y:\\", await fixture.Service.GetFolderToOpenAsync("bim"));
+
+        Assert.Equal(3, detector.Calls);
+        Assert.Equal(LegacyEncryptedSmbPolicy.ShareUnc, fixture.Port.Mounts.Single(call => call.Drive == "Y:").ShareUnc);
+        Assert.False(fixture.Service.Folders.Single(folder => folder.ResourceId == "bim").ViaLegacyConnector);
+    }
+
+    [Fact]
+    public async Task Leftover_drive_mapping_outside_neighbour_mode_is_refused_as_not_owned()
+    {
+        using var fixture = LegacyFixture(new FakeLegacyConnector { NeighbourMode = false });
+        fixture.Port.Targets["Q:"] = LegacyEncryptedSmbPolicy.ShareUnc; // e.g. left by a killed earlier process
+
+        var error = await Assert.ThrowsAsync<CommonSmbAccessException>(
+            () => fixture.Service.GetFolderToOpenAsync("bim"));
+
+        Assert.Equal("smb_mapping_not_owned", error.Code);
+        Assert.Empty(fixture.Port.Mounts);
+        Assert.Empty(fixture.Port.Unmounts);
+        Assert.Equal(LegacyEncryptedSmbPolicy.ShareUnc, fixture.Port.Targets["Q:"]);
+    }
+
+    [Fact]
+    public async Task Failing_detector_fails_closed_for_legacy_share()
+    {
+        using var fixture = LegacyFixture(new FakeLegacyConnector { Failure = new InvalidOperationException("boom") });
+
+        var error = await Assert.ThrowsAsync<CommonSmbAccessException>(
+            () => fixture.Service.GetFolderToOpenAsync("bim"));
+
+        Assert.Equal("smb_legacy_client_active", error.Code);
+        Assert.Empty(fixture.Port.Mounts);
+        Assert.Contains("detector:InvalidOperationException",
+            fixture.Service.LegacyConnectorSnapshot!.ToSafeDiagnostic(), StringComparison.Ordinal);
+        Assert.DoesNotContain("boom", fixture.Service.LegacyConnectorSnapshot.ToSafeDiagnostic(), StringComparison.Ordinal);
+    }
+
+    private static Fixture LegacyFixture(FakeLegacyConnector detector)
+    {
+        var fixture = new Fixture(
+            address => address.Equals(IPAddress.Parse("100.64.1.20")) ||
+                address.Equals(IPAddress.Parse(LegacyEncryptedSmbPolicy.Destination)),
+            legacyConnector: detector);
+        fixture.Receipt = fixture.Receipt with
+        {
+            Resources = [.. fixture.Receipt.Resources, fixture.Receipt.Resources[0] with
+            {
+                ResourceId = "bim", ShareUnc = LegacyEncryptedSmbPolicy.ShareUnc
+            }]
+        };
+        fixture.Profile = fixture.Profile with
+        {
+            Resources = [.. fixture.Profile.Resources, fixture.Profile.Resources[0] with { ResourceId = "bim" }]
+        };
+        return fixture;
+    }
+
+    private sealed class FakeLegacyConnector : ILegacyConnectorDetector
+    {
+        public bool NeighbourMode { get; set; }
+        public bool Transferred { get; set; }
+        public Exception? Failure { get; set; }
+        public int Calls { get; private set; }
+
+        public LegacyConnectorSnapshot Detect()
+        {
+            Calls++;
+            if (Failure is not null) throw Failure;
+            var process = NeighbourMode ? LegacySignal.Present : LegacySignal.Absent;
+            return new LegacyConnectorSnapshot(process, LegacySignal.Absent, LegacySignal.Absent, LegacySignal.Absent,
+                Transferred ? LegacySignal.Present : LegacySignal.Absent, []);
+        }
+    }
+
+    [Fact]
     public async Task Explicit_mount_reuse_rechecks_live_route_when_network_notification_was_missed()
     {
         using var fixture = new Fixture();
@@ -919,7 +1041,8 @@ public sealed class CommonSmbAccessServiceTests
         public Fixture(
             Func<IPAddress, bool>? destinationAllowed = null,
             Func<TimeSpan, CancellationToken, Task>? delay = null,
-            bool overlayAwareTransport = false)
+            bool overlayAwareTransport = false,
+            ILegacyConnectorDetector? legacyConnector = null)
         {
             _destinationAllowed = destinationAllowed ?? (address => address.Equals(IPAddress.Parse("100.64.1.20")));
             Profile = CreateProfile();
@@ -937,7 +1060,8 @@ public sealed class CommonSmbAccessServiceTests
                 Port,
                 _time,
                 mappingLivenessInterval: TimeSpan.FromSeconds(15),
-                delay);
+                delay,
+                legacyConnector: legacyConnector);
         }
 
         public DeviceAccessProfile Profile { get; set; }

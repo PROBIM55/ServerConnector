@@ -260,7 +260,7 @@
     if(typeof snapshot.signOutPending==='boolean')state.signOutPending=snapshot.signOutPending;
     if(typeof snapshot.connectionProgress==='string')state.connectionProgress=snapshot.connectionProgress;
     if(snapshot.commonAccessSelected===true&&snapshot.notice===null)delete state.notices.connect;
-    if(Array.isArray(snapshot.assignedFolders))state.assignedFolders=snapshot.assignedFolders.filter(folder=>folder&&typeof folder==='object').map(folder=>({resourceId:String(folder.resourceId??''),displayName:String(folder.displayName??''),drive:typeof folder.drive==='string'?folder.drive:null}));
+    if(Array.isArray(snapshot.assignedFolders))state.assignedFolders=snapshot.assignedFolders.filter(folder=>folder&&typeof folder==='object').map(folder=>({resourceId:String(folder.resourceId??''),displayName:String(folder.displayName??''),drive:typeof folder.drive==='string'?folder.drive:null,viaLegacyConnector:folder.viaLegacyConnector===true}));
     if(typeof snapshot.folderStatus==='string')state.folderStatus=snapshot.folderStatus;
     if(snapshot.status&&typeof snapshot.status==='string')state.connectionStatus=snapshot.status;
     if(typeof snapshot.updateAvailable==='boolean')state.updateChecked=snapshot.updateAvailable;

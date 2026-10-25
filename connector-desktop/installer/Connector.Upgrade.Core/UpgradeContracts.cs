@@ -247,7 +247,10 @@ public sealed record InterruptedUpgradeInspection(
     bool UserStateCanBeRestored,
     bool UserStateMatchesSnapshot);
 
-public sealed record NewAccessVerification(bool PlatformApi, bool VpnRoute, bool Smb, bool SmbRequired = true)
+/// <param name="SmbFailureCode">Local smb_* reason of a failed SMB probe (e.g. smb_credential_conflict,
+/// smb_legacy_client_active); in-process only, never a server message.</param>
+public sealed record NewAccessVerification(bool PlatformApi, bool VpnRoute, bool Smb, bool SmbRequired = true,
+    string? SmbFailureCode = null)
 {
     public bool IsSuccessful => PlatformApi && VpnRoute && (!SmbRequired || Smb);
 }

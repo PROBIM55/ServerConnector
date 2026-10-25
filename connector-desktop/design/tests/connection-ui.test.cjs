@@ -41,10 +41,10 @@ test('ready account retains logout and does not offer another restore',()=>{
   assert.doesNotMatch(html,/data-act="reconnect"/);
 });
 
-const renderFolders=fields=>{
+const renderFolders=(fields,legacy=false)=>{
   const state={mode:'structura',fields,commonAccessSelected:true,connectionStatus:'Подключено',
     assignedFolders:[{resourceId:'company-empty',displayName:'Company_empty',drive:null},
-      {resourceId:'brigada-models',displayName:'BIM_Models',drive:null}]};
+      {resourceId:'brigada-models',displayName:'BIM_Models',drive:null,viaLegacyConnector:legacy}]};
   return context.window.CONNECTOR_REVIEW_PAGES({state,
     button:(text,style,attributes='')=>`<button ${attributes}>${text}</button>`,
     escape:value=>String(value),notice:()=>'',row:(title,detail,actions='')=>`${title}: ${detail}${actions}`,
@@ -63,4 +63,14 @@ test('selected BIM folder can be opened on demand before it has a drive',()=>{
   assert.match(html,/<option value="brigada-models" selected>BIM_Models<\/option>/);
   assert.match(html,/<button data-act="models-open">Открыть папку<\/button>/);
   assert.match(html,/<button data-act="models-unmount" disabled>Отключить диск<\/button>/);
+});
+
+test('BIM folder served by the previous connector is shown but cannot be opened or mounted here',()=>{
+  const html=renderFolders({'share-resource':'brigada-models'},true);
+  assert.match(html,/Доступна через прежний Structura Connector/);
+  assert.match(html,/<button data-act="models-open" disabled>Открыть папку<\/button>/);
+  assert.match(html,/<button data-act="models-mount" disabled>Подключить диск<\/button>/);
+  const company=renderFolders({'share-resource':'company-empty'},true);
+  assert.match(company,/<button data-act="models-open">Открыть папку<\/button>/);
+  assert.match(company,/<button data-act="models-mount">Подключить диск<\/button>/);
 });

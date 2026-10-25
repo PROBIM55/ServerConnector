@@ -53,7 +53,20 @@ public interface IExactSmbAccessProbe
     ValueTask<bool> VerifyAuthenticatedReadAsync(
         ExactSmbAccessProbeRequest request,
         CancellationToken cancellationToken);
+
+    /// <summary>Same probe with the locally defined reason of a safe failure, when known.</summary>
+    async ValueTask<ExactSmbAccessProbeResult> VerifyAuthenticatedReadDetailedAsync(
+        ExactSmbAccessProbeRequest request,
+        CancellationToken cancellationToken) =>
+        new(await VerifyAuthenticatedReadAsync(request, cancellationToken).ConfigureAwait(false));
 }
+
+/// <param name="FailureCode">
+/// A local smb_* code such as <c>smb_credential_conflict</c> (Windows 1219: the server is already
+/// connected under another account, e.g. by the previous connector) or <c>smb_legacy_client_active</c>.
+/// Never a server message, account or path.
+/// </param>
+public sealed record ExactSmbAccessProbeResult(bool Verified, string? FailureCode = null);
 
 public sealed class UnavailableExactSmbAccessProbe : IExactSmbAccessProbe
 {
@@ -163,12 +176,13 @@ public sealed class CommonConnectorLiveAccessVerificationPort : ILiveNewAccessVe
         if (!smbRequired)
             return new NewAccessVerification(true, true, false, SmbRequired: false);
 
-        var smb = await _smb.VerifyAuthenticatedReadAsync(
+        var smb = await _smb.VerifyAuthenticatedReadDetailedAsync(
             new ExactSmbAccessProbeRequest(state.DeviceId, state.Revision, profile, overlay),
             cancellationToken).ConfigureAwait(false);
         if (!ExactReadySession(_session.Current, state, profile))
             return new NewAccessVerification(false, false, false);
-        return new NewAccessVerification(true, true, smb);
+        return new NewAccessVerification(true, true, smb.Verified,
+            SmbFailureCode: smb.Verified ? null : smb.FailureCode);
     }
 
     private async ValueTask<bool> VerifyProtectedControlPlaneAsync(CancellationToken cancellationToken)

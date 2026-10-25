@@ -162,6 +162,59 @@ public sealed class WindowsSmbAccessProbeTests
         Assert.Null(port.Target);
     }
 
+    [Fact]
+    public async Task Credential_conflict_is_a_safe_failure_with_a_distinguishable_code()
+    {
+        var port = new FakeMappingPort { RejectedMount = new SmbCredentialConflictException() };
+        var probe = CreateProbe(port, Receipt(), (_, _) => ValueTask.FromResult(true));
+
+        var result = await probe.VerifyAuthenticatedReadDetailedAsync(Request(), CancellationToken.None);
+
+        Assert.Equal(new ExactSmbAccessProbeResult(false, "smb_credential_conflict"), result);
+        Assert.False(await probe.VerifyAuthenticatedReadAsync(Request(), CancellationToken.None));
+        Assert.Equal(0, port.ExactUnmountCalls);
+        Assert.Null(port.Target);
+    }
+
+    [Fact]
+    public async Task Neighbour_mode_is_a_safe_failure_with_a_distinguishable_code_and_no_mapping()
+    {
+        var port = new FakeMappingPort();
+        var receipt = Receipt() with
+        {
+            Resources = [Receipt().Resources[0] with { ShareUnc = LegacyEncryptedSmbPolicy.ShareUnc }]
+        };
+        var probe = new WindowsSmbAccessProbe(
+            new FakeTransport(receipt),
+            address => address.Equals(IPAddress.Parse(LegacyEncryptedSmbPolicy.Destination)),
+            new FixedTimeProvider(Now),
+            _ => ValueTask.FromResult(Overlay()),
+            _ => port,
+            (_, _) => ValueTask.FromResult(true),
+            new AliveLegacyConnector());
+
+        var result = await probe.VerifyAuthenticatedReadDetailedAsync(Request(), CancellationToken.None);
+
+        Assert.Equal(new ExactSmbAccessProbeResult(false, "smb_legacy_client_active"), result);
+        Assert.Equal(0, port.MountCalls);
+        Assert.Equal(0, port.ExactUnmountCalls);
+    }
+
+    [Fact]
+    public async Task Other_safe_failures_keep_the_boolean_contract_without_a_code()
+    {
+        var port = new FakeMappingPort();
+        var probe = CreateProbe(port, Receipt(), (_, _) => ValueTask.FromResult(true));
+
+        var result = await probe.VerifyAuthenticatedReadDetailedAsync(
+            Request() with { DeviceId = "dev_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" }, CancellationToken.None);
+        IExactSmbAccessProbe unavailable = new UnavailableExactSmbAccessProbe();
+
+        Assert.Equal(new ExactSmbAccessProbeResult(false), result);
+        Assert.Equal(new ExactSmbAccessProbeResult(false),
+            await unavailable.VerifyAuthenticatedReadDetailedAsync(Request(), CancellationToken.None));
+    }
+
     private static WindowsSmbAccessProbe CreateProbe(
         FakeMappingPort port,
         ConnectorSmbAccess receipt,
@@ -259,6 +312,7 @@ public sealed class WindowsSmbAccessProbeTests
         public int MountCalls { get; private set; }
         public int ExactUnmountCalls { get; private set; }
         public bool FailCleanup { get; init; }
+        public Exception? RejectedMount { get; init; } // Native refusal before any mapping exists.
 
         public ValueTask<NetworkOverlaySnapshot> GetLiveOverlayAsync(CancellationToken cancellationToken)
         {
@@ -298,6 +352,7 @@ public sealed class WindowsSmbAccessProbeTests
             Assert.Equal("Z:", drive);
             Assert.Null(Target);
             MountCalls++;
+            if (RejectedMount is not null) return ValueTask.FromException(RejectedMount);
             MountedShare = shareUnc;
             ObservedUserName = userName;
             ObservedPassword = password;
@@ -325,6 +380,12 @@ public sealed class WindowsSmbAccessProbeTests
         }
 
         public void ReplaceWithForeign() => Target = @"\\100.64.0.99\foreign";
+    }
+
+    private sealed class AliveLegacyConnector : ILegacyConnectorDetector
+    {
+        public LegacyConnectorSnapshot Detect() => new(
+            LegacySignal.Present, LegacySignal.Absent, LegacySignal.Absent, LegacySignal.Absent, LegacySignal.Absent, []);
     }
 
     private sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider

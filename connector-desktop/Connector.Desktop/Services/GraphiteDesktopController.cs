@@ -1001,6 +1001,14 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
             _connectorHost.Log($"Graphite native {name} failed ({ex.GetType().Name}, {ex.Code}, " +
                 $"win32 {(ex.InnerException as Win32Exception)?.NativeErrorCode}).");
         }
+        catch (CommonSmbAccessException ex) when (ex.Code == "smb_legacy_client_active")
+        {
+            // Neighbour mode: no native mount was attempted and the previous connector is untouched.
+            lock (_gate) _notice = new SafeNotice(name, "Папка BIM_Models на этом компьютере открывается через " +
+                "прежний Structura Connector. Перевод компьютера на Платформа Коннектор выполняет администратор.");
+            _connectorHost.Log($"Graphite native {name} skipped ({ex.Code}; " +
+                $"{_runtimeServices.CommonFolders.LegacyConnectorSnapshot?.ToSafeDiagnostic()}).");
+        }
         catch (Exception ex)
         {
             lock (_gate) _notice = new SafeNotice(name, "Действие не выполнено. Подробности доступны в журнале.");
