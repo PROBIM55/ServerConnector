@@ -579,6 +579,11 @@ public sealed class CommonSmbAccessService : IDisposable
             SignalRouteInvalidation();
             throw Error("smb_route_unavailable", "The live SMB route is outside the managed overlay.", exception);
         }
+        catch (SmbCredentialConflictException exception)
+        {
+            throw Error("smb_credential_conflict",
+                "The SMB server is already connected under another account in this Windows session.", exception);
+        }
         catch (SmbMappingCleanupException)
         {
             _pendingMappings[drive] = mapping;

@@ -56,6 +56,20 @@ internal sealed class SmbRouteUnavailableException : InvalidOperationException
         : base("The OS-selected SMB route does not use the authorized overlay source.") { }
 }
 
+/// <summary>
+/// ERROR_SESSION_CREDENTIAL_CONFLICT: this logon session already connects to the
+/// SMB server under another account (for example a previous connector). That
+/// connection is foreign: it is never cancelled, replaced or reused.
+/// </summary>
+internal sealed class SmbCredentialConflictException : Win32Exception
+{
+    public const int ErrorSessionCredentialConflict = 1219;
+
+    public SmbCredentialConflictException()
+        : base(ErrorSessionCredentialConflict,
+            "Windows already connects to this SMB server under another account in this logon session.") { }
+}
+
 internal sealed class SmbMappingCleanupException : Exception
 {
     public SmbMappingCleanupException(Exception primaryFailure, Exception cleanupFailure)
@@ -171,6 +185,9 @@ public sealed class WindowsSmbMappingPort : IWindowsSmbMappingPort, IDisposable
         _encryptedMappings.Remove(drive);
         var result = encrypted ? _native.AddEncryptedConnection(drive, shareUnc, userName, password)
             : _native.AddConnection(drive, shareUnc, userName, password);
+        // No mapping was created; the conflicting connection is not ours to touch.
+        if (result == SmbCredentialConflictException.ErrorSessionCredentialConflict)
+            throw new SmbCredentialConflictException();
         if (result != NoError)
             throw new Win32Exception(result, "Windows refused the temporary SMB drive mapping.");
 

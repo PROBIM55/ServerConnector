@@ -991,6 +991,16 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
         {
             lock (_gate) _notice = new SafeNotice(name, ex.Message);
         }
+        catch (CommonSmbAccessException ex) when (ex.Code == "smb_credential_conflict")
+        {
+            // The foreign Windows connection is left untouched; its account is never logged.
+            lock (_gate) _notice = new SafeNotice(name, "Этот сервер уже подключён в Windows под другой учётной записью " +
+                "(например, прежним Structura Connector). Откройте папку через прежний коннектор. " +
+                "Чтобы работать через Платформа Коннектор, закройте прежний коннектор, отключите его автозапуск " +
+                "и войдите в Windows заново.");
+            _connectorHost.Log($"Graphite native {name} failed ({ex.GetType().Name}, {ex.Code}, " +
+                $"win32 {(ex.InnerException as Win32Exception)?.NativeErrorCode}).");
+        }
         catch (Exception ex)
         {
             lock (_gate) _notice = new SafeNotice(name, "Действие не выполнено. Подробности доступны в журнале.");

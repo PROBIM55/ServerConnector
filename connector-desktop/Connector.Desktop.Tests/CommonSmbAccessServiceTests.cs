@@ -283,6 +283,44 @@ public sealed class CommonSmbAccessServiceTests
     }
 
     [Fact]
+    public async Task Credential_conflict_with_foreign_session_is_typed_and_leaves_foreign_mapping_untouched()
+    {
+        using var fixture = new Fixture();
+        fixture.Port.Targets["P:"] = @"\\100.64.1.20\BIM_Models";
+        fixture.Port.RejectedMount = new SmbCredentialConflictException();
+
+        var open = await Assert.ThrowsAsync<CommonSmbAccessException>(
+            () => fixture.Service.GetFolderToOpenAsync("docs"));
+        var mount = await Assert.ThrowsAsync<CommonSmbAccessException>(
+            () => fixture.Service.MountAsync("docs", "Y:"));
+
+        foreach (var error in new[] { open, mount })
+        {
+            Assert.Equal("smb_credential_conflict", error.Code);
+            Assert.Equal(1219, Assert.IsAssignableFrom<Win32Exception>(error.InnerException).NativeErrorCode);
+            Assert.DoesNotContain("top-secret-password", error.ToString(), StringComparison.Ordinal);
+        }
+        Assert.Equal(2, fixture.Port.Mounts.Count);
+        Assert.Empty(fixture.Port.Unmounts);
+        Assert.Equal(@"\\100.64.1.20\BIM_Models", fixture.Port.Targets["P:"]);
+        Assert.Null(fixture.Port.Targets.GetValueOrDefault("Z:"));
+        Assert.Null(fixture.Port.Targets.GetValueOrDefault("Y:"));
+    }
+
+    [Fact]
+    public async Task Other_native_mount_failure_keeps_untyped_win32_failure()
+    {
+        using var fixture = new Fixture();
+        fixture.Port.RejectedMount = new Win32Exception(1326);
+
+        var error = await Assert.ThrowsAsync<Win32Exception>(
+            () => fixture.Service.GetFolderToOpenAsync("docs"));
+
+        Assert.Equal(1326, error.NativeErrorCode);
+        Assert.Empty(fixture.Port.Unmounts);
+    }
+
+    [Fact]
     public async Task Explicit_mount_reuse_rechecks_live_route_when_network_notification_was_missed()
     {
         using var fixture = new Fixture();
@@ -997,6 +1035,7 @@ public sealed class CommonSmbAccessServiceTests
         public bool RouteAllowed { get; set; } = true;
         public Func<NetworkOverlaySnapshot?> LiveOverlay { get; set; } = () => null;
         public Exception? MountFailure { get; set; }
+        public Exception? RejectedMount { get; set; } // Native refusal before any mapping exists.
         public Exception? ExactUnmountFailure { get; set; }
         public bool BlockMount { get; set; }
         public bool BlockExactUnmount { get; set; }
@@ -1047,6 +1086,7 @@ public sealed class CommonSmbAccessServiceTests
             cancellationToken.ThrowIfCancellationRequested();
             Mounts.Add(new MountCall(drive, shareUnc, userName, password, destination,
                 expectedOverlayAddresses.ToArray()));
+            if (RejectedMount is not null) throw RejectedMount;
             Targets[drive] = shareUnc;
             MountStarted.TrySetResult();
             if (BlockMount) await ReleaseMount.Task.WaitAsync(cancellationToken);
@@ -1161,6 +1201,34 @@ public sealed class WindowsSmbMappingPortTests
         Assert.Equal(Share, native.Target);
     }
 
+    [Theory]
+    [InlineData(1219, true, false)]
+    [InlineData(1219, true, true)]
+    [InlineData(1326, false, false)]
+    [InlineData(1326, false, true)]
+    [InlineData(53, false, false)]
+    public async Task Native_refusal_is_typed_only_for_credential_conflict_and_never_cancels_anything(
+        int nativeError, bool credentialConflict, bool legacyEncrypted)
+    {
+        var native = new FakeNativeApi(OverlaySource) { AddResult = nativeError };
+        using var port = legacyEncrypted
+            ? new WindowsSmbMappingPort(native, legacyEncryptedShares: [LegacyEncryptedSmbPolicy.ShareUnc])
+            : new WindowsSmbMappingPort(native);
+        var share = legacyEncrypted ? LegacyEncryptedSmbPolicy.ShareUnc : Share;
+        var destination = legacyEncrypted ? IPAddress.Parse(LegacyEncryptedSmbPolicy.Destination) : Destination;
+
+        var error = await Assert.ThrowsAnyAsync<Win32Exception>(
+            async () => await port.MountAsync("Z:", share, @"SMBHOST\cnb", "secret",
+                destination, [OverlaySource], CancellationToken.None));
+
+        Assert.Equal(nativeError, error.NativeErrorCode);
+        Assert.Equal(credentialConflict, error is SmbCredentialConflictException);
+        if (!credentialConflict) Assert.IsType<Win32Exception>(error);
+        Assert.Equal(legacyEncrypted ? 1 : 0, native.EncryptedAdds);
+        Assert.Equal(0, native.CancelCalls);
+        Assert.Null(native.Target);
+    }
+
     [Fact]
     public async Task Route_recheck_reads_current_os_route_each_time()
     {
@@ -1223,6 +1291,8 @@ public sealed class WindowsSmbMappingPortTests
         public string? Target { get; private set; }
         public int CancelCalls { get; private set; }
         public int CancelResult { get; init; }
+        public int AddResult { get; init; }
+        public int EncryptedAdds { get; private set; }
         public int? ReplaceWithForeignOnTargetRead { get; init; }
 
         public string? GetTarget(string drive)
@@ -1237,8 +1307,15 @@ public sealed class WindowsSmbMappingPortTests
 
         public int AddConnection(string drive, string shareUnc, string userName, string password)
         {
+            if (AddResult != 0) return AddResult;
             Target = shareUnc;
             return 0;
+        }
+
+        public int AddEncryptedConnection(string drive, string shareUnc, string userName, string password)
+        {
+            EncryptedAdds++;
+            return AddConnection(drive, shareUnc, userName, password);
         }
 
         public int CancelConnection(string drive)
