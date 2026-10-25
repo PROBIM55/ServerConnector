@@ -188,7 +188,7 @@ public sealed class WindowsBridgeDesktopRestarter : IBridgeDesktopRestarter
         var root = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "Platform", "Bridge");
-        if (uri.Port == 39420)
+        if (uri.Port == TeklaProviderAdapter.Tekla2020BridgePort)
         {
             var profileRoot = Path.Combine(root, "profiles", "2020.0");
             return new BridgeRuntimeTarget(
@@ -199,7 +199,7 @@ public sealed class WindowsBridgeDesktopRestarter : IBridgeDesktopRestarter
                 $"--object-map \"{Path.Combine(profileRoot, "object-map.json")}\" " +
                 $"--idempotency-log \"{Path.Combine(profileRoot, "operation-log.jsonl")}\"");
         }
-        if (uri.Port == 39421)
+        if (uri.Port == TeklaProviderAdapter.DefaultBridgePort)
         {
             return new BridgeRuntimeTarget(
                 "PlatformBridgeDesktop",

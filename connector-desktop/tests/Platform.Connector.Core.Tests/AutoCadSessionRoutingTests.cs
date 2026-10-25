@@ -58,13 +58,13 @@ public sealed class AutoCadSessionRoutingTests
         var fake = new FakeSessionExecutor();
         var adapter = new AutoCadProviderAdapter(() => fake);
 
-        // Прежний batch-контракт: без autoCadExePath падает AUTOCAD_EXE_REQUIRED —
-        // поведение не изменилось, session-исполнитель не вызывался.
-        var payload = Json(new { workingDirectory = Path.Combine(Path.GetTempPath(), "acad-batch-" + Guid.NewGuid().ToString("N")) });
+        // Batch-контракт: без установленного плагина падает PLUGIN_NOT_FOUND
+        // (exe и плагин разрешаются локально, аудит ИБ А1), session-исполнитель не вызывался.
+        var payload = Json(new { jobTimeoutSeconds = 5 });
         var result = await adapter.ExecuteAsync(CreateJob("legacy-batch", payload), CancellationToken.None);
 
         Assert.False(result.IsSuccess);
-        Assert.Equal("AUTOCAD_EXE_REQUIRED", result.ErrorCode);
+        Assert.Equal("PLUGIN_NOT_FOUND", result.ErrorCode);
         Assert.Null(fake.LastRequest);
         Assert.Equal(0, fake.CallCount);
     }
