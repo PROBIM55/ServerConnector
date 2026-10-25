@@ -10,6 +10,24 @@ internal static class GraphiteWebSecurity
         => TryGetTrustedUri(value, out Uri? uri) && uri is not null &&
            string.Equals(uri.AbsolutePath, DocumentPath, StringComparison.Ordinal);
 
+    /// <summary>
+    /// Optional WebView2 settings differ by runtime version. A failure is reported (false) instead of aborting
+    /// the initialization; the caller provides a fallback.
+    /// </summary>
+    internal static bool TryEnableOptional(Action enable, Action<string>? log, string feature)
+    {
+        try
+        {
+            enable();
+            return true;
+        }
+        catch (Exception exception)
+        {
+            log?.Invoke($"Graphite UI: optional WebView2 feature '{feature}' is unavailable ({exception.GetType().Name}).");
+            return false;
+        }
+    }
+
     internal static bool IsTrustedResource(string? value)
         => TryGetTrustedUri(value, out _);
 

@@ -17,7 +17,8 @@ public sealed record DesktopPreferences(
     string? ConverterOutputDirectory = null,
     string? TeklaPublishSourcePath = null,
     string? TeklaExtensionsPublishSourcePath = null,
-    string? TeklaLibrariesPublishSourcePath = null);
+    string? TeklaLibrariesPublishSourcePath = null,
+    string? UiTheme = null);
 
 // IPC carries only target selection and the publication comment. Native source
 // paths stay in AppSettings and are resolved by the existing Tekla publisher.

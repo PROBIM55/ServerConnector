@@ -24,6 +24,9 @@ public sealed class PlatformToolsService : IDisposable
         _bridgeRestarter = bridgeRestarter ?? new WindowsBridgeDesktopRestarter();
     }
 
+    /// <summary>Bundled manifest of the pinned Blender runtime (version, archive size, source).</summary>
+    public string AgrRuntimeManifestPath => _agr.ManifestPath;
+
     public Task<AgrRuntimeProbe> ProbeAgrAsync(CancellationToken cancellationToken) => _agr.ProbeAsync(cancellationToken);
 
     public Task<AgrManagedRuntimeInstallResult> InstallAgrAsync(IProgress<AgrRuntimeInstallProgress>? progress, CancellationToken cancellationToken)

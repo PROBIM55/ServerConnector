@@ -17,6 +17,7 @@ Contents:
   10. sdefl (part of gltfpack.exe)
   11. Microsoft Visual C++ Redistributable (runtime for Assimp64.dll)
   12. IFC optimizer worker and Platform Connector rollback components
+  13. Manrope font (application interface)
 
 ==============================================================================
 1. Open Asset Import Library (Assimp)
@@ -632,3 +633,12 @@ SHA-256: D6666FD1613B16879AB6FDA9912D3476D0BA0BE2A782A7F934772D9F89DEDC3D
 The MSI contains .NET Runtime 8.0.28 and System.Security.Cryptography.ProtectedData
 8.0.0. See the full Microsoft runtime and package notices and license texts in
 ThirdPartyLicenses/platform-1.2.1/.
+
+==============================================================================
+13. Manrope font (application interface)
+==============================================================================
+File: ui/fonts/Manrope-Variable.ttf
+Source: https://github.com/googlefonts/manrope
+Copyright 2018 The Manrope Project Authors (https://github.com/googlefonts/manrope)
+License: SIL Open Font License, Version 1.1. The full license text is distributed
+next to the font: ui/fonts/Manrope-OFL.txt.

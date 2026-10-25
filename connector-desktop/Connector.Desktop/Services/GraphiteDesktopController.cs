@@ -39,6 +39,9 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
     };
 
     private static readonly TimeSpan LegacyWatchInterval = TimeSpan.FromSeconds(30);
+    // Fixed destinations only: the web document names an action, never a URL or a path.
+    private const string PlatformUrl = "https://bimplatforma.ru/";
+    private const string LicensesFileName = "THIRD_PARTY_NOTICES.txt";
     private const string LegacyStartedMessage = "Запущен прежний Structura Connector. Компьютер переведён на " +
         "Платформа Коннектор, и прежний коннектор может отключить папку BIM_Models. Закройте его через значок " +
         "в области уведомлений («Закрыть») или верните его кнопкой «Вернуть прежний коннектор» в настройках.";
@@ -79,6 +82,12 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
     private int _browserSignInPending;
     private string? _converterSubmissionMode;
     private IReadOnlyList<PlatformAutoCadSession> _cadSessions = Array.Empty<PlatformAutoCadSession>();
+    private long _noticeSeq;
+    private volatile bool _windowMaximized;
+    private volatile bool _nativeCaption;
+    private object? _agrRuntime;
+    private bool _agrRuntimeRead;
+    private string _uiTheme;
 
     public GraphiteDesktopController(
         IConnectorHost connectorHost,
@@ -130,6 +139,9 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
         foreach (ConverterWorkspaceJob job in _converterWorkspace.Jobs) Subscribe(job);
         _legacyStatus = ReadLegacyStatus();
         TrackOperation(WatchLegacyConnectorAsync(_lifetime.Token));
+        _uiTheme = GraphiteCommandRules.NormalizeTheme(_connectorHost.Settings.UiTheme) ?? "dark";
+        _connectorHost.OwnerWindow.StateChanged += OnOwnerWindowStateChanged;
+        _windowMaximized = _connectorHost.OwnerWindow.WindowState == System.Windows.WindowState.Maximized;
     }
 
     public event Action<object>? SnapshotChanged;
@@ -252,7 +264,11 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
             ["connectPending"] = commonBusy,
             ["signOutPending"] = connectionProgress.Operation == CommonConnectionOperation.SignOut,
             ["connectionProgress"] = progressMessage,
-            ["assignedFolders"] = _commonAccess.IsSelected && _commonAccess.HasPermission(mode, "folders", ConnectorPermission.Read)
+            // One interface for both products: the folder list follows the grant of either product,
+            // not the product of the last command.
+            ["assignedFolders"] = _commonAccess.IsSelected &&
+                (_commonAccess.HasPermission("structura", "folders", ConnectorPermission.Read) ||
+                 _commonAccess.HasPermission("platform", "folders", ConnectorPermission.Read))
                 ? _runtimeServices.CommonFolders.Folders : Array.Empty<CommonSmbFolder>(),
             ["folderStatus"] = _runtimeServices.CommonFolderStatus,
             ["legacyTransfer"] = LegacyTransferSnapshot(),
@@ -280,7 +296,11 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
             },
             ["cadSessions"] = _cadSessions,
             ["job"] = job,
-            ["notice"] = notice
+            ["notice"] = notice,
+            ["uiTheme"] = _uiTheme,
+            ["windowMaximized"] = _windowMaximized,
+            ["nativeCaption"] = _nativeCaption,
+            ["agrRuntime"] = AgrRuntimeFacts()
         };
         return snapshot;
     }
@@ -290,15 +310,24 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
         ObjectDisposedException.ThrowIf(_disposed, this);
         ArgumentNullException.ThrowIfNull(request);
         cancellationToken.ThrowIfCancellationRequested();
+        // Messages of GraphiteUserException are fixed user texts of this boundary; the document shows them as is.
+        return GraphiteCommandRules.RefuseUserErrors(() => HandleCore(request, cancellationToken), message =>
+        {
+            _connectorHost.Log($"Graphite native {request.Command} refused: {message}");
+            return Availability(false, message);
+        });
+    }
+
+    private Task<object?> HandleCore(GraphiteRpcRequest request, CancellationToken cancellationToken)
+    {
         ApplyRequestContext(request.Payload);
 
         if (_commonAccess.IsSelected)
         {
-            if (IsLegacyProtectedCommand(request.Command))
-                return Availability(false, "Этот раздел ожидает настройки доступа администратором.");
             var module = CommandModule(request.Command);
             var permission = request.Command is "models-mount" or "models-unmount" or "models-open" or "vpn-check" or
-                "firm-sync-all" or "xs-sync" or "ext-sync" or "lib-sync" or "legacy-transfer"
+                "firm-sync-all" or "xs-sync" or "ext-sync" or "lib-sync" or "legacy-transfer" or
+                "xs-open" or "ext-open" or "lib-open"
                 ? ConnectorPermission.Read : ConnectorPermission.Execute;
             if (module is not null && !_commonAccess.HasPermission(_mode, module, permission))
                 return Availability(false, "Для этого действия нет доступа. Обратитесь к администратору.");
@@ -330,9 +359,6 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
             case "update-download":
                 StartSupportAction(DesktopSupportAction.DownloadPendingUpdate, request.Command, cancellationToken);
                 break;
-            case "release-notes":
-                StartSupportAction(DesktopSupportAction.ShowReleaseNotes, request.Command, cancellationToken);
-                break;
             case "settings-log":
             case "cad-log":
             case "bridge-log":
@@ -349,10 +375,9 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
             case "diagnostics":
                 StartSupportAction(DesktopSupportAction.ExportDiagnostics, request.Command, cancellationToken);
                 break;
-            case "log-folder":
-                return Availability(false, "Журнал доступен кнопкой «Открыть журнал».");
             case "update-apply":
-                StartOperation(() => _connectorHost.InstallPendingUpdateAsync(confirmBeforeRun: true), request.Command, cancellationToken);
+                // The page asks first (its own dialog), like the update toast; one confirmation only.
+                StartOperation(() => _connectorHost.InstallPendingUpdateAsync(confirmBeforeRun: false), request.Command, cancellationToken);
                 break;
             case "firm-sync-all":
                 StartOperation(_connectorHost.RunTeklaInteractiveSyncAsync, request.Command, cancellationToken);
@@ -401,13 +426,8 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
             case "history-clear":
                 ClearHistory();
                 break;
-            case "jobs-refresh":
-                break;
             case "settings-store":
                 StartSavePreferences(request.Payload, reconnect: false, request.Command, cancellationToken);
-                break;
-            case "settings-save":
-                StartSavePreferences(request.Payload, reconnect: true, request.Command, cancellationToken);
                 break;
             case "ifc-detect":
                 StartAsyncCommand(Require(_patching, "Патчинг IFC").DetectCommand, request.Command, cancellationToken);
@@ -433,9 +453,6 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
             case "sharing-log":
                 Execute(Require(_modelSharing, "Model Sharing").OpenLogCommand);
                 break;
-            case "vpn-enable":
-                StartAsyncCommand(Require(_vpn, "VPN").EnableCommand, request.Command, cancellationToken);
-                break;
             case "models-mount":
                 if (_commonAccess.IsSelected)
                 {
@@ -455,9 +472,6 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
                 }
                 else StartOperation(() => _connectorHost.UnmountVpnShareAsync(ReadSafeField("drive")), request.Command, cancellationToken);
                 break;
-            case "vpn-disable":
-                StartAsyncCommand(Require(_vpn, "VPN").DisableCommand, request.Command, cancellationToken);
-                break;
             case "vpn-check":
                 if (_commonAccess.IsSelected)
                     StartOperation(async () =>
@@ -465,12 +479,9 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
                         using var response = await _commonAccess.SendAsync(System.Net.Http.HttpMethod.Head, "jobs/health", null,
                             new Dictionary<string, string>(), cancellationToken);
                         if (response.StatusCode != System.Net.HttpStatusCode.NoContent)
-                            throw new InvalidOperationException("Не удалось подтвердить защищённое подключение.");
+                            throw UserError("Не удалось подтвердить защищённое подключение.");
                     }, request.Command, cancellationToken);
                 else Require(_vpn, "VPN").RefreshStatus();
-                break;
-            case "vpn-log":
-                Execute(Require(_vpn, "VPN").OpenLogCommand);
                 break;
             case "models-open":
                 if (_commonAccess.IsSelected)
@@ -489,18 +500,6 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
                 if (!StartLegacyAction(request.Command, request.Command == "legacy-transfer"
                         ? TransferLegacyConnectorAsync : RestoreLegacyConnectorAsync, cancellationToken))
                     return Availability(false, "Действие с прежним коннектором уже выполняется.");
-                break;
-            case "speckle-open":
-                Execute(Require(_structura, "Structura").OpenSpeckleCommand);
-                break;
-            case "cloud-open":
-                Execute(Require(_structura, "Structura").OpenNextcloudCommand);
-                break;
-            case "speckle-access":
-                Execute(Require(_structura, "Structura").ShowSpeckleAccessCommand);
-                break;
-            case "cloud-access":
-                Execute(Require(_structura, "Structura").ShowNextcloudAccessCommand);
                 break;
             case "agr-probe":
                 StartAsyncCommand(_platformTools.ProbeAgrCommand, request.Command, cancellationToken);
@@ -535,23 +534,33 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
                 SelectRequestedJob(request.Payload);
                 Execute(_converterWorkspace.OpenValidationReportCommand);
                 break;
-            case "publish-validate":
-                StartOperation(() => _connectorHost.ValidateTeklaPublicationAsync(CreateTeklaPublicationRequest(request.Payload), cancellationToken), request.Command, cancellationToken);
+            case "window-minimize":
+            case "window-maximize":
+            case "window-close":
+                // «window-close» takes the path of the window cross: the Closing handler keeps the connector in the tray.
+                var windowCommand = request.Command;
+                OnOwnerWindow(window =>
+                {
+                    if (GraphiteCommandRules.NextWindowState(windowCommand, window.WindowState) is { } state) window.WindowState = state;
+                    else window.Close();
+                });
                 break;
-            case "publish-start":
-                StartOperation(() => _connectorHost.PublishTeklaAsync(CreateTeklaPublicationRequest(request.Payload), cancellationToken), request.Command, cancellationToken);
+            case "ui-theme":
+                SaveTheme(ReadField(request.Payload, "ui-theme"));
                 break;
-            case "agent-start":
-                StartBackgroundConnection(_mode, request.Command, cancellationToken);
+            case "platform-open":
+                OpenWithShell(PlatformUrl, "Не удалось открыть Платформу в браузере.");
                 break;
-            case "agent-stop":
-                StopBackgroundConnection(_mode, request.Command, cancellationToken);
+            case "xs-open":
+            case "ext-open":
+            case "lib-open":
+                OpenTeklaFolder(request.Command);
                 break;
-            case "exports-save":
-            case "exports-run":
-            case "exports-toggle":
-            case "exports-history":
-                return Availability(false, "Автоматические выгрузки моделей ещё разрабатываются.");
+            case "licenses-open":
+                var licenses = Path.Combine(AppContext.BaseDirectory, LicensesFileName);
+                if (!File.Exists(licenses)) throw UserError("Файл лицензий не найден. Переустановите Платформа Коннектор.");
+                OpenWithShell(licenses, "Не удалось открыть файл лицензий.");
+                break;
             default:
                 return Availability(false, "Действие пока недоступно в этой версии.");
         }
@@ -572,46 +581,12 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
     private void StartConnect(string token, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(token) || token.Length > 4096)
-            throw new InvalidOperationException("Нужен действующий токен устройства.");
+            throw UserError("Нужен действующий токен устройства.");
 
         StartOperation(async () =>
         {
             await _connectorHost.ConnectByTokenAsync(token, showSuccessDialog: true);
         }, "connect", cancellationToken);
-    }
-
-    private void StartBackgroundConnection(string mode, string command, CancellationToken cancellationToken)
-    {
-        if (_commonAccess.IsSelected)
-        {
-            StartCommonConnect(null, true, cancellationToken);
-            return;
-        }
-        if (!_connectorHost.CanControlBackgroundConnection)
-            throw new InvalidOperationException("Управление фоновым подключением недоступно.");
-        if (mode == "platform")
-        {
-            StartPlatformConnect(null, reconnect: true, cancellationToken);
-            return;
-        }
-        StartOperation(() => _connectorHost.StartBackgroundConnectionAsync(cancellationToken), command, cancellationToken);
-    }
-
-    private void StopBackgroundConnection(string mode, string command, CancellationToken cancellationToken)
-    {
-        if (_commonAccess.IsSelected)
-        {
-            StartOperation(() => _runtimeServices.DisconnectCommonAsync(cancellationToken), command, cancellationToken);
-            return;
-        }
-        if (!_connectorHost.CanControlBackgroundConnection)
-            throw new InvalidOperationException("Управление фоновым подключением недоступно.");
-        if (mode == "platform")
-        {
-            StartOperation(async () => RequireAccepted(await _platformConnection.DisconnectAsync(cancellationToken)), command, cancellationToken);
-            return;
-        }
-        StartOperation(() => _connectorHost.StopBackgroundConnectionAsync(cancellationToken), command, cancellationToken);
     }
 
     private void StartSavePreferences(JsonElement payload, bool reconnect, string command, CancellationToken cancellationToken)
@@ -640,7 +615,7 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
     private string ReadStoredToken()
     {
         string token = SettingsService.DecryptToken(_connectorHost.Settings.TokenCipherBase64);
-        if (string.IsNullOrWhiteSpace(token)) throw new InvalidOperationException("Сохранённый токен отсутствует.");
+        if (string.IsNullOrWhiteSpace(token)) throw UserError("Сохранённый токен отсутствует.");
         return token;
     }
 
@@ -740,16 +715,18 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
     {
         var started = System.Diagnostics.Stopwatch.StartNew();
         string message;
+        string kind = "error";
         try
         {
             await attempt.Completion;
+            kind = attempt.Operation == CommonConnectionOperation.SignOut || _commonAccess.IsReady ? "ok" : "warn";
             message = attempt.Operation == CommonConnectionOperation.SignOut ?
                 _runtimeServices.CommonFolderCleanupPending
                     ? "Вы вышли из учётной записи. Некоторые сетевые папки заняты — закройте открытые файлы."
                     : "Вы вышли из учётной записи." :
                 _commonAccess.IsReady ? "Подключено." : _commonAccess.DisplayStatus;
         }
-        catch (OperationCanceledException) when (attempt.Token.IsCancellationRequested) { message = "Действие отменено."; }
+        catch (OperationCanceledException) when (attempt.Token.IsCancellationRequested) { message = "Действие отменено."; kind = "info"; }
         catch (ConnectorSignInException ex) { message = ex.Message; }
         catch (Exception ex)
         {
@@ -770,18 +747,10 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
         }
         finally { lifetime.Dispose(); }
         if (_runtimeServices.CommonOperations.IsLatest(attempt.Generation))
-            lock (_gate) _notice = new SafeNotice(name, message, attempt.Generation);
+            lock (_gate) _notice = Notice(name, message, kind, attempt.Generation);
         _connectorHost.Log($"Common connection {attempt.Operation} finished in {started.Elapsed.TotalSeconds:F1}s.");
         PublishSnapshot();
     }
-
-    // New enrollment cannot reuse legacy web passwords, SMB credentials or
-    // direct HTTP transports. Those adapters require typed resource grants.
-    // Tekla firm/extensions/libraries sync is not listed: it reads public HTTPS
-    // manifests and an anonymous git repository, so tekla Read is enough.
-    private static bool IsLegacyProtectedCommand(string command) => command is
-        "speckle-open" or "speckle-access" or "cloud-open" or "cloud-access" or
-        "vpn-enable" or "vpn-disable" or "publish-start" or "publish-validate";
 
     private static string? CommandModule(string command) => command switch
     {
@@ -790,6 +759,7 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
         "agr-probe" or "agr-install" => "agr",
         "bridge-check" or "bridge-start" or "bridge-restart" => "tekla",
         "firm-sync-all" or "xs-sync" or "ext-sync" or "lib-sync" => "tekla",
+        "xs-open" or "ext-open" or "lib-open" => "tekla",
         "cad-refresh" or "cad-ping" => "autocad",
         "models-mount" or "models-unmount" or "models-open" or "vpn-check" => "folders",
         // The transfer hands BIM_Models to this connector: the same Read right as opening a folder.
@@ -805,7 +775,7 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
         if (!string.IsNullOrWhiteSpace(selected)) return selected;
         var folders = _runtimeServices.CommonFolders.Folders;
         if (folders.Count == 1) return folders[0].ResourceId;
-        throw new InvalidOperationException(folders.Count == 0 ? "Папки ещё не назначены администратором." : "Выберите папку проекта.");
+        throw UserError(folders.Count == 0 ? "Папки ещё не назначены администратором." : "Выберите папку проекта.");
     }
 
     private static void RequireAccepted(PlatformOperationResult result)
@@ -813,27 +783,29 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
         if (!result.Accepted) throw new InvalidOperationException(result.Code);
     }
 
-    private bool StartLegacyAction(string name, Func<CancellationToken, Task<string>> action,
+    private bool StartLegacyAction(string name, Func<CancellationToken, Task<(string Message, string Kind)>> action,
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (_lifetime.IsCancellationRequested) throw new OperationCanceledException(_lifetime.Token);
         if (Interlocked.CompareExchange(ref _legacyBusy, 1, 0) != 0) return false;
-        lock (_gate) _notice = new SafeNotice(name, "Действие запущено.");
+        lock (_gate) _notice = Notice(name, "Действие запущено.", "progress");
         // Native steps (window messages, registry, WNet) never run on the UI thread.
         TrackOperation(Task.Run(() => ObserveLegacyActionAsync(name, action, cancellationToken)));
         return true;
     }
 
-    private async Task ObserveLegacyActionAsync(string name, Func<CancellationToken, Task<string>> action,
+    private async Task ObserveLegacyActionAsync(string name, Func<CancellationToken, Task<(string Message, string Kind)>> action,
         CancellationToken cancellationToken)
     {
         string message;
-        try { message = await action(cancellationToken); }
-        catch (OperationCanceledException) { message = "Действие отменено."; }
+        string kind;
+        try { (message, kind) = await action(cancellationToken); }
+        catch (OperationCanceledException) { message = "Действие отменено."; kind = "info"; }
         catch (Exception ex)
         {
             message = "Действие не выполнено. Подробности доступны в журнале.";
+            kind = "error";
             _connectorHost.Log($"Legacy connector {name} failed ({ex.GetType().Name}).");
         }
         finally
@@ -841,24 +813,31 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
             _legacyStatus = ReadLegacyStatus();
             Volatile.Write(ref _legacyBusy, 0);
         }
-        lock (_gate) _notice = new SafeNotice(name, message);
+        lock (_gate) _notice = Notice(name, message, kind);
         PublishSnapshot();
     }
 
-    private async Task<string> TransferLegacyConnectorAsync(CancellationToken cancellationToken)
+    private static string OutcomeKind(LegacyTransferOutcome outcome) => outcome switch
+    {
+        LegacyTransferOutcome.Completed => "ok",
+        LegacyTransferOutcome.AlreadyDone => "info",
+        _ => "error"
+    };
+
+    private async Task<(string Message, string Kind)> TransferLegacyConnectorAsync(CancellationToken cancellationToken)
     {
         var service = _runtimeServices.LegacyTransfer;
         var (readiness, grantKnown) = ReadLegacyReadiness();
         if (readiness.ConnectionReady && !grantKnown)
-            return "Список общих папок ещё не получен, поэтому доступ к папке BIM_Models не проверен. Откройте " +
-                "раздел «Общие папки», дождитесь списка папок и повторите перевод.";
+            return ("Список общих папок ещё не получен, поэтому доступ к папке BIM_Models не проверен. Откройте " +
+                "раздел «Папки», дождитесь списка папок и повторите перевод.", "warn");
         var preflight = service.Preflight(readiness);
-        if (preflight.Transferred) return "Компьютер уже переведён на Платформа Коннектор.";
+        if (preflight.Transferred) return ("Компьютер уже переведён на Платформа Коннектор.", "info");
         if (preflight.Blockers.Count > 0)
         {
             _connectorHost.Log($"Legacy connector transfer refused (ready={readiness.ConnectionReady}, " +
                 $"granted={readiness.LegacyShareGranted}, incomplete={preflight.Incomplete}).");
-            return "Перевод недоступен. " + string.Join(" ", preflight.Blockers);
+            return ("Перевод недоступен. " + string.Join(" ", preflight.Blockers), "error");
         }
         var warning = preflight.Warnings.Count == 0 ? string.Empty : "\n\nВнимание: " + string.Join(" ", preflight.Warnings);
         if (!await ConfirmLegacyAsync("Перевести компьютер на Платформа Коннектор?\n\n" +
@@ -867,30 +846,30 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
                 "проводником: они работают под учётной записью прежнего коннектора и не дают подключить папку здесь. " +
                 "Его токен, настройки и защищённый туннель для Tekla не изменяются. " +
                 "Вернуть прежний коннектор можно кнопкой «Вернуть прежний коннектор» в настройках." + warning))
-            return "Перевод отменён.";
+            return ("Перевод отменён.", "info");
 
         var result = await service.TransferAsync(new LegacyTransferRequest(true, readiness, () => ConfirmLegacyAsync(
             "Прежний Structura Connector не закрылся сам. Завершить его принудительно?\n\n" +
             "Незавершённые действия прежнего коннектора будут прерваны.")), cancellationToken);
         _connectorHost.Log($"Legacy connector transfer {result.Outcome} ({result.Code}).");
         if (result.Outcome == LegacyTransferOutcome.Completed) await RefreshLegacyFolderFlagsAsync();
-        return result.Message;
+        return (result.Message, OutcomeKind(result.Outcome));
     }
 
-    private async Task<string> RestoreLegacyConnectorAsync(CancellationToken cancellationToken)
+    private async Task<(string Message, string Kind)> RestoreLegacyConnectorAsync(CancellationToken cancellationToken)
     {
         var service = _runtimeServices.LegacyTransfer;
-        if (!service.ReadStatus().CanRestore) return "Компьютер не переведён: прежний коннектор работает как раньше.";
+        if (!service.ReadStatus().CanRestore) return ("Компьютер не переведён: прежний коннектор работает как раньше.", "info");
         if (!await ConfirmLegacyAsync("Вернуть прежний Structura Connector?\n\n" +
                 "Диск Платформа Коннектор с папкой BIM_Models будет отключён, автозапуск прежнего коннектора " +
                 "восстановлен, а сам он запущен. Папку BIM_Models снова будет обслуживать прежний коннектор."))
-            return "Возврат отменён.";
+            return ("Возврат отменён.", "info");
 
         var result = await service.RestoreAsync(
             ct => _runtimeServices.CommonFolders.ReleaseOwnedLegacyShareAsync(ct), cancellationToken);
         _connectorHost.Log($"Legacy connector restore {result.Outcome} ({result.Code}).");
         if (result.Outcome == LegacyTransferOutcome.Completed) await RefreshLegacyFolderFlagsAsync();
-        return result.Message;
+        return (result.Message, OutcomeKind(result.Outcome));
     }
 
     /// <summary>
@@ -970,7 +949,7 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
                     if (previous != _legacyStatus) PublishSnapshot();
                     continue;
                 }
-                lock (_gate) _notice = new SafeNotice("legacy-started", LegacyStartedMessage);
+                lock (_gate) _notice = Notice("legacy-started", LegacyStartedMessage, "warn");
                 _connectorHost.Log("Legacy connector process started after the transfer; notice shown.");
                 try { _legacyStartedNotice?.Invoke(LegacyStartedMessage); }
                 catch (Exception) { /* The in-app notice remains. */ }
@@ -996,8 +975,8 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
                      ?? _converterWorkspace.OutputDirectory;
         }
 
-        if (input is null) throw new InvalidOperationException("Сначала выберите исходный файл в системном диалоге.");
-        if (string.IsNullOrWhiteSpace(output)) throw new InvalidOperationException("Сначала выберите папку результата.");
+        if (input is null) throw UserError("Сначала выберите исходный файл в системном диалоге.");
+        if (string.IsNullOrWhiteSpace(output)) throw UserError("Сначала выберите папку результата.");
 
         _converterWorkspace.OutputDirectory = output;
         _converterWorkspace.Product = _mode == "platform" ? ConnectorProductId.Platform : ConnectorProductId.Structura;
@@ -1073,12 +1052,6 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
             _pickedFolders.GetValueOrDefault("publish-lib-path"));
     }
 
-    private static TeklaPublicationRequest CreateTeklaPublicationRequest(JsonElement payload) => new(
-        ReadBooleanField(payload, "publish-firm", false),
-        ReadBooleanField(payload, "publish-extensions", false),
-        ReadBooleanField(payload, "publish-libraries", false),
-        ReadField(payload, "publish-comment").Trim());
-
     private string[]? ChooseFiles(string target, string filter, string extension)
     {
         string[]? paths;
@@ -1092,7 +1065,7 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
         if (paths is null) return null;
         if (paths.Length > 128 || paths.Any(path => !Path.IsPathFullyQualified(path) || !File.Exists(path) ||
             !string.Equals(Path.GetExtension(path), extension, StringComparison.OrdinalIgnoreCase)))
-            throw new InvalidOperationException("Выберите не более 128 IFC-файлов.");
+            throw UserError("Выберите не более 128 IFC-файлов.");
         return paths;
     }
 
@@ -1108,7 +1081,7 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
         if (path is null) return null;
         if (!Path.IsPathFullyQualified(path) || !File.Exists(path) ||
             !string.Equals(Path.GetExtension(path), extension, StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException("Выбранный файл не соответствует ожидаемому типу.");
+            throw UserError("Выбранный файл не соответствует ожидаемому типу.");
         return path;
     }
 
@@ -1123,7 +1096,7 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
         }
         if (path is null) return null;
         if (!Path.IsPathFullyQualified(path) || !Directory.Exists(path))
-            throw new InvalidOperationException("Выбранная папка недоступна.");
+            throw UserError("Выбранная папка недоступна.");
         return path;
     }
 
@@ -1150,7 +1123,7 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
     {
         if (command is not AsyncRelayCommand asyncCommand)
             throw new InvalidOperationException("Команда не поддерживает наблюдаемое async-выполнение.");
-        if (!asyncCommand.CanExecute(null)) throw new InvalidOperationException("Действие сейчас недоступно.");
+        if (!asyncCommand.CanExecute(null)) throw UserError("Действие сейчас недоступно.");
         StartOperation(() => asyncCommand.ExecuteAsync(), name, cancellationToken);
     }
 
@@ -1158,7 +1131,7 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (_lifetime.IsCancellationRequested) throw new OperationCanceledException(_lifetime.Token);
-        lock (_gate) _notice = new SafeNotice(name, "Действие запущено.");
+        lock (_gate) _notice = Notice(name, "Действие запущено.", "progress");
         Task task = ObserveAsync(operation, name);
         TrackOperation(task);
     }
@@ -1178,38 +1151,42 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
         {
             await operation();
             var outcome = LastOutcome(name);
-            lock (_gate) _notice = new SafeNotice(name, OutcomeMessage(outcome, name));
+            lock (_gate) _notice = Notice(name, OutcomeMessage(outcome, name), OutcomeKind(outcome));
         }
         catch (OperationCanceledException)
         {
-            lock (_gate) _notice = new SafeNotice(name, "Действие отменено.");
+            lock (_gate) _notice = Notice(name, "Действие отменено.", "info");
         }
         catch (ConnectorSignInException ex)
         {
-            lock (_gate) _notice = new SafeNotice(name, ex.Message);
+            lock (_gate) _notice = Notice(name, ex.Message, "error");
+        }
+        catch (GraphiteUserException ex)
+        {
+            lock (_gate) _notice = Notice(name, ex.Message, "error");
         }
         catch (CommonSmbAccessException ex) when (ex.Code == "smb_credential_conflict")
         {
             // The foreign Windows connection is left untouched; its account is never logged.
-            lock (_gate) _notice = new SafeNotice(name, "Этот сервер уже подключён в Windows под другой учётной записью " +
+            lock (_gate) _notice = Notice(name, "Этот сервер уже подключён в Windows под другой учётной записью " +
                 "(например, прежним Structura Connector). Откройте папку через прежний коннектор. " +
                 "Чтобы работать через Платформа Коннектор, выполните в настройках «Перевести компьютер на " +
-                "Платформа Коннектор».");
+                "Платформа Коннектор».", "error");
             _connectorHost.Log($"Graphite native {name} failed ({ex.GetType().Name}, {ex.Code}, " +
                 $"win32 {(ex.InnerException as Win32Exception)?.NativeErrorCode}).");
         }
         catch (CommonSmbAccessException ex) when (ex.Code == "smb_legacy_client_active")
         {
             // Neighbour mode: no native mount was attempted and the previous connector is untouched.
-            lock (_gate) _notice = new SafeNotice(name, "Папка BIM_Models на этом компьютере открывается через " +
+            lock (_gate) _notice = Notice(name, "Папка BIM_Models на этом компьютере открывается через " +
                 "прежний Structura Connector. Чтобы открывать её здесь, выполните в настройках «Перевести компьютер " +
-                "на Платформа Коннектор».");
+                "на Платформа Коннектор».", "warn");
             _connectorHost.Log($"Graphite native {name} skipped ({ex.Code}; " +
                 $"{_runtimeServices.CommonFolders.LegacyConnectorSnapshot?.ToSafeDiagnostic()}).");
         }
         catch (Exception ex)
         {
-            lock (_gate) _notice = new SafeNotice(name, "Действие не выполнено. Подробности доступны в журнале.");
+            lock (_gate) _notice = Notice(name, "Действие не выполнено. Подробности доступны в журнале.", "error");
             _connectorHost.Log($"Graphite native {name} failed ({ex.GetType().Name}).");
         }
         finally
@@ -1224,7 +1201,6 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
         "connect-common" => _commonAccess.IsReady ? OperationOutcome.Succeeded : OperationOutcome.None,
         "ifc-apply" or "ifc-rollback" => _patching?.LastOperationOutcome ?? OperationOutcome.Rejected,
         "sharing-config" => _modelSharing?.LastOperationOutcome ?? OperationOutcome.Rejected,
-        "vpn-enable" or "vpn-disable" => _vpn?.LastOperationOutcome ?? OperationOutcome.Rejected,
         "connect" or "reconnect" => _connectorHost.IsConnected ? OperationOutcome.Succeeded : OperationOutcome.Failed,
         "connect-platform" => _platformConnection.Connection.IsConnected ? OperationOutcome.Succeeded : OperationOutcome.None,
         "start" or "ifc-optimize" or "ifc-analyze" => _converterWorkspace.SelectedJob?.State switch
@@ -1235,6 +1211,13 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
             _ => OperationOutcome.None
         },
         _ => OperationOutcome.None
+    };
+
+    private static string OutcomeKind(OperationOutcome outcome) => outcome switch
+    {
+        OperationOutcome.Cancelled => "info",
+        OperationOutcome.Rejected or OperationOutcome.Failed => "error",
+        _ => "ok"
     };
 
     private static string OutcomeMessage(OperationOutcome outcome, string command) => outcome switch
@@ -1249,7 +1232,7 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
 
     private static void Execute(ICommand command)
     {
-        if (!command.CanExecute(null)) throw new InvalidOperationException("Действие сейчас недоступно.");
+        if (!command.CanExecute(null)) throw UserError("Действие сейчас недоступно.");
         command.Execute(null);
     }
 
@@ -1289,9 +1272,14 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
 
     private void ClearHistory()
     {
-        if (_converterWorkspace.IsSubmitting) throw new InvalidOperationException("Дождитесь завершения задания.");
-        _converterWorkspace.Jobs.Clear();
-        _converterWorkspace.SelectedJob = null;
+        if (_converterWorkspace.IsSubmitting) throw UserError("Дождитесь завершения задания.");
+        // «Очистить завершённые»: a queued or running job stays in the list.
+        foreach (ConverterWorkspaceJob job in _converterWorkspace.Jobs
+                     .Where(job => GraphiteCommandRules.IsFinishedJobState(job.State)).ToArray())
+        {
+            if (ReferenceEquals(_converterWorkspace.SelectedJob, job)) _converterWorkspace.SelectedJob = null;
+            _converterWorkspace.Jobs.Remove(job);
+        }
     }
 
     private void SelectRequestedJob(JsonElement payload)
@@ -1343,6 +1331,94 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
     }
 
     private void OnPropertyChanged(object? sender, PropertyChangedEventArgs args) => PublishSnapshot();
+
+    /// <summary>The page title bar cannot move the window (WebView2 without non-client regions): the system caption is used.</summary>
+    public void UseNativeCaption()
+    {
+        _nativeCaption = true;
+        PublishSnapshot();
+    }
+
+    /// <summary>Version, archive size and source host of the pinned Blender runtime, read once from its bundled manifest.</summary>
+    private object? AgrRuntimeFacts()
+    {
+        lock (_gate)
+        {
+            if (_agrRuntimeRead) return _agrRuntime;
+            _agrRuntimeRead = true;
+            try
+            {
+                var manifest = global::Platform.Connector.Compute.Agr.AgrBlenderRuntimeManifest.Load(_platformTools.NativeApi.AgrRuntimeManifestPath);
+                _agrRuntime = new { version = manifest.Version, archiveSizeBytes = manifest.ArchiveSizeBytes, sourceHost = manifest.ArchiveUrl.Host };
+            }
+            catch (Exception ex)
+            {
+                _connectorHost.Log($"Graphite: Blender runtime manifest unavailable ({ex.GetType().Name}).");
+            }
+            return _agrRuntime;
+        }
+    }
+
+    private void OnOwnerWindowStateChanged(object? sender, EventArgs args)
+    {
+        var maximized = _connectorHost.OwnerWindow.WindowState == System.Windows.WindowState.Maximized;
+        if (maximized == _windowMaximized) return;
+        _windowMaximized = maximized;
+        PublishSnapshot();
+    }
+
+    /// <summary>Window buttons of the page title bar; the change is queued so the reply is not re-entrant.</summary>
+    private void OnOwnerWindow(Action<System.Windows.Window> action)
+    {
+        var window = _connectorHost.OwnerWindow;
+        window.Dispatcher.BeginInvoke(new Action(() => action(window)));
+    }
+
+    private void SaveTheme(string requested)
+    {
+        var theme = GraphiteCommandRules.NormalizeTheme(requested) ?? throw UserError("Неизвестная тема оформления.");
+        lock (_gate) _uiTheme = theme;
+        TrackOperation(SaveThemeAsync(theme));
+    }
+
+    private async Task SaveThemeAsync(string theme)
+    {
+        try
+        {
+            await _connectorHost.SaveDesktopPreferencesAsync(
+                new DesktopPreferences(null, null, null, null, null, null, null, null, UiTheme: theme));
+        }
+        catch (Exception ex)
+        {
+            lock (_gate) _notice = Notice("ui-theme", "Тема применена, но не сохранена. Подробности доступны в журнале.", "error");
+            _connectorHost.Log($"Graphite theme save failed ({ex.GetType().Name}).");
+            PublishSnapshot();
+        }
+    }
+
+    private void OpenTeklaFolder(string command)
+    {
+        Dictionary<string, string> picked;
+        lock (_gate) picked = new Dictionary<string, string>(_pickedFolders, StringComparer.Ordinal);
+        OpenWithShell(GraphiteCommandRules.ResolveTeklaFolder(command, picked, _connectorHost.Settings),
+            "Не удалось открыть папку в проводнике.");
+    }
+
+    private void OpenWithShell(string target, string failure)
+    {
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(target) { UseShellExecute = true })?.Dispose();
+        }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
+        {
+            _connectorHost.Log($"Graphite shell open failed ({ex.GetType().Name}).");
+            throw UserError(failure);
+        }
+    }
+
+    private SafeNotice Notice(string command, string message, string kind, long? generation = null) =>
+        new(command, message, kind, Interlocked.Increment(ref _noticeSeq), generation);
     private void OnPlatformSnapshotChanged(ConnectorRuntimeSnapshot snapshot) => PublishSnapshot();
     private void OnCommonOperationChanged() => PublishSnapshot();
     private void OnCommonRecoveryChanged()
@@ -1384,6 +1460,7 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
         _runtimeServices.Platform.SnapshotChanged -= OnPlatformSnapshotChanged;
         _runtimeServices.CommonOperations.Changed -= OnCommonOperationChanged;
         _runtimeServices.CommonRecoveryChanged -= OnCommonRecoveryChanged;
+        _connectorHost.OwnerWindow.StateChanged -= OnOwnerWindowStateChanged;
         foreach (ConverterWorkspaceJob job in _converterWorkspace.Jobs) Unsubscribe(job);
 
         Task[] pending;
@@ -1399,7 +1476,8 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
     private static T Require<T>(T? value, string name) where T : class =>
         value ?? throw Unavailable(name + " недоступен в текущей композиции приложения.");
 
-    private static NotSupportedException Unavailable(string message) => new(message);
+    private static GraphiteUserException Unavailable(string message) => new(message);
+    private static GraphiteUserException UserError(string message) => new(message);
     private static string Allowed(string value, HashSet<string> allowed, string fallback) => allowed.Contains(value) ? value : fallback;
     private static string NormalizeJobState(string state) => state switch
     {
@@ -1503,5 +1581,6 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
         }
     }
 
-    private sealed record SafeNotice(string Command, string Message, long? ConnectionGeneration = null);
+    /// <summary>Kind: ok, error, warn, info or progress; Seq lets the document show each notice exactly once.</summary>
+    private sealed record SafeNotice(string Command, string Message, string Kind, long Seq, long? ConnectionGeneration = null);
 }

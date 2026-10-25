@@ -45,13 +45,14 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Content Include="..\design\*.html;..\design\*.js;..\design\style.css">
+    <Content Include="..\design\*.html;..\design\*.js;..\design\*.css">
       <Link>ui\%(Filename)%(Extension)</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
     </Content>
-    <Content Include="..\design\brand\structura-logo.png;..\design\brand\platform-field-refined-v3.png">
-      <Link>ui\brand\%(Filename)%(Extension)</Link>
+    <!-- Manrope (SIL OFL 1.1) is served locally: the page has no network access. -->
+    <Content Include="..\design\fonts\Manrope-Variable.ttf;..\design\fonts\Manrope-OFL.txt">
+      <Link>ui\fonts\%(Filename)%(Extension)</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
     </Content>

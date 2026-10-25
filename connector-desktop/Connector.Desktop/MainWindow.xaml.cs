@@ -461,6 +461,11 @@ public partial class MainWindow : Window, IShellHost, IConnectorHost
         ApplySelectedFolder(preferences.TeklaPublishSourcePath, value => _settings.TeklaPublishSourcePath = value);
         ApplySelectedFolder(preferences.TeklaExtensionsPublishSourcePath, value => _settings.TeklaExtensionsPublishSourcePath = value);
         ApplySelectedFolder(preferences.TeklaLibrariesPublishSourcePath, value => _settings.TeklaLibrariesPublishSourcePath = value);
+        if (preferences.UiTheme is "dark" or "light")
+        {
+            _settings.UiTheme = preferences.UiTheme;
+            ApplyWindowTheme(preferences.UiTheme);
+        }
         if (preferences.AutoStart is { } autoStart)
         {
             _autoStartService.SetEnabled(autoStart);
@@ -784,8 +789,68 @@ public partial class MainWindow : Window, IShellHost, IConnectorHost
         }
     }
 
+    private bool _nativeCaption;
+
+    /// <summary>
+    /// Without a system caption a maximized window overhangs the screen by its sizing frame plus the padded
+    /// border (SM_CXSIZEFRAME + SM_CXPADDEDBORDER at the window DPI). The 4 px edge in the normal state belongs
+    /// to the native window so that WindowChrome can resize it; the WebView2 child would swallow the edge.
+    /// </summary>
+    private void ApplyFrameMargins()
+    {
+        if (_nativeCaption)
+        {
+            RootGrid.Margin = new Thickness(0);
+            GraphiteWebHost.Margin = new Thickness(0);
+            return;
+        }
+        if (WindowState == WindowState.Maximized)
+        {
+            var dpi = System.Windows.Media.VisualTreeHelper.GetDpi(this);
+            var dpiValue = (uint)Math.Round(dpi.PixelsPerInchX);
+            int padded = GetSystemMetricsForDpi(SmCxPaddedBorder, dpiValue);
+            double x = (GetSystemMetricsForDpi(SmCxSizeFrame, dpiValue) + padded) / dpi.DpiScaleX;
+            double y = (GetSystemMetricsForDpi(SmCySizeFrame, dpiValue) + padded) / dpi.DpiScaleY;
+            RootGrid.Margin = new Thickness(x, y, x, y);
+            GraphiteWebHost.Margin = new Thickness(0);
+        }
+        else
+        {
+            RootGrid.Margin = new Thickness(0);
+            GraphiteWebHost.Margin = new Thickness(4);
+        }
+    }
+
+    /// <summary>Fallback when WebView2 cannot move the window from the page title bar: the system caption returns.</summary>
+    private void UseNativeCaption()
+    {
+        if (_nativeCaption) return;
+        _nativeCaption = true;
+        System.Windows.Shell.WindowChrome.SetWindowChrome(this, null);
+        ApplyFrameMargins();
+        _graphite.UseNativeCaption();
+        AppendLog("Интерфейс: перетаскивание за заголовок страницы недоступно в этой версии WebView2, используется системный заголовок окна.");
+    }
+
+    private const int SmCxSizeFrame = 32, SmCySizeFrame = 33, SmCxPaddedBorder = 92;
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern int GetSystemMetricsForDpi(int index, uint dpi);
+
+    /// <summary>The resize edge around the page takes the page background of the chosen theme.</summary>
+    private void ApplyWindowTheme(string? theme)
+    {
+        var brush = new System.Windows.Media.SolidColorBrush(theme == "light"
+            ? System.Windows.Media.Color.FromRgb(0xE6, 0xE9, 0xEE)
+            : System.Windows.Media.Color.FromRgb(0x1A, 0x1C, 0x20));
+        brush.Freeze();
+        Background = brush;
+        RootGrid.Background = brush;
+    }
+
     private async void Window_Loaded(object sender, RoutedEventArgs e)
     {
+        ApplyWindowTheme(_settings.UiTheme);
         try
         {
             var saved = await _runtimeServices.Host.PrepareLocalAsync();
@@ -798,6 +863,7 @@ public partial class MainWindow : Window, IShellHost, IConnectorHost
         }
         await GraphiteWebHost.PublishSnapshotAsync(_graphite.CreateSnapshot());
         await GraphiteWebHost.InitializeAsync(_webViewUserDataDirectory);
+        if (!GraphiteWebHost.NonClientRegionEnabled) UseNativeCaption();
         AppendLog("При закрытии окно сворачивается в трей. Для полного выхода: иконка в трее -> Закрыть.");
         if (_runLoadedExternalActions)
         {
@@ -1023,6 +1089,7 @@ public partial class MainWindow : Window, IShellHost, IConnectorHost
 
     private void MainWindow_StateChanged(object? sender, EventArgs e)
     {
+        ApplyFrameMargins();
         if (WindowState == WindowState.Minimized)
         {
             HideToTray();

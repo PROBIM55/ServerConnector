@@ -38,6 +38,9 @@ public partial class GraphiteWebView : System.Windows.Controls.UserControl, IAsy
         InitializeComponent();
     }
 
+    /// <summary>True once WebView2 accepted CSS app-region; false before initialization or when unsupported.</summary>
+    public bool NonClientRegionEnabled { get; private set; }
+
     public void Configure(
         Func<GraphiteRpcRequest, CancellationToken, Task<object?>> commandHandler,
         Action<string>? log = null,
@@ -179,7 +182,7 @@ public partial class GraphiteWebView : System.Windows.Controls.UserControl, IAsy
 
         try
         {
-            Browser.DefaultBackgroundColor = System.Drawing.Color.FromArgb(255, 18, 23, 29);
+            Browser.DefaultBackgroundColor = System.Drawing.Color.FromArgb(255, 26, 28, 32);
             string userDataDirectory = _userDataDirectory ?? Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                 "Platform Connector", "UI", "WebView2");
@@ -190,6 +193,10 @@ public partial class GraphiteWebView : System.Windows.Controls.UserControl, IAsy
             CoreWebView2 core = Browser.CoreWebView2 ??
                 throw new InvalidOperationException("WebView2 initialization did not produce a browser instance.");
             ApplyRestrictedSettings(core.Settings);
+            // The document's 40 px title bar (CSS app-region: drag) moves and maximizes the window. Older runtimes
+            // lack the setting; the host then falls back to the system caption (NonClientRegionEnabled stays false).
+            NonClientRegionEnabled = GraphiteWebSecurity.TryEnableOptional(
+                () => core.Settings.IsNonClientRegionSupportEnabled = true, LogFixed, "non-client region");
             AttachCoreEvents(core);
             core.SetVirtualHostNameToFolderMapping(
                 GraphiteWebSecurity.VirtualHostName,

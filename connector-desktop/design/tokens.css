@@ -1,0 +1,56 @@
+/* Platform Connector design tokens: the only source of colours for desktop.html.
+   Values are the approved mockup (Main.dc.html renderVals dark/light, SignIn.dc.html), which follow the
+   Platform kit. Names keep the mockup spelling so that markup copied from it stays readable. */
+@font-face {
+  font-family: Manrope;
+  src: url("fonts/Manrope-Variable.ttf") format("truetype");
+  font-weight: 200 800;
+  font-style: normal;
+  font-display: block;
+}
+
+:root {
+  color-scheme: dark;
+  --app: #1a1c20; --side: #15171a; --panel: #212429; --raised: #272b31; --field: #121417;
+  --hover: #2b3037; --line: #2c3138; --line2: #3b414a;
+  --text: #e8ebef; --text2: #c4c9d0; --dim: #979ea9;
+  --accent: #5a9be3; --onAccent: #0d1116; --accentSoft: rgba(90,155,227,0.16); --accentInk: #9cc5f2;
+  --ok: #62ba7c; --okSoft: rgba(98,186,124,0.15); --okInk: #8fd3a3;
+  --warn: #e0aa4e; --warnSoft: rgba(224,170,78,0.14); --warnInk: #ecc98d;
+  --bad: #e2715f; --badSoft: rgba(226,113,95,0.15); --badInk: #f0b3a8;
+  --shadow: 0 14px 36px rgba(0,0,0,0.5);
+  --link: #7fb3ec; --linkHover: #a9cdf5;
+  --scrim: rgba(8,10,12,0.55);
+  --closeHover: #c42b1c;
+  /* Brand mark: identical in both themes. */
+  --mark: #5a9be3; --markInk: #0d1116;
+  /* Sign-in screen (SignIn.dc.html uses its own slightly different greys). */
+  --siText: #d8dce2; --siHead: #eef1f5; --siDim: #949ba6; --siSub: #c4c9d0;
+  --siPanel: #23262b; --siLine: #2e3238;
+  --siSecBg: #2a2e34; --siSecLine: #383d45;
+  --siWaitBg: #2f3f55; --siWaitInk: #a9cdf5;
+  --siPri: #5a9be3; --siPriInk: #0e1013; --siDone: #62ba7c;
+  --siStepDone: rgba(98,186,124,0.2); --siStepDoneInk: #8fd3a3;
+  --siStepIdle: #31353c; --siStepIdleInk: #949ba6;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --app: #e6e9ee; --side: #dde1e7; --panel: #f5f6f8; --raised: #ffffff; --field: #ffffff;
+  --hover: #e3e7ed; --line: #d3d9e0; --line2: #c1c8d1;
+  --text: #1e2935; --text2: #3a4656; --dim: #566273;
+  --accent: #2e6fb0; --onAccent: #ffffff; --accentSoft: rgba(46,111,176,0.12); --accentInk: #245c94;
+  --ok: #1d7f3f; --okSoft: rgba(29,127,63,0.12); --okInk: #1d7f3f;
+  --warn: #b07208; --warnSoft: rgba(200,130,10,0.13); --warnInk: #7a4e08;
+  --bad: #b8402f; --badSoft: rgba(184,64,47,0.11); --badInk: #a03626;
+  --shadow: 0 14px 36px rgba(30,41,53,0.18);
+  --link: #245c94; --linkHover: #1e2935;
+  --scrim: rgba(30,41,53,0.35);
+  --siText: #1e2935; --siHead: #1e2935; --siDim: #566273; --siSub: #3a4656;
+  --siPanel: #f5f6f8; --siLine: #d3d9e0;
+  --siSecBg: #ffffff; --siSecLine: #c1c8d1;
+  --siWaitBg: rgba(46,111,176,0.12); --siWaitInk: #245c94;
+  --siPri: #2e6fb0; --siPriInk: #ffffff; --siDone: #1d7f3f;
+  --siStepDone: rgba(29,127,63,0.12); --siStepDoneInk: #1d7f3f;
+  --siStepIdle: #e3e7ed; --siStepIdleInk: #566273;
+}

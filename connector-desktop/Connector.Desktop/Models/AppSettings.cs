@@ -81,6 +81,8 @@ public sealed class AppSettings
     public string IfcPatchingTeklaBin { get; set; } = "";
     public string IfcPatchingStagingDir { get; set; } = "";
     public string ConverterOutputDirectory { get; set; } = "";
+    // Interface theme of the Graphite window: "dark" or "light".
+    public string UiTheme { get; set; } = "dark";
 
     // VPN access to the firm SMB share (AmneziaWG), delivered by the server via bootstrap.
     // Everything is gated by VpnEnabled; absent/false => connector behaves exactly as before.

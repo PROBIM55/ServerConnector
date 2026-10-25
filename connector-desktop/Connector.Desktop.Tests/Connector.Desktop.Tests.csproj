@@ -64,6 +64,7 @@
     <Compile Include="..\Connector.Desktop\Features\GraphiteWeb\GraphiteRpcProtocol.cs" Link="GraphiteWeb\GraphiteRpcProtocol.cs" />
     <Compile Include="..\Connector.Desktop\Features\GraphiteWeb\GraphiteRpcRequest.cs" Link="GraphiteWeb\GraphiteRpcRequest.cs" />
     <Compile Include="..\Connector.Desktop\Features\GraphiteWeb\GraphiteWebSecurity.cs" Link="GraphiteWeb\GraphiteWebSecurity.cs" />
+    <Compile Include="..\Connector.Desktop\Features\GraphiteWeb\GraphiteCommandRules.cs" Link="GraphiteWeb\GraphiteCommandRules.cs" />
   </ItemGroup>
 
   <ItemGroup>
