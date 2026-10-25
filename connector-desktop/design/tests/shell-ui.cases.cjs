@@ -149,3 +149,13 @@ test('Blender facts come from the runtime manifest in the snapshot and are hidde
   assert.match(bare, /Нужен Blender</);
   assert.doesNotMatch(bare, /download\.blender\.org|МБ/);
 });
+
+test('a job chosen inside «Задания» keeps the filter and search; from another page it opens in the full list', () => {
+  const state = stateFrom(PC, F.signedIn(), { page: 'jobs', jobFilter: 'errors', jobQuery: 'Мосты' });
+  assert.equal(PC.model.openJob(state, 'j-agr-err'), false);
+  assert.deepEqual([state.ui.page, state.ui.jobId, state.ui.jobFilter, state.ui.jobQuery], ['jobs', 'j-agr-err', 'errors', 'Мосты']);
+  assert.match(PC.pages.jobs(state), /data-ui="filter" data-id="errors" aria-selected="true"/);
+  state.ui.page = 'home';
+  assert.equal(PC.model.openJob(state, 'j-run'), true);
+  assert.deepEqual([state.ui.page, state.ui.jobId, state.ui.jobFilter, state.ui.jobQuery], ['jobs', 'j-run', 'all', '']);
+});

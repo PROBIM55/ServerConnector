@@ -25,7 +25,7 @@
     const components = [about.netbird && 'NetBird ' + about.netbird, about.webView2 && 'WebView2 ' + about.webView2, about.ifcEngine && 'движок IFC ' + about.ifcEngine].filter(Boolean).join(' · ');
     const legacyButton = legacy.canRestore
       ? button('Вернуть прежний коннектор', 'b b-sec', { cmd: 'legacy-restore', style: 'align-self: flex-start' })
-      : legacy.canTransfer ? button('Перевести компьютер на Платформа Коннектор', 'b b-pri', { cmd: 'legacy-transfer', style: 'align-self: flex-start' }) : '';
+      : legacy.canTransfer ? button('Перевести компьютер на Платформа Коннектор', 'b b-pri', { cmd: 'legacy-transfer', style: 'align-self: flex-start; max-width: 100%; height: auto; min-height: 34px; padding-block: 7px; white-space: normal' }) : '';
     return `<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px">
 <section class="card" style="padding: 20px; display: flex; flex-direction: column; gap: 14px">
 <h2 class="h2">Обновление</h2>

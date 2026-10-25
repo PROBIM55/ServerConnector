@@ -103,7 +103,10 @@
     }
     render();
   }
-  function openJob(id) { go('jobs'); state.ui.jobId = id; state.ui.jobFilter = 'all'; state.ui.jobQuery = ''; }
+  function openJob(id) {
+    closeOverlays();
+    if (M.openJob(state, id)) root.querySelector('.main')?.scrollTo?.(0, 0);
+  }
   function setTheme(theme) {
     if (theme !== 'dark' && theme !== 'light') return;
     state.theme = theme;

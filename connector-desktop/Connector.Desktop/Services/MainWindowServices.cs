@@ -23,7 +23,8 @@ public sealed class MainWindowServices
         bool allowOwnedFixtureClose = false,
         bool runLoadedExternalActions = true,
         string? webViewUserDataDirectory = null,
-        Action? loadedInitializationCompleted = null)
+        Action? loadedInitializationCompleted = null,
+        string? jobJournalPath = null)
     {
         Settings = settings ?? throw new ArgumentNullException(nameof(settings));
         AutoStart = autoStart ?? throw new ArgumentNullException(nameof(autoStart));
@@ -39,6 +40,7 @@ public sealed class MainWindowServices
         RunLoadedExternalActions = runLoadedExternalActions;
         WebViewUserDataDirectory = webViewUserDataDirectory;
         LoadedInitializationCompleted = loadedInitializationCompleted;
+        JobJournalPath = jobJournalPath;
     }
 
     public SettingsService Settings { get; }
@@ -55,6 +57,8 @@ public sealed class MainWindowServices
     public bool RunLoadedExternalActions { get; }
     public string? WebViewUserDataDirectory { get; }
     public Action? LoadedInitializationCompleted { get; }
+    /// <summary>Null keeps the production journal in the user profile; native hosts pass an isolated file.</summary>
+    public string? JobJournalPath { get; }
 
     public static MainWindowServices CreateDefault() => new(
         new SettingsService(),

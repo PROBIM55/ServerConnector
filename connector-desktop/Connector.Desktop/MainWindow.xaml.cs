@@ -317,7 +317,8 @@ public partial class MainWindow : Window, IShellHost, IConnectorHost
         _graphite = new GraphiteDesktopController(this, _runtimeServices, _shell,
             _platformTools.ViewModel, _converterWorkspace.ViewModel,
             legacyStartedNotice: message => _ = Dispatcher.InvokeAsync(() =>
-                _trayIcon.ShowBalloonTip(8000, "Платформа Коннектор", message, Forms.ToolTipIcon.Warning)));
+                _trayIcon.ShowBalloonTip(8000, "Платформа Коннектор", message, Forms.ToolTipIcon.Warning)),
+            journalPath: services.JobJournalPath);
         _graphite.SnapshotChanged += OnGraphiteSnapshot;
         GraphiteWebHost.Configure(_graphite.HandleAsync, AppendLog, _graphite.CreateDocumentSnapshot);
     }
@@ -794,7 +795,7 @@ public partial class MainWindow : Window, IShellHost, IConnectorHost
 
     /// <summary>
     /// Without a system caption a maximized window overhangs the screen by its sizing frame plus the padded
-    /// border (SM_CXSIZEFRAME + SM_CXPADDEDBORDER at the window DPI). The 4 px edge in the normal state belongs
+    /// border (SM_CXSIZEFRAME + SM_CXPADDEDBORDER at the window DPI). The 6 px edge (ResizeBorderThickness) in the normal state belongs
     /// to the native window so that WindowChrome can resize it; the WebView2 child would swallow the edge.
     /// </summary>
     private void ApplyFrameMargins()
@@ -818,7 +819,7 @@ public partial class MainWindow : Window, IShellHost, IConnectorHost
         else
         {
             RootGrid.Margin = new Thickness(0);
-            GraphiteWebHost.Margin = new Thickness(4);
+            GraphiteWebHost.Margin = new Thickness(ResizeEdge);
         }
     }
 
@@ -832,6 +833,41 @@ public partial class MainWindow : Window, IShellHost, IConnectorHost
         _graphite.UseNativeCaption();
         AppendLog("Интерфейс: перетаскивание за заголовок страницы недоступно в этой версии WebView2, используется системный заголовок окна.");
     }
+
+    private const double ResizeEdge = 6;
+
+    /// <summary>
+    /// The initial size (or a size set before showing) never exceeds the work area of the monitor the window opens
+    /// on (WindowWorkAreaFit): a 1366×768 screen or a 1920×1080 screen at 150 % has less than 900 DIP of height.
+    /// </summary>
+    private void Window_SourceInitialized(object? sender, EventArgs e)
+    {
+        IntPtr handle = new System.Windows.Interop.WindowInteropHelper(this).Handle;
+        var info = new MonitorInfo { Size = System.Runtime.InteropServices.Marshal.SizeOf<MonitorInfo>() };
+        if (!GetMonitorInfo(MonitorFromWindow(handle, MonitorDefaultToNearest), ref info)) return;
+        var dpi = System.Windows.Media.VisualTreeHelper.GetDpi(this);
+        var fit = WindowWorkAreaFit.Fit(Width, Height, MinWidth, MinHeight,
+            info.Work.Left / dpi.DpiScaleX, info.Work.Top / dpi.DpiScaleY,
+            (info.Work.Right - info.Work.Left) / dpi.DpiScaleX, (info.Work.Bottom - info.Work.Top) / dpi.DpiScaleY,
+            WindowStartupLocation == WindowStartupLocation.CenterScreen);
+        Width = fit.Width;
+        Height = fit.Height;
+        if (fit.Left is { } left && fit.Top is { } top) { Left = left; Top = top; }
+    }
+
+    private const int MonitorDefaultToNearest = 2;
+
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+    private struct MonitorRect { public int Left, Top, Right, Bottom; }
+
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+    private struct MonitorInfo { public int Size; public MonitorRect Monitor; public MonitorRect Work; public uint Flags; }
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern IntPtr MonitorFromWindow(IntPtr handle, uint flags);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool GetMonitorInfo(IntPtr monitor, ref MonitorInfo info);
 
     private const int SmCxSizeFrame = 32, SmCySizeFrame = 33, SmCxPaddedBorder = 92;
 

@@ -288,6 +288,14 @@
 
   const fieldName = (state, id) => str(String(state.fields[id] ?? ''));
   const runningJob = state => jobs(state).find(job => job.running) || null;
+  // From another page a job opens in the full list; inside «Задания» the chosen filter and search stay.
+  // Returns true when the page changed (the caller then scrolls the main area to the top).
+  const openJob = (state, id) => {
+    state.ui.jobId = id;
+    if (state.ui.page === 'jobs') return false;
+    state.ui.page = 'jobs'; state.ui.jobFilter = 'all'; state.ui.jobQuery = '';
+    return true;
+  };
 
-  Object.assign(PC, { model: { create, apply, pushNotice, localNotice, inferKind, has, hasAny, productFor, connection, network, jobs, bridge, agr, cad, folders, standard, fieldName, runningJob, CONNECTION_COMMANDS, time: { shortTime, fullTime, checkedText, span, isToday } } });
+  Object.assign(PC, { model: { create, apply, pushNotice, localNotice, inferKind, has, hasAny, productFor, connection, network, jobs, bridge, agr, cad, folders, standard, fieldName, runningJob, openJob, CONNECTION_COMMANDS, time: { shortTime, fullTime, checkedText, span, isToday } } });
 })();

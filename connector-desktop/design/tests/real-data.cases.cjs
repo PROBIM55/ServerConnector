@@ -37,7 +37,7 @@ test('jobs: one journal for Platform jobs and work on this computer, with source
   assert.match(run.startedFull, /^сегодня в \d\d:\d\d$/);
   assert.equal(run.sub, 'Мосты · Применение в Tekla · 6 950 из 11 207');
   const html = PC.pages.jobs(state);
-  assert.match(html, /<span class="lbl">Из Платформы → Tekla<\/span><h2[^>]*>Задание Tekla<\/h2>/);
+  assert.match(html, /<span class="lbl">Из Платформы → Tekla<\/span><h2[^>]*>Применение плана Tekla<\/h2>/);
   assert.match(html, /Выполняется · 62 %/);
   assert.match(html, /<span class="lbl">Выполняется<\/span><span class="ellipsis">Tekla 2025\.0 на LAGOM<\/span>/);
   assert.match(html, /<span style="font-weight: 600">Применение в Tekla<\/span><span class="lbl"[^>]*>6 950 из 11 207<\/span>/);
@@ -79,7 +79,7 @@ test('Tekla: open model and version from the bridge, standard sections with full
   const html = PC.pages.tekla(state);
   assert.match(html, /<span class="lbl">Открытая модель<\/span><span[^>]*>Иртыш ПС4\.1<\/span><span class="lbl">Tekla Structures 2025\.0<\/span>/);
   assert.match(html, /127\.0\.0\.1:39421 · проверено в \d\d:\d\d/);
-  assert.match(html, /Задание Tekla · 62 %[\s\S]*data-ui="job"[^>]*data-id="j-run"[^>]*>Открыть задание/);
+  assert.match(html, /Применение плана Tekla · 62 %[\s\S]*data-ui="job"[^>]*data-id="j-run"[^>]*>Открыть задание/);
   assert.match(html, /Источник: github\.com\/PROBIM55\/tekla-firm-standard · проверено в \d\d:\d\d\. Перед обновлением закройте Tekla/);
   assert.match(html, /C:\\Company\\TeklaFirm/);
   assert.match(html, /C:\\TeklaStructures\\2025\.0\\Environments\\common\\Extensions/);
@@ -113,7 +113,7 @@ test('settings: available version with its changes, build and component versions
   assert.doesNotMatch(PC.pages.settings(stateFrom(PC, noNotes)), /<ul class="bullets"/);
   const state = stateFrom(PC, F.signedIn());
   state.ui.dialog = { name: 'update', args: {} };
-  assert.match(PC.shell.dialog(state), /<h2>Установить версию 1\.1\.13\?<\/h2>[\s\S]*дождётся окончания задания «Задание Tekla»/);
+  assert.match(PC.shell.dialog(state), /<h2>Установить версию 1\.1\.13\?<\/h2>[\s\S]*дождётся окончания задания «Применение плана Tekla»/);
 });
 
 test('a native confirmation is one page dialog answered by the explicit command with its id', () => {

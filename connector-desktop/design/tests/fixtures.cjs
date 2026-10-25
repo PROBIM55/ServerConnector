@@ -29,11 +29,11 @@ const signedIn = () => ({
   files: [{ name: 'SM_TestPart_001.zip', size: 20972, status: 'Готово' }],
   ifcFiles: [{ name: 'Капсулы 15.12.25.ifc', size: 4718592, status: 'Готово' }, { name: 'Модель (стройподъем).ifc', size: 1782579, status: 'Выбран' }],
   modelFolders: [],
-  // The unified journal, newest first: Platform jobs, local operations and converter jobs (GraphiteSnapshotFacts.Jobs).
+  // The unified journal, newest first (Tekla titles as ConnectorJobJournal derives them from the job endpoint): Platform jobs, local operations and converter jobs (GraphiteSnapshotFacts.Jobs).
   jobs: [
-    job({ id: 'j-run', kind: 'tekla', source: 'platform', title: 'Задание Tekla', subject: 'Мосты', target: 'Tekla', startedAt: ago(6), status: 'running', progress: 62,
+    job({ id: 'j-run', kind: 'tekla', source: 'platform', title: 'Применение плана Tekla', subject: 'Мосты', target: 'Tekla', startedAt: ago(6), status: 'running', progress: 62,
       steps: [step('Получено из Платформы', 'ok', '21:42'), step('Выполнение', 'ok'), step('Применение в Tekla', 'run', '6 950 из 11 207')] }),
-    job({ id: 'j-tekla-done', kind: 'tekla', source: 'platform', title: 'Задание Tekla', subject: 'Мосты', target: 'Tekla', startedAt: ago(12), finishedAt: ago(11), status: 'ok', progress: 100,
+    job({ id: 'j-tekla-done', kind: 'tekla', source: 'platform', title: 'Подготовка плана Tekla', subject: 'Мосты', target: 'Tekla', startedAt: ago(12), finishedAt: ago(11), status: 'ok', progress: 100,
       steps: [step('Получено из Платформы', 'ok', '21:36'), step('Выполнение', 'ok'), step('Готово', 'ok')] }),
     job({ id: 'j-ifc', kind: 'ifc', source: 'local', title: 'Оптимизация IFC', subject: 'Капсулы 15.12.25.ifc', startedAt: ago(30), finishedAt: ago(28), status: 'ok', progress: 100,
       steps: [step('Принято к выполнению', 'ok', '21:18'), step('Выполнение', 'ok'), step('Готово', 'ok')], mode: 'structura', operation: 'optimize',

@@ -3,6 +3,8 @@
 html, body { height: 100%; }
 body { margin: 0; overflow: hidden; background: var(--app); color: var(--text);
   font-family: Manrope, 'Segoe UI', sans-serif; font-size: 13.5px; line-height: 1.45; }
+/* WebView2 draws the classic 17 px Windows scrollbar with arrow buttons; the Platform kit uses a thin one in the theme. */
+* { scrollbar-width: thin; scrollbar-color: var(--line2) transparent; }
 a { color: var(--link); } a:hover { color: var(--linkHover); }
 button, input, select { font-family: inherit; }
 button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
@@ -99,7 +101,8 @@ button:disabled { cursor: default; opacity: .55; }
 /* ---- overlays ------------------------------------------------------------------------------------ */
 .scrim { position: absolute; inset: 0; background: var(--scrim); display: flex; justify-content: center; align-items: center; z-index: 20; }
 .scrim.top { align-items: flex-start; padding-top: 90px; }
-.dialog { width: 520px; max-width: calc(100% - 32px); background: var(--raised); box-shadow: var(--shadow); padding: 22px; display: flex; flex-direction: column; gap: 14px; box-sizing: border-box; }
+/* The mockup's 520 px is the content box: 520 + 2×22 padding + 2×1 border. */
+.dialog { width: 566px; max-width: calc(100% - 32px); background: var(--raised); box-shadow: var(--shadow); padding: 22px; display: flex; flex-direction: column; gap: 14px; box-sizing: border-box; }
 .dialog h2 { margin: 0; font-size: 18px; font-weight: 800; }
 .palette { width: 600px; max-width: calc(100% - 32px); background: var(--raised); box-shadow: var(--shadow); overflow: hidden; }
 .palette-item { display: flex; width: 100%; align-items: center; gap: 12px; padding: 11px 16px; border: 0; background: transparent; color: inherit; text-align: left; cursor: pointer; font: inherit; }

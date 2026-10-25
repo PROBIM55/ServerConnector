@@ -2,16 +2,16 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:graphite="clr-namespace:Connector.Desktop.Features.GraphiteWeb"
-        Title="Платформа Коннектор" Icon="Assets/platform_connector.ico" Height="900" Width="1180" MinHeight="720" MinWidth="920"
-        Background="#1A1C20" Loaded="Window_Loaded">
+        Title="Платформа Коннектор" Icon="Assets/platform_connector.ico" Height="900" Width="1180" MinHeight="600" MinWidth="920"
+        Background="#1A1C20" SourceInitialized="Window_SourceInitialized" Loaded="Window_Loaded">
     <!-- The page draws its own 40 px title bar (app-region: drag); the native frame keeps only resize edges. -->
     <WindowChrome.WindowChrome>
         <WindowChrome CaptionHeight="0" ResizeBorderThickness="6" GlassFrameThickness="0,0,0,1"
                       CornerRadius="0" UseAeroCaptionButtons="False" />
     </WindowChrome.WindowChrome>
     <Grid x:Name="RootGrid" Background="#1A1C20">
-        <!-- The 4 px edge belongs to the native window: WindowChrome resizes there, the WebView2 child would not. -->
-        <graphite:GraphiteWebView x:Name="GraphiteWebHost" Margin="4" />
+        <!-- The 6 px edge (= ResizeBorderThickness) belongs to the native window: WindowChrome resizes there, the WebView2 child would not. -->
+        <graphite:GraphiteWebView x:Name="GraphiteWebHost" Margin="6" />
         <!-- Existing feature controls retain their settings/commands during the renderer migration.
              The approved HTML/CSS is the only visible product interface. -->
         <Grid Visibility="Collapsed">
