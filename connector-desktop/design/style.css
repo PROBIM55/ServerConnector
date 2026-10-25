@@ -128,3 +128,4 @@ input[type="radio"], input[type="checkbox"] { color-scheme: light; }
 .titlebar.native { app-region: no-drag; -webkit-app-region: no-drag; }
 .si-links { display: flex; flex-wrap: wrap; gap: 4px 18px; }
 .si-links .linklike { margin-top: 0; font-size: 12px; color: var(--siDim); }
+.dropzone.over { border-color: var(--accent) !important; background: var(--accentSoft) !important; }

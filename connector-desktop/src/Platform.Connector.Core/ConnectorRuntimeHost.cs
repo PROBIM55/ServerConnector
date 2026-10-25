@@ -67,6 +67,9 @@ public sealed class ConnectorRuntimeHost : IAsyncDisposable
     /// <summary>Every local or remote job status emitted by the shared runner.</summary>
     public event Action<ConnectorJobStatusEnvelope>? JobStatusChanged;
 
+    /// <summary>The leased job before its first status (local or remote); see <see cref="ConnectorJobRunner.JobPicked"/>.</summary>
+    public event Action<ConnectorJobEnvelope>? JobPicked;
+
     public bool IsRunning => _supervisorTask is { IsCompleted: false };
 
     public ConnectorRuntimeState RuntimeState => _runtimeState;
@@ -357,6 +360,7 @@ public sealed class ConnectorRuntimeHost : IAsyncDisposable
                     _idempotencyStore,
                     _logger,
                     _jobExecutors);
+                _runner.JobPicked += job => JobPicked?.Invoke(job);
                 _dispatcher = new ConnectorJobDispatcher(_runner, _executionGate, _localStatusPublisher);
                 _executionLease = lease;
             }

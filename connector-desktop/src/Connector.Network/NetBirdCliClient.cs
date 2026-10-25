@@ -165,7 +165,9 @@ public sealed class NetBirdCliClient : INetworkOverlayClient
                 addresses,
                 _timeProvider.GetUtcNow(),
                 serviceStatus == NetworkServiceStatus.Ready ? "ready" : managementMatches ? "netbird_degraded" : "netbird_management_mismatch",
-                managementUri);
+                managementUri,
+                ReadVersion(root),
+                ReadPeers(root));
             return new(snapshot, canonicalWireGuardPublicKey);
         }
         catch (JsonException)
@@ -286,6 +288,42 @@ public sealed class NetBirdCliClient : INetworkOverlayClient
             .Cast<IPAddress>()
             .Distinct()
             .ToArray();
+    }
+
+    /// <summary>Daemon (or CLI) version of the status output, when it is a plain version number.</summary>
+    internal static string? ReadVersion(JsonElement root)
+    {
+        var value = ReadString(root, "daemonVersion") ?? ReadString(root, "cliVersion");
+        return value is { Length: > 0 and <= 32 } && value.All(character => char.IsAsciiLetterOrDigit(character) || character is '.' or '-')
+            ? value
+            : null;
+    }
+
+    /// <summary>
+    /// Remote peers of «netbird status --json» (peers.details): overlay address, routed networks and the
+    /// connection type («P2P» is direct, «Relayed» goes through a relay). Keys and endpoints are not read.
+    /// </summary>
+    internal static IReadOnlyList<NetworkOverlayPeer> ReadPeers(JsonElement root)
+    {
+        if (!TryGetProperty(root, "peers", out var peers) || peers.ValueKind != JsonValueKind.Object ||
+            !TryGetProperty(peers, "details", out var details) || details.ValueKind != JsonValueKind.Array)
+            return Array.Empty<NetworkOverlayPeer>();
+        var result = new List<NetworkOverlayPeer>();
+        foreach (var peer in details.EnumerateArray().Take(512))
+        {
+            if (peer.ValueKind != JsonValueKind.Object) continue;
+            var ip = (ReadString(peer, "netbirdIp") ?? ReadString(peer, "ip"))?.Split('/', 2)[0];
+            if (ip is null || !IPAddress.TryParse(ip, out var address)) continue;
+            var networks = new List<string>();
+            if (TryGetProperty(peer, "networks", out var routed) && routed.ValueKind == JsonValueKind.Array)
+                foreach (var network in routed.EnumerateArray().Take(64))
+                    if (network.ValueKind == JsonValueKind.String && network.GetString() is { Length: > 0 and <= 64 } text)
+                        networks.Add(text);
+            var connected = string.Equals(ReadString(peer, "status"), "Connected", StringComparison.OrdinalIgnoreCase);
+            var relayed = string.Equals(ReadString(peer, "connectionType"), "Relayed", StringComparison.OrdinalIgnoreCase);
+            result.Add(new NetworkOverlayPeer(address, connected, relayed, networks.AsReadOnly()));
+        }
+        return result.AsReadOnly();
     }
 
     private static bool ReadNestedBoolean(JsonElement root, string owner, string property) =>

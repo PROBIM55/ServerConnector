@@ -252,10 +252,10 @@ public partial class MainWindow : Window, IShellHost, IConnectorHost
     private string _activeSessionId = string.Empty;
     private UpdateManifest? _pendingUpdate;
     private PackageUpdateCandidate? _pendingPackageUpdate;
-    private UpdateToastWindow? _updateToastWindow;
     private string? _downloadedInstallerPath;
-    private bool _updateOfferShown;
     private string _lastUpdateToastVersion = string.Empty;
+    private DateTimeOffset? _lastUpdateCheckUtc;
+    private bool _lastUpdateCheckFailed;
     private bool _updateCheckInProgress;
     private bool _teklaCheckInProgress;   // seam backing store for IShellHost.TeklaCheckInProgress (read by connect flow)
     private bool _teklaBalloonShown;      // seam backing store; reset via IShellHost.ResetTeklaPendingBalloon
@@ -312,14 +312,10 @@ public partial class MainWindow : Window, IShellHost, IConnectorHost
         _standard?.RefreshUi();
         SyncFeatureModules();
         UpdateHeaderStatusUi();
+        // Confirmations (drive disconnection, transfer and return of the previous connector, Model Sharing, IFC
+        // patch) are dialogs of the page, served by the controller; no native message box is shown for them.
         _graphite = new GraphiteDesktopController(this, _runtimeServices, _shell,
             _platformTools.ViewModel, _converterWorkspace.ViewModel,
-            confirmFolderDisconnect: drive => Dispatcher.InvokeAsync(() =>
-                ThemedDialogs.Show(this, $"Отключить общую папку от диска {drive}?",
-                    "Общая папка", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes).Task,
-            confirmLegacyAction: message => Dispatcher.InvokeAsync(() =>
-                ThemedDialogs.Show(this, message, "Прежний коннектор",
-                    MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.Yes).Task,
             legacyStartedNotice: message => _ = Dispatcher.InvokeAsync(() =>
                 _trayIcon.ShowBalloonTip(8000, "Платформа Коннектор", message, Forms.ToolTipIcon.Warning)));
         _graphite.SnapshotChanged += OnGraphiteSnapshot;
@@ -351,6 +347,9 @@ public partial class MainWindow : Window, IShellHost, IConnectorHost
         ThemedDialogs.Show(this, message, title, buttons, image);
 
     Window IShellHost.OwnerWindow => this;
+
+    ILocalJobProgress IShellHost.BeginOperation(string kind, string title, string? subject, string firstStep) =>
+        _graphite.Journal.BeginLocal(kind, title, subject, firstStep);
 
     bool IShellHost.TeklaCheckInProgress
     {
@@ -620,7 +619,12 @@ public partial class MainWindow : Window, IShellHost, IConnectorHost
 
     bool IConnectorHost.HasPendingUpdate => _pendingUpdate is not null || _pendingPackageUpdate is not null;
 
-    // Tekla-mirror sync button — identical to the Стандарт-tab button (OperationProgressWindow + "already running").
+    DesktopUpdateInfo IConnectorHost.UpdateInfo => new(
+        _pendingPackageUpdate?.Version ?? _pendingUpdate?.Version,
+        _pendingPackageUpdate is not null ? _pendingPackageUpdate.Notes : _pendingUpdate?.Notes,
+        _lastUpdateCheckUtc, _lastUpdateCheckFailed);
+
+    // Tekla-mirror sync button — identical to the Стандарт-tab button (a journal entry; a refusal is thrown).
     Task IConnectorHost.RunTeklaInteractiveSyncAsync() =>
         _standard is null ? Task.CompletedTask : _standard.RunInteractiveSyncAsync();
 
@@ -667,12 +671,10 @@ public partial class MainWindow : Window, IShellHost, IConnectorHost
         if (_shell.Tekla.Module("Model Sharing") is Features.Tekla.ModelSharing.ModelSharingModule ms)
         {
             ms.Log = AppendLog;
-            // Window-owned themed dialogs (mirror VPN) instead of the module's default owner-less MessageBox.
-            ms.ConfirmHandler = msg =>
-                ThemedDialogs.Show(this, msg, "Model Sharing", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes;
-            ms.ShowMessage = (msg, isError) =>
-                ThemedDialogs.Show(this, msg, "Model Sharing", MessageBoxButton.OK,
-                    isError ? MessageBoxImage.Warning : MessageBoxImage.Information);
+            // The confirmation is a dialog of the page; progress and outcome are an entry of «Задания».
+            ms.ConfirmAsync = request => _graphite.ConfirmAsync(request);
+            ms.BeginProgress = () => GraphiteDesktopController.ModelSharingProgress(
+                _graphite.Journal.BeginLocal("sharing", "Настройка Model Sharing", "Tekla Structures", "Настраиваем Tekla"));
             // Persistence stays in the shell: the module hands back the applied values to save the ModelSharing* keys.
             ms.OnProvisioned = info =>
             {
@@ -687,8 +689,7 @@ public partial class MainWindow : Window, IShellHost, IConnectorHost
 
         if (_shell.Tekla.Module("Патчинг") is Features.Tekla.Patching.PatchingModule patch)
         {
-            patch.ConfirmHandler = msg =>
-                ThemedDialogs.Show(this, msg, "Патчинг Tekla", MessageBoxButton.OKCancel, MessageBoxImage.Warning) == MessageBoxResult.OK;
+            patch.ConfirmAsync = request => _graphite.ConfirmAsync(request);
         }
 
         if (_shell.Structura.Module("Structura") is Features.Structura.StructuraModule st)
@@ -894,106 +895,18 @@ public partial class MainWindow : Window, IShellHost, IConnectorHost
         _loadedInitializationCompleted?.Invoke();
     }
 
-    private async Task CheckAndOfferUpdatesAsync()
+    /// <summary>
+    /// A found update is shown by the page (banner on «Главная», card in «Настройки»). While the window is in the
+    /// tray, a system notification tells about it once per version; clicking it opens the window.
+    /// </summary>
+    private void NotifyUpdateAvailable(string? version)
     {
-        await CheckUpdatesAsync(showDialogs: false);
-        await OfferUpdateInstallIfAvailableAsync();
-    }
-
-    private async Task OfferUpdateInstallIfAvailableAsync()
-    {
-        if (_updateOfferShown)
-        {
-            return;
-        }
-
-        if (_pendingUpdate is null && _pendingPackageUpdate is null)
-        {
-            return;
-        }
-
-        _updateOfferShown = true;
-
-        var result = ThemedDialogs.Show(this,
-            "Доступна новая версия приложения «Платформа Коннектор». Установить обновление сейчас?",
-            "Обновление доступно",
-            MessageBoxButton.YesNo,
-            MessageBoxImage.Question);
-
-        if (result != MessageBoxResult.Yes)
-        {
-            return;
-        }
-
-        try
-        {
-            await InstallPendingUpdateAsync(confirmBeforeRun: false);
-        }
-        catch (Exception ex)
-        {
-            AppendLog("Ошибка автообновления: " + ex.Message);
-            _connector?.SetUpdateState("Обновление: ошибка установки");
-            _updateOfferShown = false;
-        }
-    }
-
-    private void ShowUpdateAvailableToast(UpdateManifest manifest)
-    {
-        var version = manifest.Version?.Trim() ?? string.Empty;
-        if (string.IsNullOrWhiteSpace(version))
-        {
-            return;
-        }
-
-        if (string.Equals(_lastUpdateToastVersion, version, StringComparison.OrdinalIgnoreCase))
-        {
-            if (_updateToastWindow is not null && _updateToastWindow.IsVisible)
-            {
-                _updateToastWindow.BringToFront();
-            }
-            return;
-        }
-
-        if (_updateToastWindow is not null && _updateToastWindow.IsVisible)
-        {
-            _updateToastWindow.Close();
-            _updateToastWindow = null;
-        }
-
-        _lastUpdateToastVersion = version;
-        var toast = new UpdateToastWindow(
-            "Платформа Коннектор",
-            "Доступна новая версия: " + version + ".",
-            async () => await InstallPendingUpdateAsync(confirmBeforeRun: false));
-        toast.Closed += (_, _) =>
-        {
-            if (ReferenceEquals(_updateToastWindow, toast))
-            {
-                _updateToastWindow = null;
-            }
-        };
-        _updateToastWindow = toast;
-        toast.Show();
-    }
-
-    private void ShowPackageUpdateAvailableToast(PackageUpdateCandidate candidate)
-    {
-        if (string.Equals(_lastUpdateToastVersion, candidate.Version, StringComparison.OrdinalIgnoreCase))
-        {
-            return;
-        }
-
-        _lastUpdateToastVersion = candidate.Version;
-        var toast = new UpdateToastWindow(
-            "Платформа Коннектор",
-            "Доступна новая версия: " + candidate.Version + ".",
-            async () => await InstallPendingUpdateAsync(confirmBeforeRun: false));
-        toast.Closed += (_, _) =>
-        {
-            if (ReferenceEquals(_updateToastWindow, toast)) _updateToastWindow = null;
-        };
-        _updateToastWindow = toast;
-        toast.Show();
+        var shown = DesktopUpdateNotes.SafeVersion(version);
+        if (shown is null || string.Equals(_lastUpdateToastVersion, shown, StringComparison.OrdinalIgnoreCase)) return;
+        _lastUpdateToastVersion = shown;
+        if (IsVisible && WindowState != WindowState.Minimized) return;
+        _trayIcon.ShowBalloonTip(8000, "Платформа Коннектор",
+            "Доступна новая версия " + shown + ". Откройте коннектор, чтобы установить её.", Forms.ToolTipIcon.Info);
     }
 
     private async Task TryAutoConnectAsync()
@@ -1062,6 +975,7 @@ public partial class MainWindow : Window, IShellHost, IConnectorHost
             ContextMenuStrip = menu
         };
         tray.DoubleClick += (_, _) => ShowFromTray();
+        tray.BalloonTipClicked += (_, _) => ShowFromTray();
         return tray;
     }
 
@@ -2110,6 +2024,8 @@ public partial class MainWindow : Window, IShellHost, IConnectorHost
             _settingsService.Save(_settings);
 
             var manifest = await _updateService.TryGetUpdateAsync(manifestUrl, cancellationToken);
+            _lastUpdateCheckFailed = manifest is null;
+            if (manifest is not null) _lastUpdateCheckUtc = DateTimeOffset.UtcNow;
             if (manifest is null)
             {
                 _pendingUpdate = null;
@@ -2128,7 +2044,7 @@ public partial class MainWindow : Window, IShellHost, IConnectorHost
                 _pendingUpdate = manifest;
                 _connector?.SetUpdateState($"Доступно обновление: {manifest.Version}");
                 AppendLog("Найдено обновление: " + manifest.Version);
-                ShowUpdateAvailableToast(manifest);
+                NotifyUpdateAvailable(manifest.Version);
                 if (!showDialogs)
                 {
                     UpdateActionButtonUi();
@@ -2166,6 +2082,7 @@ public partial class MainWindow : Window, IShellHost, IConnectorHost
         catch (Exception ex)
         {
             _pendingUpdate = null;
+            _lastUpdateCheckFailed = true;
             _connector?.SetUpdateState("Обновление: ошибка проверки");
             AppendLog("Ошибка проверки обновления: " + ex.Message);
             UpdateActionButtonUi();
@@ -2229,21 +2146,25 @@ public partial class MainWindow : Window, IShellHost, IConnectorHost
 
     private async Task InstallPendingUpdateAsync(bool confirmBeforeRun)
     {
+        // A caller that has not asked the user yet gets the same single page dialog as «Установить» in «Настройках».
+        if (confirmBeforeRun && !await _graphite.ConfirmAsync(new PageConfirmation(
+                "Установить новую версию?", "Коннектор перезапустится и подключится сам.",
+                ["Учётная запись и настройки сохранятся.", "Windows может спросить разрешение на установку."],
+                null, "Установить", Danger: false, Cancel: "Позже")))
+            return;
         try
         {
             if (_packageUpdateService.IsManagedInstall)
             {
-                await InstallPendingPackageUpdateAsync(confirmBeforeRun);
+                await InstallPendingPackageUpdateAsync();
                 return;
             }
 
             if (_pendingUpdate is null)
             {
-                await CheckUpdatesAsync(showDialogs: true);
+                await CheckUpdatesAsync(showDialogs: false);
                 if (_pendingUpdate is null)
-                {
-                    return;
-                }
+                    throw new Features.GraphiteWeb.GraphiteUserException("Новая версия не найдена: установлена актуальная версия.");
             }
 
             _connector?.SetUpdateActionEnabled(false);
@@ -2251,43 +2172,38 @@ public partial class MainWindow : Window, IShellHost, IConnectorHost
             _downloadedInstallerPath = await _updateService.DownloadInstallerAsync(_pendingUpdate, CancellationToken.None);
             AppendLog("Скачан установщик обновления: " + _downloadedInstallerPath);
 
-            var shouldRunInstaller = !confirmBeforeRun || ThemedDialogs.Show(this,
-                "Установщик скачан. Закрыть приложение и запустить обновление сейчас?",
-                "Обновление",
-                MessageBoxButton.YesNo,
-                MessageBoxImage.Question) == MessageBoxResult.Yes;
-
-            if (shouldRunInstaller)
+            // Asked once before this point (the page dialog or the confirmation above).
+            var restartBlockReason = GetUpdateRestartBlockReason();
+            if (restartBlockReason is not null)
             {
-                var restartBlockReason = GetUpdateRestartBlockReason();
-                if (restartBlockReason is not null)
-                {
-                    _connector?.SetUpdateState("Обновление: ожидает завершения задачи");
-                    ThemedDialogs.Show(this, restartBlockReason, "Обновление", MessageBoxButton.OK, MessageBoxImage.Information);
-                    return;
-                }
-                UpdateService.RunInstaller(_downloadedInstallerPath);
-                ExitFromTray();
+                _connector?.SetUpdateState("Обновление: ожидает завершения задачи");
+                throw new Features.GraphiteWeb.GraphiteUserException(restartBlockReason);
             }
-            else
-            {
-                _connector?.SetUpdateState("Обновление: установщик скачан");
-                _connector?.SetUpdateActionEnabled(true);
-            }
+            UpdateService.RunInstaller(_downloadedInstallerPath);
+            ExitFromTray();
+        }
+        catch (Features.GraphiteWeb.GraphiteUserException)
+        {
+            _connector?.SetUpdateActionEnabled(_pendingUpdate is not null);
+            throw;
         }
         catch (Exception ex)
         {
             _connector?.SetUpdateActionEnabled(_pendingUpdate is not null);
             _connector?.SetUpdateState("Обновление: ошибка установки");
             AppendLog("Ошибка установки обновления: " + ex.Message);
-            ThemedDialogs.Show(this, ex.Message, "Ошибка обновления", MessageBoxButton.OK, MessageBoxImage.Error);
+            throw new Features.GraphiteWeb.GraphiteUserException("Обновление не установлено. Подробности доступны в журнале.");
         }
     }
 
     private async Task CheckPackageUpdatesAsync(bool showDialogs, CancellationToken cancellationToken = default)
     {
         _connector?.SetUpdateState("Обновление: проверка пакетной версии...");
-        var candidate = await _packageUpdateService.CheckForUpdatesAsync(cancellationToken);
+        PackageUpdateCandidate? candidate;
+        try { candidate = await _packageUpdateService.CheckForUpdatesAsync(cancellationToken); }
+        catch (Exception) when (!cancellationToken.IsCancellationRequested) { _lastUpdateCheckFailed = true; throw; }
+        _lastUpdateCheckFailed = false;
+        _lastUpdateCheckUtc = DateTimeOffset.UtcNow;
         _pendingPackageUpdate = candidate;
         _pendingUpdate = null;
         if (candidate is null)
@@ -2301,17 +2217,18 @@ public partial class MainWindow : Window, IShellHost, IConnectorHost
 
         _connector?.SetUpdateState($"Доступно обновление: {candidate.Version}");
         AppendLog("Найдено пакетное обновление: " + candidate.Version);
-        ShowPackageUpdateAvailableToast(candidate);
+        NotifyUpdateAvailable(candidate.Version);
         UpdateActionButtonUi();
         if (showDialogs) ThemedDialogs.Show(this, "Доступна новая версия: " + candidate.Version, "Обновления", MessageBoxButton.OK, MessageBoxImage.Information);
     }
 
-    private async Task InstallPendingPackageUpdateAsync(bool confirmBeforeRun)
+    private async Task InstallPendingPackageUpdateAsync()
     {
         if (_pendingPackageUpdate is null)
         {
-            await CheckPackageUpdatesAsync(showDialogs: true);
-            if (_pendingPackageUpdate is null) return;
+            await CheckPackageUpdatesAsync(showDialogs: false);
+            if (_pendingPackageUpdate is null)
+                throw new Features.GraphiteWeb.GraphiteUserException("Новая версия не найдена: установлена актуальная версия.");
         }
 
         _connector?.SetUpdateActionEnabled(false);
@@ -2324,22 +2241,14 @@ public partial class MainWindow : Window, IShellHost, IConnectorHost
             await _packageUpdateService.DownloadUpdatesAsync(candidate, CancellationToken.None);
             AppendLog("Пакет обновления загружен: " + candidate.Version);
 
-            var shouldApply = !confirmBeforeRun || ThemedDialogs.Show(this,
-                "Пакет обновления загружен. Перезапустить Connector и применить его сейчас?",
-                "Обновление", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes;
-            if (!shouldApply)
-            {
-                _connector?.SetUpdateState("Обновление: пакет загружен");
-                return;
-            }
-
+            // The page asked once (its own dialog) before this call.
             // Legacy sync/batch discovery remains guarded until it joins Agent admission.
             if (_teklaCheckInProgress ||
                 (_shell.Converter.Module("Конвертация") is Features.Converter.ConverterModule batch && batch.ViewModel.IsRunning) ||
                 _platformTools.ViewModel.IsBusy)
             {
                 _connector?.SetUpdateState("Обновление: ожидает завершения задачи");
-                return;
+                throw new Features.GraphiteWeb.GraphiteUserException("Обновление установится после текущего задания. Повторите, когда оно завершится.");
             }
             _connector?.SetUpdateState("Обновление: завершение принятых заданий...");
             var drain = await _runtimeServices.Host.RequestDrainAsync(TimeSpan.FromSeconds(60), CancellationToken.None);
@@ -2347,14 +2256,13 @@ public partial class MainWindow : Window, IShellHost, IConnectorHost
             if (drain.Phase != global::Platform.Connector.Core.ConnectorDrainPhase.ReadyToApply)
             {
                 _connector?.SetUpdateState("Обновление: ожидает завершения задачи");
-                return;
+                throw new Features.GraphiteWeb.GraphiteUserException("Обновление установится после текущего задания. Повторите, когда оно завершится.");
             }
             var restartBlockReason = GetUpdateRestartBlockReason();
             if (restartBlockReason is not null)
             {
                 _connector?.SetUpdateState("Обновление: ожидает завершения задачи");
-                ThemedDialogs.Show(this, restartBlockReason, "Обновление", MessageBoxButton.OK, MessageBoxImage.Information);
-                return;
+                throw new Features.GraphiteWeb.GraphiteUserException(restartBlockReason);
             }
 
             _packageUpdateService.ApplyUpdatesAndRestart(candidate);
@@ -2364,11 +2272,15 @@ public partial class MainWindow : Window, IShellHost, IConnectorHost
         {
             _connector?.SetUpdateState("Обновление: загрузка отменена");
         }
+        catch (Features.GraphiteWeb.GraphiteUserException)
+        {
+            throw;
+        }
         catch (Exception ex)
         {
             _connector?.SetUpdateState("Обновление: ошибка установки");
             AppendLog("Ошибка пакетного обновления: " + ex.Message);
-            ThemedDialogs.Show(this, ex.Message, "Ошибка обновления", MessageBoxButton.OK, MessageBoxImage.Error);
+            throw new Features.GraphiteWeb.GraphiteUserException("Обновление не установлено. Подробности доступны в журнале.");
         }
         finally
         {
@@ -2806,8 +2718,9 @@ public partial class MainWindow : Window, IShellHost, IConnectorHost
         // A drive can be recreated outside Connector with the same UNC. The
         // stored target cannot distinguish that replacement; only this explicit
         // user confirmation authorizes removing the present Windows mapping.
-        if (ThemedDialogs.Show(this, $"Отключить общую папку от диска {normalizedDrive}?\n\nБудет отключено текущее сетевое подключение Windows на этом диске.",
-            "Общая папка", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
+        if (!await _graphite.ConfirmAsync(new PageConfirmation(
+                $"Отключить диск {normalizedDrive}?", "Будет отключено текущее сетевое подключение Windows на этом диске.",
+                [$"Закройте файлы, открытые с диска {normalizedDrive}."], null, "Отключить", Danger: true)))
             throw new OperationCanceledException();
 
         if (!_managedSmbMappings.MatchesRecordedTarget(normalizedDrive, assignedShare))

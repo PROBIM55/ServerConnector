@@ -24,9 +24,8 @@ public sealed class ModelSharingViewModel : ObservableObject
     private string _persistedTeklaBin = "";
     private string _extensionsLocalPath = "";
 
-    // The View sets these to show a confirm dialog / message box (the shell may swap in window-owned themed
-    // dialogs). ConfirmHandler returns true to proceed; ShowMessage(text, isError) is informational.
-    public Func<string, bool>? ConfirmHandler { get; set; }
+    // The shell supplies the page confirmation; ShowMessage is optional (the outcome is ResultMessage).
+    public Func<PageConfirmation, Task<bool>>? ConfirmAsync { get; set; }
     public Action<string, bool>? ShowMessage { get; set; }
 
     // Shell wires this to AppendLog (journal in MainWindow). Best-effort; null is fine in design-time.
@@ -35,8 +34,8 @@ public sealed class ModelSharingViewModel : ObservableObject
     // Shell wires this to persist the ModelSharing* settings keys + Save() — persistence stays in the shell.
     public Action<ModelSharingProvisionedInfo>? OnProvisioned { get; set; }
 
-    // The View wires these (OperationProgressWindow is a Window-owned shell helper, so it stays in the View):
-    // BeginProgress shows the window, ReportProgress/Complete drive it. All optional — null => no progress UI.
+    // The shell wires these to an entry of the page journal («Задания»):
+    // BeginProgress starts the entry, Step/Succeeded/Failed drive it. All optional — null => no progress.
     public Func<ModelSharingProgressHandle?>? BeginProgress { get; set; }
 
     public ModelSharingViewModel(ModelSharingProvisioningService? service = null)
@@ -183,8 +182,9 @@ public sealed class ModelSharingViewModel : ObservableObject
             if (_service.IsTeklaRunning())
             {
                 progress?.Dismiss();
+                ResultMessage = "Сейчас запущена Tekla Structures. Закройте её и повторите настройку Model Sharing.";
                 LastOperationOutcome = OperationOutcome.Rejected;
-                ShowMessage?.Invoke("Сейчас запущена Tekla Structures. Закройте её и повторите настройку Model Sharing.", true);
+                ShowMessage?.Invoke(ResultMessage, true);
                 return;
             }
 
@@ -192,8 +192,12 @@ public sealed class ModelSharingViewModel : ObservableObject
             var serverHost = string.IsNullOrWhiteSpace(_serverHost) ? "62.113.36.107" : _serverHost;
             var serverPort = _serverPort > 0 ? _serverPort : 9990;
 
-            var confirm = ConfirmHandler?.Invoke(
-                $"Подготовить Tekla к Model Sharing на этом компьютере?\n\nПользователь: {name} ({email})\nСервер: {serverHost}:{serverPort}\nПапка: {teklaBin}\n\nTekla должна быть закрыта.") ?? true;
+            var confirm = ConfirmAsync is { } ask && await ask(new PageConfirmation(
+                "Настроить Model Sharing?",
+                "Коннектор подключит службу кэша Model Sharing к Tekla Structures на этом компьютере.",
+                [$"Пользователь: {name} ({email})", $"Сервер: {serverHost}:{serverPort}", $"Папка Tekla: {teklaBin}",
+                    "Ход и итог появятся в «Заданиях»."],
+                "Tekla Structures должна быть закрыта.", "Настроить", Danger: false));
             if (!confirm)
             {
                 progress?.Dismiss();
@@ -241,7 +245,7 @@ public sealed class ModelSharingViewModel : ObservableObject
         catch (Exception ex)
         {
             LastOperationOutcome = OperationOutcome.Failed;
-            progress?.Failed(ex.Message);
+            progress?.Failed("Model Sharing не настроен. Подробности доступны в журнале коннектора.");
             ResultMessage = ex.Message;
             Log?.Invoke("Ошибка настройки Model Sharing: " + ex.Message);
             ShowMessage?.Invoke(ex.Message, true);
@@ -324,8 +328,8 @@ public sealed record ModelSharingIdentity(string DeviceId, string IssuedTo, bool
 public sealed record ModelSharingProvisionedInfo(string TeklaBin, string ServerHost, int ServerPort,
     string IdentityEmail, DateTimeOffset AppliedUtc);
 
-// View-supplied progress handle wrapping the shell's OperationProgressWindow (kept out of the VM — it is a
-// Window-owned helper). Every member is optional so the VM degrades gracefully when no progress UI is wired.
+// Shell-supplied progress handle (an entry of the page journal), kept out of the VM as plain callbacks.
+// Every member is optional so the VM degrades gracefully when no progress is wired.
 public sealed class ModelSharingProgressHandle
 {
     public Action? ShowAction { get; init; }

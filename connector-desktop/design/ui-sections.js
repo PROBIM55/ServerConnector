@@ -16,7 +16,7 @@
     badge: state => { const n = PC.pages.home.attention(state).length; return n ? { text: String(n), tone: 't-warn' } : null; }
   });
   define({
-    id: 'jobs', title: 'Задания', hint: 'Задания, которые выполняет коннектор на этом компьютере', icon: 'jobs', group: 'main',
+    id: 'jobs', title: 'Задания', hint: 'Всё, что выполняет коннектор: из Платформы и на этом компьютере', icon: 'jobs', group: 'main',
     visible: always, legacyPage: 'jobs', page: state => PC.pages.jobs(state),
     badge: state => { const n = M.jobs(state).filter(job => job.running).length; return n ? { text: String(n), tone: 't-run' } : null; },
     commands: [{ label: 'Очистить завершённые задания', cmd: 'history-clear', section: 'converters', when: state => M.jobs(state).some(job => !job.running) }]
@@ -32,10 +32,14 @@
     tile: state => {
       if (M.has(state, 'platform', 'tekla')) {
         const br = M.bridge(state);
-        return { label: 'Tekla', value: br.state === 'ok' ? 'Мост работает' : br.state === 'down' ? 'Нет связи' : 'Не проверено', meta: br.text, tone: br.state === 'ok' ? 'ok' : br.state === 'down' ? 'warn' : 'idle' };
+        const label = 'Tekla' + (state.tekla?.version ? ' ' + state.tekla.version : '');
+        if (br.state === 'ok') return { label, value: br.model ? 'Модель открыта' : 'Мост работает', meta: br.model || br.text, tone: 'ok' };
+        return { label, value: br.state === 'down' ? 'Нет связи' : 'Не проверено', meta: br.state === 'down' ? 'Откройте модель в Tekla' : br.text, tone: br.state === 'down' ? 'warn' : 'idle' };
       }
-      const firm = String(state.module['firm-version'] || '').trim() || 'Не синхронизировано';
-      return { label: 'Tekla · стандарт фирмы', value: firm, meta: 'Папка фирмы', tone: firm === 'Не синхронизировано' ? 'warn' : 'ok' };
+      const std = M.standard(state);
+      const firm = std.sections.find(s => s.id === 'xs');
+      const value = firm ? firm.installed || 'Не синхронизировано' : String(state.module['firm-version'] || '').trim() || 'Не синхронизировано';
+      return { label: 'Tekla · стандарт фирмы', value, meta: std.updates.length ? 'Есть обновление' : 'Папка фирмы', tone: value === 'Не синхронизировано' || std.updates.length ? 'warn' : 'ok' };
     },
     commands: [
       { label: 'Обновить стандарт Tekla', cmd: 'firm-sync-all', tab: 'standard', when: state => M.has(state, 'structura', 'tekla') },
@@ -75,7 +79,7 @@
   define({
     id: 'converters', title: 'Конвертеры', hint: 'Оптимизация IFC и FBX → GLB на этом компьютере', icon: 'converters', module: 'converters',
     visible: state => M.hasAny(state, 'converters'), legacyPage: 'converters', page: state => PC.pages.converters(state),
-    notices: ['start', 'cancel', 'results', 'report', 'ifc-optimize', 'ifc-analyze', 'ifc-validation', 'ifc-remove', 'ifc-clear-finished', 'pick-input', 'files-clear', 'history-clear'],
+    notices: ['start', 'cancel', 'results', 'report', 'ifc-optimize', 'ifc-analyze', 'ifc-validation', 'ifc-remove', 'ifc-clear-finished', 'pick-input', 'drop-input', 'files-clear', 'history-clear'],
     commands: [
       { label: 'Добавить IFC-файлы', cmd: 'pick-input', conv: 'ifc', data: { target: 'ifc-input' } },
       { label: 'Добавить ZIP для FBX → GLB', cmd: 'pick-input', conv: 'fbx', data: { target: 'zip-input' } }
@@ -102,10 +106,10 @@
     badge: state => state.updateAvailable ? { dot: true, title: 'Доступно обновление' } : null,
     notices: ['update-', 'settings-', 'log-clear', 'diagnostics', 'legacy-restore', 'ui-theme', 'reconnect', 'signout', 'connect-common', 'licenses-open'],
     tileOrder: 1,
-    tile: state => { const c = conn(state); return { label: 'Подключение', value: c.chip[0], meta: 'Учётная запись и защищённое соединение', tone: c.ready ? 'ok' : 'warn' }; },
+    tile: state => { const c = conn(state); return { label: 'Подключение', value: c.chip[0], meta: (c.ready && M.network(state).line) || 'Учётная запись и защищённое соединение', tone: c.ready ? 'ok' : 'warn' }; },
     commands: [
       { label: 'Проверить обновления', cmd: 'update-check' },
-      { label: 'Установить обновление', dialog: 'update', when: state => state.updateAvailable },
+      { label: 'Установить обновление', dialog: 'update', when: state => state.updateAvailable, title: state => state.update?.version ? 'Установить обновление ' + state.update.version : null },
       { label: 'Открыть журнал', cmd: 'settings-log' },
       { label: 'Сохранить диагностику', cmd: 'diagnostics' },
       { label: 'Светлая тема', ui: 'theme', data: { id: 'light' }, when: state => state.theme !== 'light' },
@@ -133,11 +137,11 @@
     for (const entry of visible(state)) {
       items.push({ kind: 'Раздел', label: entry.title, where: entry.hint, run: { ui: 'go', page: entry.id } });
       for (const command of entry.commands) if (!command.when || command.when(state))
-        items.push({ kind: 'Действие', label: command.label, where: entry.title, run: { ...command, page: entry.id, section: command.section || entry.id } });
+        items.push({ kind: 'Действие', label: (command.title && command.title(state)) || command.label, where: entry.title, run: { ...command, page: entry.id, section: command.section || entry.id } });
     }
     if (isVisible(state, 'folders')) for (const folder of state.folders)
       items.push({ kind: 'Папка', label: folder.displayName, where: folder.drive ? 'Диск ' + folder.drive : folder.viaLegacyConnector ? 'Через прежний коннектор' : 'Папки', run: { ui: 'go', page: 'folders' } });
-    for (const job of M.jobs(state)) items.push({ kind: 'Задание', label: job.title + (job.output ? ' · ' + job.output : ''), where: job.statusText, run: { ui: 'job', id: job.id } });
+    for (const job of M.jobs(state)) items.push({ kind: 'Задание', label: job.title + (job.subject ? ' · ' + job.subject : job.output ? ' · ' + job.output : '') + (job.started ? ' · ' + job.started : ''), where: job.statusText, run: { ui: 'job', id: job.id } });
     const words = query.toLowerCase().split(/\s+/).filter(Boolean);
     const hits = items.filter(item => words.every(word => (item.label + ' ' + item.where + ' ' + item.kind).toLowerCase().includes(word)));
     // Matches in the name come before matches found only in the description.

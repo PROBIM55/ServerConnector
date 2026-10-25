@@ -250,22 +250,13 @@ public partial class StandardView : System.Windows.Controls.UserControl
         {
             balloonMessage = balloonMessage[..237] + "...";
         }
-        _host.ShowTrayBalloon(
-            5000,
-            "Стандарт Tekla",
-            balloonMessage,
-            isWarning: true);
-
-        if (_host.IsWindowVisible)
-        {
-            _host.ShowDialog(
-                string.IsNullOrWhiteSpace(message)
-                    ? targetName + ": не удалось синхронизировать. Закройте блокирующую программу и повторите синхронизацию."
-                    : message,
-                "Не удалось обновить: " + targetName,
-                MessageBoxButton.OK,
-                MessageBoxImage.Warning);
-        }
+        // The open window shows the failure in «Задания» and as a page notice; the tray balloon is for a hidden window.
+        if (!_host.IsWindowVisible)
+            _host.ShowTrayBalloon(
+                5000,
+                "Стандарт Tekla",
+                balloonMessage,
+                isWarning: true);
     }
 
     // ===== Sync engine (lifted from RunTeklaSyncCycleAsync) ==========================================
@@ -273,7 +264,7 @@ public partial class StandardView : System.Windows.Controls.UserControl
         bool showDialogs,
         bool forceRefresh,
         bool autoApplyIfPossible,
-        OperationProgressWindow? progressReporter = null,
+        ILocalJobProgress? progressReporter = null,
         TeklaStandardSection? section = null)
     {
         var summaryLines = new List<string>();
@@ -300,19 +291,19 @@ public partial class StandardView : System.Windows.Controls.UserControl
             if (section is null or TeklaStandardSection.Firm)
             {
                 currentStep++;
-                progressReporter?.UpdateStep("Проверяем раздел: Папка фирмы", "Получаем данные и применяем обновление при необходимости", currentStep, totalSteps, EstimateOperationEta(currentStep, totalSteps));
+                progressReporter?.Step("Проверяем раздел: Папка фирмы", "Получаем данные и применяем обновление при необходимости", (currentStep - 1) * 100 / totalSteps);
                 await CheckAndApplyTeklaTargetAsync(CreateFirmTargetState(), ApplyFirmTargetState, forceRefresh, autoApplyIfPossible, summaryLines, progressReporter);
             }
             if (section is null or TeklaStandardSection.Extensions)
             {
                 currentStep++;
-                progressReporter?.UpdateStep("Проверяем раздел: Пользовательские приложения", "Получаем данные и применяем обновление при необходимости", currentStep, totalSteps, EstimateOperationEta(currentStep, totalSteps));
+                progressReporter?.Step("Проверяем раздел: Пользовательские приложения", "Получаем данные и применяем обновление при необходимости", (currentStep - 1) * 100 / totalSteps);
                 await CheckAndApplyTeklaTargetAsync(CreateExtensionsTargetState(), ApplyExtensionsTargetState, forceRefresh, autoApplyIfPossible, summaryLines, progressReporter);
             }
             if (section is null or TeklaStandardSection.Libraries)
             {
                 currentStep++;
-                progressReporter?.UpdateStep("Проверяем раздел: Grasshopper Libraries", "Получаем данные и применяем обновление при необходимости", currentStep, totalSteps, EstimateOperationEta(currentStep, totalSteps));
+                progressReporter?.Step("Проверяем раздел: Grasshopper Libraries", "Получаем данные и применяем обновление при необходимости", (currentStep - 1) * 100 / totalSteps);
                 await CheckAndApplyTeklaTargetAsync(CreateLibrariesTargetState(), ApplyLibrariesTargetState, forceRefresh, autoApplyIfPossible, summaryLines, progressReporter);
             }
 
@@ -366,7 +357,7 @@ public partial class StandardView : System.Windows.Controls.UserControl
         bool forceRefresh,
         bool autoApplyIfPossible,
         List<string> summaryLines,
-        OperationProgressWindow? progressReporter = null)
+        ILocalJobProgress? progressReporter = null)
     {
         if (forceRefresh)
         {
@@ -423,7 +414,7 @@ public partial class StandardView : System.Windows.Controls.UserControl
             return;
         }
 
-        progressReporter?.UpdateDetail("Копируем обновления в локальную папку: " + target.DisplayName);
+        progressReporter?.Detail("Копируем обновления в локальную папку: " + target.DisplayName);
         var applyResult = await Task.Run(() => _teklaStandardService.ApplyPendingGitUpdate(new TeklaManagedSyncRequest
         {
             TargetKey = target.Key,
@@ -471,78 +462,53 @@ public partial class StandardView : System.Windows.Controls.UserControl
         summaryLines.Add(applyResult.Message);
     }
 
-    private async void TeklaUpdateAction_Click(object sender, RoutedEventArgs e) => await RunInteractiveSyncAsync();
+    private async void TeklaUpdateAction_Click(object sender, RoutedEventArgs e)
+    {
+        try { await RunInteractiveSyncAsync(); }
+        catch (Exception ex) { _host.Log("Стандарт Tekla: " + ex.Message); }
+    }
 
     // Interactive sync with a progress window + "already running" notice. Public so the shell can route the
     // Коннектор-tab mirror button (its Click forwarder) through the SAME path as the Стандарт-tab button —
     // identical progress window + guard, no behavior delta on the mirror.
-    public async Task RunInteractiveSyncAsync()
+    // Interactive sync recorded in the page journal («Задания»). A refusal or a failed section is reported to the
+    // caller (the page shows it as a notice); the steps and the summary stay in the journal entry.
+    public Task RunInteractiveSyncAsync() => RunInteractiveSyncCoreAsync(null);
+
+    public Task RunInteractiveSyncAsync(TeklaStandardSection section) => RunInteractiveSyncCoreAsync(section);
+
+    private async Task RunInteractiveSyncCoreAsync(TeklaStandardSection? section)
     {
         if (_host.TeklaCheckInProgress)
-        {
-            _host.ShowDialog(
-                "Синхронизация уже выполняется. Дождитесь завершения текущей операции",
-                "Стандарт Tekla",
-                MessageBoxButton.OK,
-                MessageBoxImage.Information);
-            return;
-        }
+            throw new Features.GraphiteWeb.GraphiteUserException("Синхронизация стандарта Tekla уже выполняется. Дождитесь её завершения.");
 
-        var progressWindow = new OperationProgressWindow("Синхронизация Tekla", "Проверяем и обновляем локальные папки");
-        progressWindow.Owner = _host.OwnerWindow;
-        progressWindow.Show();
-        try
+        var subject = section switch
         {
-            var summaryLines = await RunTeklaSyncCycleAsync(
-                showDialogs: false,
-                forceRefresh: true,
-                autoApplyIfPossible: true,
-                progressReporter: progressWindow);
-
-            var resultText = summaryLines.Count == 0
-                ? "Синхронизация завершена"
-                : string.Join(Environment.NewLine, summaryLines);
-            if (HasTeklaSyncErrors())
-            {
-                progressWindow.MarkFailed(resultText);
-            }
-            else
-            {
-                progressWindow.MarkSucceeded(resultText);
-            }
-        }
-        catch (Exception ex)
-        {
-            progressWindow.MarkFailed(ex.Message);
-        }
-    }
-
-    public async Task RunInteractiveSyncAsync(TeklaStandardSection section)
-    {
-        if (_host.TeklaCheckInProgress)
-        {
-            _host.ShowDialog("Синхронизация уже выполняется. Дождитесь завершения текущей операции", "Стандарт Tekla", MessageBoxButton.OK, MessageBoxImage.Information);
-            return;
-        }
-
-        var name = section switch
-        {
-            TeklaStandardSection.Firm => "папки фирмы",
-            TeklaStandardSection.Extensions => "пользовательских приложений",
-            _ => "Grasshopper Libraries"
+            TeklaStandardSection.Firm => "Папка фирмы",
+            TeklaStandardSection.Extensions => "Расширения",
+            TeklaStandardSection.Libraries => "Библиотеки Grasshopper",
+            _ => "Все разделы"
         };
-        var progressWindow = new OperationProgressWindow("Синхронизация Tekla", "Проверяем раздел: " + name) { Owner = _host.OwnerWindow };
-        progressWindow.Show();
+        var progress = _host.BeginOperation("standard", "Обновление стандарта Tekla", subject, "Сверка версий");
+        List<string> summaryLines;
         try
         {
-            var summaryLines = await RunTeklaSyncCycleAsync(false, true, true, progressWindow, section);
-            var resultText = summaryLines.Count == 0 ? "Синхронизация завершена" : string.Join(Environment.NewLine, summaryLines);
-            if (HasTeklaSyncErrors(section)) progressWindow.MarkFailed(resultText); else progressWindow.MarkSucceeded(resultText);
+            summaryLines = await RunTeklaSyncCycleAsync(false, true, true, progress, section);
         }
         catch (Exception ex)
         {
-            progressWindow.MarkFailed(ex.Message);
+            // The exception text goes to the application log only; the journal keeps a user text.
+            _host.Log("Стандарт Tekla: синхронизация не выполнена: " + ex.Message);
+            progress.Fail("Синхронизация не выполнена. Подробности доступны в журнале коннектора.");
+            throw new Features.GraphiteWeb.GraphiteUserException("Стандарт Tekla не обновлён. Подробности — в «Заданиях».");
         }
+        var resultText = summaryLines.Count == 0 ? "Синхронизация завершена" : string.Join("; ", summaryLines);
+        if (section is { } only ? HasTeklaSyncErrors(only) : HasTeklaSyncErrors())
+        {
+            progress.Fail(resultText);
+            throw new Features.GraphiteWeb.GraphiteUserException("Стандарт Tekla обновлён не полностью. Подробности — в «Заданиях».");
+        }
+        progress.Succeed(resultText);
     }
 
     private void SetSectionError(TeklaStandardSection? section, Exception ex)
@@ -1087,7 +1053,7 @@ public partial class StandardView : System.Windows.Controls.UserControl
         cancellationToken.ThrowIfCancellationRequested();
         if (Interlocked.CompareExchange(ref _publicationInProgress, 1, 0) != 0)
             throw new InvalidOperationException("Публикация уже выполняется. Дождитесь её завершения.");
-        OperationProgressWindow? progressWindow = null;
+        ILocalJobProgress? progressWindow = null;
         try
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -1098,9 +1064,7 @@ public partial class StandardView : System.Windows.Controls.UserControl
 
             var totalSteps = selectedTargets.Count + 3;
             var currentStep = 0;
-            progressWindow = new OperationProgressWindow("Публикация Tekla", "Подготавливаем публикацию");
-            progressWindow.Owner = _host.OwnerWindow;
-            progressWindow.Show();
+            progressWindow = _host.BeginOperation("standard", "Публикация стандарта Tekla", null, "Подготавливаем публикацию");
 
             TeklaPublishButton.IsEnabled = false;
 
@@ -1108,12 +1072,7 @@ public partial class StandardView : System.Windows.Controls.UserControl
             foreach (var selectedTarget in selectedTargets)
             {
                 currentStep++;
-                progressWindow.UpdateStep(
-                    "Публикуем раздел: " + selectedTarget.DisplayName,
-                    "Идет проверка изменений и подготовка публикации",
-                    currentStep,
-                    totalSteps,
-                    EstimateOperationEta(currentStep, totalSteps));
+                progressWindow.Step("Публикуем раздел: " + selectedTarget.DisplayName, "Идет проверка изменений и подготовка публикации", (currentStep - 1) * 100 / totalSteps);
 
                 var payload = new TeklaManifestPublishPayload
                 {
@@ -1141,21 +1100,11 @@ public partial class StandardView : System.Windows.Controls.UserControl
             }
 
             currentStep++;
-            progressWindow.UpdateStep(
-                "Обновляем данные по состоянию",
-                "Сохраняем информацию о публикации",
-                currentStep,
-                totalSteps,
-                EstimateOperationEta(currentStep, totalSteps));
+            progressWindow.Step("Обновляем данные по состоянию", "Сохраняем информацию о публикации", (currentStep - 1) * 100 / totalSteps);
             _host.SaveSettings();
 
             currentStep++;
-            progressWindow.UpdateStep(
-                "Запускаем синхронизацию на этом компьютере",
-                "Сейчас локальные папки будут приведены к опубликованному состоянию",
-                currentStep,
-                totalSteps,
-                EstimateOperationEta(currentStep, totalSteps));
+            progressWindow.Step("Запускаем синхронизацию на этом компьютере", "Сейчас локальные папки будут приведены к опубликованному состоянию", (currentStep - 1) * 100 / totalSteps);
             await RunTeklaSyncCycleAsync(
                 showDialogs: false,
                 forceRefresh: true,
@@ -1163,25 +1112,13 @@ public partial class StandardView : System.Windows.Controls.UserControl
             if (HasTeklaSyncErrors())
                 throw new InvalidOperationException("Публикация на сервере завершена, но локальная синхронизация требует проверки журнала.");
 
-            currentStep++;
-            progressWindow.UpdateStep(
-                "Готово",
-                "Публикация и синхронизация завершены",
-                currentStep,
-                totalSteps,
-                TimeSpan.Zero);
-            progressWindow.MarkSucceeded(string.Join(Environment.NewLine, resultLines));
-
-            _host.ShowDialog(
-                "Публикация завершена\n\n" + string.Join(Environment.NewLine, resultLines),
-                "Стандарт Tekla",
-                MessageBoxButton.OK,
-                MessageBoxImage.Information);
+            // The outcome is the journal entry («Задания»); no native dialog.
+            progressWindow.Succeed(string.Join("; ", resultLines));
         }
         catch (Exception ex)
         {
             var message = GetFriendlyTeklaPublishErrorMessage(ex);
-            progressWindow?.MarkFailed(message);
+            progressWindow?.Fail(message);
             _host.Log("Ошибка публикации Tekla: " + message);
             throw new InvalidOperationException(message, ex);
         }
@@ -1205,7 +1142,7 @@ public partial class StandardView : System.Windows.Controls.UserControl
         }
         catch (Exception ex)
         {
-            _host.ShowDialog(GetFriendlyTeklaPublishErrorMessage(ex), "Стандарт Tekla", MessageBoxButton.OK, MessageBoxImage.Error);
+            _host.Log("Публикация Tekla: " + GetFriendlyTeklaPublishErrorMessage(ex));
         }
     }
 
@@ -1237,11 +1174,6 @@ public partial class StandardView : System.Windows.Controls.UserControl
         targets.Add(new TeklaPublishTargetSelection { TargetKey = key, DisplayName = displayName, SourcePath = sourcePath.Trim() });
     }
 
-    private static TimeSpan EstimateOperationEta(int currentStep, int totalSteps)
-    {
-        var remainingSteps = Math.Max(0, totalSteps - currentStep);
-        return TimeSpan.FromSeconds(Math.Max(0, remainingSteps * 12));
-    }
 
     private void TeklaPublishBrowse_Click(object sender, RoutedEventArgs e)
     {

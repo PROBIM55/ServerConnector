@@ -7,43 +7,54 @@
   const dotStyle = color => `width: 9px; height: 9px; flex: 0 0 9px; border-radius: 50%; background: ${color};`;
   const toneColor = { ok: 'var(--ok)', run: 'var(--accent)', bad: 'var(--bad)', warn: 'var(--warn)', idle: 'var(--line2)' };
   const toneVars = { run: ['accentSoft', 'accentInk'], ok: ['okSoft', 'okInk'], bad: ['badSoft', 'badInk'], warn: ['warnSoft', 'warnInk'], idle: ['hover', 'text2'] };
-  const jobSub = job => 'На этом ПК' + (job.output ? ' · ' + job.output : '');
+  const stepColor = { ok: 'var(--ok)', run: 'var(--accent)', err: 'var(--bad)', wait: 'var(--line2)' };
 
   /* Attention items are derived from facts in the snapshot (see PC.sections for the owning section). */
   const attention = state => {
     const items = [];
+    if (M.hasAny(state, 'tekla')) for (const section of M.standard(state).updates)
+      items.push({ icon: '↓', tone: 't-run', title: 'Новая ревизия: ' + section.name + ' Tekla', text: (section.installed || 'не установлено') + ' → ' + section.available + '. Закройте Tekla перед обновлением.',
+        btn: 'Обновить', cls: 'b-pri', cmd: section.id + '-sync', data: { section: 'tekla' } });
     const agr = M.agr(state);
+    const agrFailed = M.jobs(state).find(job => job.kind === 'agr' && job.tone === 'bad');
     if (M.hasAny(state, 'agr') && agr.state === 'missing')
-      items.push({ icon: '!', tone: 't-bad', title: 'Blender для АГР не готов', text: 'Публикация АГР ждёт установки Blender' + (state.agrRuntime ? ` ${state.agrRuntime.version}. Установка ${PC.formatSize(state.agrRuntime.sizeBytes)}, один раз.` : '.'), btn: 'Установить', cls: 'b-sec', ui: 'go', data: { page: 'agr' } });
-    const failed = M.jobs(state).find(job => job.tone === 'bad');
-    if (failed) items.push({ icon: '!', tone: 't-bad', title: failed.title + ' — ошибка', text: jobSub(failed) + (failed.hasReport ? '. Причина — в отчёте задания.' : '. Подробности доступны в журнале.'), btn: 'Открыть', cls: 'b-sec', ui: 'job', data: { id: failed.id } });
+      items.push({ icon: '!', tone: 't-bad', title: agrFailed ? agrFailed.title + (agrFailed.subject ? ' «' + agrFailed.subject + '»' : '') + ' не выполнена' : 'Blender для АГР не готов',
+        text: 'Нет Blender' + (state.agrRuntime ? ` ${state.agrRuntime.version}. Установка ${PC.formatSize(state.agrRuntime.sizeBytes)}, один раз.` : '.'), btn: 'Установить', cls: 'b-sec', ui: 'go', data: { page: 'agr' } });
+    const failed = M.jobs(state).find(job => job.tone === 'bad' && !(agrFailed && job.id === agrFailed.id && agr.state === 'missing'));
+    if (failed) items.push({ icon: '!', tone: 't-bad', title: failed.title + ' — ошибка', text: failed.error || failed.sourceText, btn: 'Открыть', cls: 'b-sec', ui: 'job', data: { id: failed.id } });
     const folders = M.folders(state);
     if (M.hasAny(state, 'folders') && folders.neighbour && folders.legacy.canTransfer) {
       const names = folders.viaLegacy.map(f => f.displayName).join(', ');
       items.push({ icon: 'i', tone: 't-warn', title: names + ' — через прежний коннектор', text: 'Он работает на этом компьютере. Остальные папки доступны здесь.', btn: 'Подробнее', cls: 'b-sec', ui: 'go', data: { page: 'folders' } });
     }
     if (state.updateAvailable)
-      items.push({ icon: '↑', tone: 't-ok', title: 'Доступна новая версия коннектора', text: 'Установится после текущего задания.', btn: 'Что нового', cls: 'b-sec', ui: 'go', data: { page: 'settings' } });
+      items.push({ icon: '↑', tone: 't-ok', title: state.update?.version ? 'Доступна версия ' + state.update.version : 'Доступна новая версия коннектора', text: 'Установится после текущего задания.', btn: 'Что нового', cls: 'b-sec', ui: 'go', data: { page: 'settings' } });
     return items;
   };
 
   PC.pages.home = state => {
     const items = attention(state);
-    const running = M.runningJob(state);
+    const all = M.jobs(state);
+    const running = all.find(job => job.running) || null;
+    const runningCount = all.filter(job => job.running).length;
     const tiles = PC.sections.tiles(state).slice(0, 4);
     const conn = M.connection(state);
-    const summary = (running ? 'Одно задание выполняется. ' : 'Активных заданий нет. ') + (items.length ? 'Требуют решения: ' + items.length + '.' : 'Решений не требуется.');
+    const tools = ['tekla', 'autocad'].filter(m => M.hasAny(state, m)).map(m => m === 'tekla' ? 'Tekla' : 'AutoCAD');
+    const summary = (conn.ready && tools.length ? tools.join(' и ') + (tools.length > 1 ? ' доступны' : ' доступна') + ', ' : '')
+      + (runningCount ? (runningCount === 1 ? 'одно задание выполняется' : runningCount + ' ' + PC.plural(runningCount, 'задание', 'задания', 'заданий') + ' выполняются') : 'активных заданий нет')
+      + '. ' + (items.length ? 'Требуют решения: ' + items.length + '.' : 'Решений не требуется.');
     const head = conn.ready ? { title: 'Компьютер на связи с Платформой', bg: 'okSoft', ink: 'ok', path: 'm5 12 4.5 4.5L19 7' }
       : conn.busy ? { title: 'Подключаемся к Платформе', bg: 'accentSoft', ink: 'accentInk', path: 'M12 6v6l4 2' }
       : { title: 'Нет связи с Платформой', bg: 'warnSoft', ink: 'warnInk', path: 'M12 7v6M12 17h.01' };
     const runningCard = running ? `<button type="button" data-ui="job" data-id="${esc(running.id)}" class="row" style="flex: 0 1 360px; display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-radius: 10px; border: 1px solid var(--line); background: var(--raised); color: inherit; text-align: left; cursor: pointer; font: inherit">
 <span style="display: flex; justify-content: space-between; gap: 10px"><span style="font-weight: 650">${esc(running.title)}</span><span style="color: var(--accentInk); font-weight: 700">${running.progress} %</span></span>
 <span class="bar"><span style="width: ${running.progress}%"></span></span>
-<span class="lbl">${esc(jobSub(running))}</span></button>` : '';
-    const recent = M.jobs(state).slice(0, 4);
+<span class="lbl ellipsis">${esc(running.sub || running.sourceText)}</span></button>` : '';
+    const today = all.filter(job => job.today).slice(0, 4);
+    const sentence = summary.charAt(0).toUpperCase() + summary.slice(1);
     return `<section class="card" style="display: flex; flex-wrap: wrap; align-items: center; gap: 20px; padding: 18px 20px">
 <span style="width: 44px; height: 44px; border-radius: 12px; background: var(--${head.bg}); color: var(--${head.ink}); display: grid; place-items: center"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${head.path}"></path></svg></span>
-<div style="flex: 1 1 260px"><div style="font-size: 17px; font-weight: 750">${head.title}</div><div style="color: var(--dim)">${esc(summary)}</div></div>
+<div style="flex: 1 1 260px"><div style="font-size: 17px; font-weight: 750">${head.title}</div><div style="color: var(--dim)">${esc(sentence)}</div></div>
 ${runningCard}</section>
 ${tiles.length ? `<div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px">${tiles.map(tile => `<button type="button" data-ui="go" data-page="${esc(tile.page)}" class="tile"><span style="display: flex; align-items: center; justify-content: space-between"><span class="lbl" style="font-size: 12.5px">${esc(tile.label)}</span><span style="${dotStyle(toneColor[tile.tone] || toneColor.idle)}"></span></span><span style="font-size: 17px; font-weight: 750">${esc(tile.value)}</span><span class="lbl ellipsis">${esc(tile.meta)}</span></button>`).join('')}</div>` : ''}
 <div class="split">
@@ -52,54 +63,85 @@ ${tiles.length ? `<div style="display: grid; grid-template-columns: repeat(4, mi
 ${items.length ? items.map(item => `<div class="row" style="display: flex; gap: 14px; align-items: center; padding: 12px 18px; border-top: 1px solid var(--line)">
 <span class="chip ${item.tone}" style="align-self: center; width: 30px; height: 30px; padding: 0; justify-content: center; border-radius: 9px; font-size: 14px">${esc(item.icon)}</span>
 <div style="flex: 1; min-width: 0"><div style="font-weight: 650">${esc(item.title)}</div><div style="color: var(--dim)">${esc(item.text)}</div></div>
-${button(item.btn, 'b b-sm ' + item.cls, { ui: item.ui, data: item.data })}</div>`).join('') : `<div class="empty" style="border-top: 1px solid var(--line)">Сейчас ничего не требует вашего решения.</div>`}
+${button(item.btn, 'b b-sm ' + item.cls, { cmd: item.cmd, ui: item.ui, data: item.data })}</div>`).join('') : `<div class="empty" style="border-top: 1px solid var(--line)">Сейчас ничего не требует вашего решения.</div>`}
 </section>
 <section class="card" style="flex: 2 1 300px; min-width: 0; overflow: hidden">
-<div style="display: flex; align-items: center; padding: 16px 18px 10px"><h2 class="h2" style="flex: 1">Последние задания</h2>${button('Все задания', 'b-ghost', { ui: 'go', data: { page: 'jobs' } })}</div>
-${recent.length ? recent.map(job => `<button type="button" data-ui="job" data-id="${esc(job.id)}" class="row" style="display: flex; width: 100%; align-items: center; gap: 12px; padding: 10px 18px; border: 0; border-top: 1px solid var(--line); background: transparent; color: inherit; text-align: left; cursor: pointer; font: inherit"><span style="${dotStyle(toneColor[job.tone])}"></span><span style="flex: 1; min-width: 0"><span style="display: block; font-weight: 600">${esc(job.title)}</span><span class="lbl ellipsis" style="display: block">${esc(jobSub(job))}</span></span><span class="lbl">${esc(job.statusText)}</span></button>`).join('') : `<div class="empty" style="border-top: 1px solid var(--line)">Заданий пока нет.</div>`}
+<div style="display: flex; align-items: center; padding: 16px 18px 10px"><h2 class="h2" style="flex: 1">Сегодня</h2>${button('Все задания', 'b-ghost', { ui: 'go', data: { page: 'jobs' } })}</div>
+${today.length ? today.map(job => `<button type="button" data-ui="job" data-id="${esc(job.id)}" class="row" style="display: flex; width: 100%; align-items: center; gap: 12px; padding: 10px 18px; border: 0; border-top: 1px solid var(--line); background: transparent; color: inherit; text-align: left; cursor: pointer; font: inherit"><span style="${dotStyle(toneColor[job.tone])}"></span><span style="flex: 1; min-width: 0"><span style="display: block; font-weight: 600">${esc(job.title)}</span><span class="lbl ellipsis" style="display: block">${esc(job.sub || job.sourceText)}</span></span><span class="lbl">${esc(job.running ? job.progress + ' %' : job.started)}</span></button>`).join('') : `<div class="empty" style="border-top: 1px solid var(--line)">Сегодня заданий не было.</div>`}
 </section></div>`;
   };
   PC.pages.home.attention = attention;
 
-  const FILTERS = [['all', 'Все', () => true], ['running', 'Выполняются', job => job.running], ['errors', 'Ошибки', job => job.tone === 'bad']];
+  const FILTERS = [['all', 'Все', () => true], ['running', 'Выполняются', job => job.running], ['errors', 'Ошибки', job => job.tone === 'bad'],
+    ['platform', 'Из Платформы', job => job.source === 'platform'], ['local', 'На этом ПК', job => job.source === 'local']];
+
+  /** Actions of the selected job: only commands that exist for its kind. */
+  const jobActions = (state, job) => {
+    const acts = [];
+    const converter = job.kind === 'ifc' || job.kind === 'fbx';
+    if (converter) {
+      if (job.running) acts.push(button('Отменить', 'b b-danger', { cmd: 'cancel', data: { section: 'converters', target: job.id } }));
+      if (job.hasResult) acts.push(button('Открыть результат', 'b b-pri', { cmd: 'results', data: { section: 'converters', target: job.id } }));
+      if (job.hasReport) acts.push(button(job.kind === 'ifc' ? 'Отчёт JSON' : 'Отчёт', 'b b-sec', { cmd: 'report', data: { section: 'converters', target: job.id } }));
+      if (job.hasValidation) acts.push(button('Проверить результат', 'b b-sec', { cmd: 'ifc-validation', data: { section: 'converters', target: job.id } }));
+      return acts;
+    }
+    if (job.kind === 'agr' && job.tone === 'bad' && M.agr(state).state !== 'ready') acts.push(button('Установить Blender', 'b b-pri', { ui: 'go', data: { page: 'agr' } }));
+    const log = { standard: ['Журнал синхронизации', 'firm-log', 'tekla'], sharing: ['Журнал Model Sharing', 'sharing-log', 'tekla'], patch: ['Журнал патча', 'ifc-log', 'tekla'] }[job.kind]
+      || ['Журнал', 'settings-log', 'settings'];
+    acts.push(button(log[0], 'b b-sec', { cmd: log[1], data: { section: log[2] } }));
+    return acts;
+  };
+
+  /** «Выполняется»: the application and the computer that run the job. */
+  const where = (state, job) => {
+    const device = state.account?.device || '';
+    const app = job.kind === 'tekla' && state.tekla?.version ? 'Tekla ' + state.tekla.version
+      : job.kind === 'autocad' ? (M.cad(state).selected ? [M.cad(state).selected.name, M.cad(state).selected.version].filter(Boolean).join(' ') : 'AutoCAD')
+      : job.kind === 'agr' ? 'Blender' : '';
+    return app && device ? app + ' на ' + device : app || device || 'На этом компьютере';
+  };
+
+  const stepsList = steps => `<ol style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column">${steps.map((step, i) => `<li style="display: flex; gap: 12px"><span style="display: flex; flex-direction: column; align-items: center"><span style="width: 12px; height: 12px; flex: 0 0 12px; margin-top: 3px; border-radius: 50%; box-sizing: border-box; ${step.state === 'wait' ? 'border: 2px solid var(--line2); background: transparent;' : 'background: ' + stepColor[step.state] + ';'}"></span>${i === steps.length - 1 ? '' : '<span style="flex: 1; width: 2px; min-height: 18px; background: var(--line)"></span>'}</span><span style="display: flex; flex-direction: column; padding-bottom: 14px; min-width: 0"><span style="font-weight: 600">${esc(step.label)}</span>${step.meta ? `<span class="lbl" style="overflow-wrap: anywhere">${esc(step.meta)}</span>` : ''}</span></li>`).join('')}</ol>`;
 
   PC.pages.jobs = state => {
     const all = M.jobs(state);
     const query = state.ui.jobQuery.trim().toLowerCase();
     const pass = (FILTERS.find(f => f[0] === state.ui.jobFilter) || FILTERS[0])[2];
-    const rows = all.filter(pass).filter(job => !query || (job.title + ' ' + job.output).toLowerCase().includes(query));
+    const rows = all.filter(pass).filter(job => !query || (job.title + ' ' + job.subject + ' ' + job.output).toLowerCase().includes(query));
     const sel = all.find(job => job.id === state.ui.jobId) || rows[0] || null;
-    const hasFinished = all.some(job => !job.running && job.status !== '—');
+    const hasFinished = all.some(job => !job.running && job.status !== 'queued');
     const head = `<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px">
 <div role="tablist" aria-label="Фильтр заданий" class="seg seg-sm" style="flex-wrap: wrap">${FILTERS.map(([id, label, f]) => `<button type="button" role="tab" data-ui="filter" data-id="${id}" aria-selected="${state.ui.jobFilter === id}">${label}<span style="opacity: .65; margin-left: 6px">${all.filter(f).length}</span></button>`).join('')}</div>
 <div style="flex: 1"></div>
-<label style="display: flex; align-items: center; gap: 8px; height: 34px; width: 220px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--line2); background: var(--field); color: var(--dim)">${PC.searchIcon(14)}<input id="job-query" type="search" placeholder="Задание или файл" aria-label="Найти задание" value="${esc(state.ui.jobQuery)}" style="flex: 1; min-width: 0; border: 0; background: transparent; color: var(--text); font-size: 13px; outline: none"></label>
+<label style="display: flex; align-items: center; gap: 8px; height: 34px; width: 220px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--line2); background: var(--field); color: var(--dim)">${PC.searchIcon(14)}<input id="job-query" type="search" placeholder="Проект или файл" aria-label="Найти задание" value="${esc(state.ui.jobQuery)}" style="flex: 1; min-width: 0; border: 0; background: transparent; color: var(--text); font-size: 13px; outline: none"></label>
 ${button('Очистить завершённые', 'b b-sec', { cmd: 'history-clear', disabled: !hasFinished, data: { section: 'converters' } })}
 </div>`;
-    if (!all.length) return head + `<section class="card"><div class="empty">Заданий пока нет. Здесь появятся конвертации IFC и FBX, запущенные на этом компьютере.</div></section>`;
+    if (!all.length) return head + `<section class="card"><div class="empty">Заданий пока нет. Здесь появятся задания Платформы для Tekla, AutoCAD и АГР и работа на этом компьютере: конвертеры, стандарт Tekla, Model Sharing и патч IFC.</div></section>`;
     const list = rows.map(job => {
       const [bg, ink] = toneVars[job.tone];
       const on = sel && sel.id === job.id;
       return `<button type="button" data-ui="job" data-id="${esc(job.id)}" class="row" style="display: flex; align-items: center; gap: 14px; width: 100%; padding: 13px 18px; border: 0; border-bottom: 1px solid var(--line); color: inherit; text-align: left; cursor: pointer; font: inherit; ${on ? 'background: var(--accentSoft); box-shadow: inset 3px 0 0 var(--accent);' : 'background: transparent;'}">
-<span style="width: 36px; height: 36px; flex: 0 0 36px; border-radius: 10px; display: grid; place-items: center; font-weight: 800; background: var(--${bg}); color: var(--${ink});">${job.glyph}</span>
+<span style="width: 36px; height: 36px; flex: 0 0 36px; border-radius: 10px; display: grid; place-items: center; font-weight: 800; background: var(--${bg}); color: var(--${ink});">${esc(job.glyph)}</span>
 <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">
-<span style="font-weight: 650" class="ellipsis">${esc(job.title)}</span>
-<span class="lbl ellipsis">${esc(jobSub(job))}</span>
+<span style="display: flex; gap: 10px; align-items: baseline"><span style="font-weight: 650; flex: 1; min-width: 0" class="ellipsis">${esc(job.title)}</span>${job.started ? `<span class="lbl">${esc(job.started)}</span>` : ''}</span>
+<span class="lbl ellipsis">${esc(job.sub || job.sourceText)}</span>
 ${job.running ? `<span style="margin-top: 6px; height: 4px; border-radius: 2px; background: var(--hover); overflow: hidden; display: block"><span style="display: block; width: ${job.progress}%; height: 4px; background: var(--accent)"></span></span>` : ''}
 </span>${chip(job.statusText, tones[job.tone], 'align-self: center')}</button>`;
     }).join('') || `<div class="empty">Нет заданий с таким условием.</div>`;
     let detail = '';
     if (sel) {
-      const acts = [];
-      if (sel.running) acts.push(button('Отменить', 'b b-danger', { cmd: 'cancel', data: { section: 'converters', target: sel.id } }));
-      if (sel.hasResult) acts.push(button('Открыть результат', 'b b-pri', { cmd: 'results', data: { section: 'converters', target: sel.id } }));
-      if (sel.hasReport) acts.push(button(sel.kind === 'ifc' ? 'Отчёт JSON' : 'Отчёт', 'b b-sec', { cmd: 'report', data: { section: 'converters', target: sel.id } }));
-      if (sel.hasValidation) acts.push(button('Проверить результат', 'b b-sec', { cmd: 'ifc-validation', data: { section: 'converters', target: sel.id } }));
+      const acts = jobActions(state, sel);
+      const facts = [['Начато', sel.startedFull], ['Длительность', sel.duration], ['Выполняется', where(state, sel)]]
+        .concat(sel.output ? [['Результат', sel.output]] : [])
+        .concat(sel.kind === 'ifc' && sel.inputBytes && sel.outputBytes ? [['Размер', PC.formatSize(sel.inputBytes) + ' → ' + PC.formatSize(sel.outputBytes)]] : [])
+        .filter(([, value]) => value);
       detail = `<aside class="card" style="flex: 2 1 320px; min-width: 0; padding: 20px; display: flex; flex-direction: column; gap: 14px; box-sizing: border-box">
-<div style="display: flex; flex-direction: column; gap: 4px"><span class="lbl">Конвертер на этом ПК</span><h2 style="margin: 0; font-size: 18px; font-weight: 800">${esc(sel.title)}</h2><span style="color: var(--text2)">${esc(jobSub(sel))}</span></div>
+<div style="display: flex; flex-direction: column; gap: 4px"><span class="lbl">${esc(sel.sourceText)}</span><h2 style="margin: 0; font-size: 18px; font-weight: 800">${esc(sel.title)}</h2>${sel.sub ? `<span style="color: var(--text2)">${esc(sel.sub)}</span>` : ''}</div>
 ${chip(sel.running ? 'Выполняется · ' + sel.progress + ' %' : sel.statusText, tones[sel.tone])}
-${sel.tone === 'bad' ? `<div class="note" style="background: var(--badSoft); color: var(--badInk)">Задание завершилось с ошибкой. ${sel.hasReport ? 'Причина записана в отчёте задания.' : 'Подробности доступны в журнале.'}</div>` : ''}
-<div style="display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 6px 12px; font-size: 13px"><span class="lbl">Выполняется</span><span>На этом компьютере</span>${sel.output ? `<span class="lbl">Результат</span><span class="ellipsis">${esc(sel.output)}</span>` : ''}</div>
+${sel.tone === 'bad' ? `<div class="note" style="background: var(--badSoft); color: var(--badInk)">${esc(sel.error || 'Задание завершилось с ошибкой. Подробности доступны в журнале.')}</div>` : ''}
+<div style="display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 6px 12px; font-size: 13px">${facts.map(([label, value]) => `<span class="lbl">${label}</span><span class="ellipsis">${esc(value)}</span>`).join('')}</div>
+${sel.steps.length ? stepsList(sel.steps) : ''}
 ${acts.length ? `<div class="acts">${acts.join('')}</div>` : ''}
 </aside>`;
     }

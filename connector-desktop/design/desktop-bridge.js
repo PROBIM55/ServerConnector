@@ -10,15 +10,19 @@
     if (typeof window.CONNECTOR_DESKTOP_COMMAND_UNAVAILABLE === 'function') window.CONNECTOR_DESKTOP_COMMAND_UNAVAILABLE(command, error);
   };
   const newId = () => crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-  const invoke = (command, payload = {}) => new Promise(resolve => {
+  const invoke = (command, payload = {}, files = null) => new Promise(resolve => {
     const id = newId();
-    if (!window.chrome?.webview?.postMessage) {
-      unavailable(command, 'Desktop runtime недоступен.');
-      resolve({ ok:false, error:'Desktop runtime недоступен.' });
+    const webview = window.chrome?.webview;
+    if (!webview?.postMessage || (files && !webview.postMessageWithAdditionalObjects)) {
+      const error = files ? 'Перетаскивание файлов недоступно в этой версии WebView2. Выберите файлы кнопкой.' : 'Desktop runtime недоступен.';
+      unavailable(command, error);
+      resolve({ ok:false, error });
       return;
     }
     pending.set(id, { resolve, command });
-    window.chrome.webview.postMessage({ schemaVersion:1, id, command, payload });
+    // Dropped files travel as WebView2 file objects; the native side reads their paths, the page never names one.
+    if (files) webview.postMessageWithAdditionalObjects({ schemaVersion:1, id, command, payload }, files);
+    else webview.postMessage({ schemaVersion:1, id, command, payload });
     if (payload.fields?.token !== undefined) payload.fields.token = '';
   });
   window.chrome?.webview?.addEventListener('message', event => {

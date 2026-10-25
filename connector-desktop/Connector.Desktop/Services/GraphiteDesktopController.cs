@@ -29,6 +29,7 @@ namespace Connector.Desktop.Services;
 public sealed class GraphiteDesktopController : IAsyncDisposable
 {
     private static readonly string ApplicationVersion = ResolveApplicationVersion();
+    private static readonly string? ApplicationBuild = ResolveApplicationBuild();
     private static readonly HashSet<string> Modes = new(StringComparer.Ordinal) { "structura", "platform" };
     private static readonly HashSet<string> Converters = new(StringComparer.Ordinal) { "catalog", "fbx", "ifc", "history" };
     private static readonly HashSet<string> TeklaPages = new(StringComparer.Ordinal) { "standard", "sharing", "ifc", "exports" };
@@ -53,9 +54,16 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
     private readonly IPlatformConnectionApi _platformConnection;
     private readonly ConnectorBrowserSignIn _browserSignIn = new();
     private readonly CommonAccessRuntime _commonAccess;
-    private readonly Func<string, Task<bool>>? _confirmFolderDisconnect;
-    private readonly Func<string, Task<bool>>? _confirmLegacyAction;
+    // Confirmations are dialogs of the page; the native action asks and waits for the explicit answer.
+    private readonly PageConfirmationBroker _confirmations = new();
     private readonly Action<string>? _legacyStartedNotice;
+    private readonly Dictionary<string, (long? Input, long? Output)> _converterSizes = new(StringComparer.Ordinal);
+    // An operation may report its own outcome text (for example, the found version); it replaces the generic line.
+    private readonly Dictionary<string, (string Message, string Kind)> _operationResults = new(StringComparer.Ordinal);
+    private string? _webViewVersion;
+    private bool _webViewVersionRead;
+    private string? _ifcEngineVersion;
+    private bool _ifcEngineVersionRead;
     private volatile LegacyTransferStatus _legacyStatus = new(false, false, null);
     private int _legacyBusy;
     private readonly ConverterWorkspaceViewModel _converterWorkspace;
@@ -98,9 +106,8 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
         Func<string, string?>? pickPath = null,
         Func<string, string[]?>? pickFiles = null,
         IPlatformConnectionApi? platformConnection = null,
-        Func<string, Task<bool>>? confirmFolderDisconnect = null,
-        Func<string, Task<bool>>? confirmLegacyAction = null,
-        Action<string>? legacyStartedNotice = null)
+        Action<string>? legacyStartedNotice = null,
+        string? journalPath = null)
     {
         _connectorHost = connectorHost ?? throw new ArgumentNullException(nameof(connectorHost));
         _runtimeServices = runtimeServices ?? throw new ArgumentNullException(nameof(runtimeServices));
@@ -110,16 +117,18 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
         _commonAccess = runtimeServices.CommonAccess;
         _runtimeServices.CommonOperations.Changed += OnCommonOperationChanged;
         _runtimeServices.CommonRecoveryChanged += OnCommonRecoveryChanged;
-        _confirmFolderDisconnect = confirmFolderDisconnect;
-        // Native confirmation only: the web document can request a transfer but never confirm it.
-        _confirmLegacyAction = confirmLegacyAction;
         _legacyStartedNotice = legacyStartedNotice;
+        Journal = new ConnectorJobJournal(journalPath ?? ConnectorJobJournal.DefaultPath, log: _connectorHost.Log);
+        Journal.Changed += PublishSnapshot;
+        _confirmations.Changed += PublishSnapshot;
+        _runtimeServices.Host.JobPicked += OnRuntimeJobPicked;
+        _runtimeServices.Host.JobStatusChanged += OnRuntimeJobStatus;
         _runtimeServices.Platform.SnapshotChanged += OnPlatformSnapshotChanged;
         _converterWorkspace = converterWorkspace ?? throw new ArgumentNullException(nameof(converterWorkspace));
         if (Path.IsPathFullyQualified(_connectorHost.Settings.ConverterOutputDirectory))
             _converterWorkspace.OutputDirectory = _connectorHost.Settings.ConverterOutputDirectory;
-        _fields["output-root"] = new DirectoryInfo(_converterWorkspace.OutputDirectory).Name;
-        _fields["ifc-output"] = new DirectoryInfo(_converterWorkspace.OutputDirectory).Name;
+        _fields["output-root"] = _converterWorkspace.OutputDirectory;
+        _fields["ifc-output"] = _converterWorkspace.OutputDirectory;
         _pickPath = pickPath;
         _pickFiles = pickFiles;
 
@@ -145,6 +154,21 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
     }
 
     public event Action<object>? SnapshotChanged;
+
+    /// <summary>Recent jobs of this connector: Platform jobs it executed and local operations («Задания»).</summary>
+    public ConnectorJobJournal Journal { get; }
+
+    /// <summary>Asks the user in the page (one dialog) and waits for the answer; false when the window closes.</summary>
+    public Task<bool> ConfirmAsync(PageConfirmation request) => _confirmations.RequestAsync(request, _lifetime.Token);
+
+    /// <summary>Model Sharing progress reported into its journal entry.</summary>
+    public static ModelSharingProgressHandle ModelSharingProgress(ILocalJobProgress progress) => new()
+    {
+        StepAction = (step, details, current, total, _) => progress.Step(step, details, total > 0 ? (current - 1) * 100 / total : null),
+        SucceededAction = details => progress.Succeed(details),
+        FailedAction = details => progress.Fail(details),
+        DismissAction = progress.Cancel
+    };
 
     public object CreateSnapshot() => CreateSnapshot(includeFields: false);
 
@@ -177,10 +201,9 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
 
     private void RestoreFolder(string name, string? path)
     {
-        // Display only the folder name. Native view models retain the complete
-        // path, including unavailable/network folders; restoration performs no I/O.
-        _savedFields[name] = Path.GetFileName((_pickedFolders.GetValueOrDefault(name) ?? path ?? string.Empty)
-            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+        // The full local path is shown (the page never sends a path back: folder targets are ignored in
+        // request fields). Restoration performs no I/O.
+        _savedFields[name] = (_pickedFolders.GetValueOrDefault(name) ?? path ?? string.Empty).Trim();
     }
 
     private object CreateSnapshot(bool includeFields, bool includeSavedFields = false)
@@ -212,10 +235,9 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
             notice = _notice;
         }
 
-        object[] history = _converterWorkspace.Jobs.Select(JobSnapshot).ToArray();
-        ConverterWorkspaceJob? current = _converterWorkspace.Jobs.FirstOrDefault(job => job.State == "Выполняется")
-            ?? _converterWorkspace.SelectedJob ?? _converterWorkspace.Jobs.FirstOrDefault();
-        object? job = current is null ? null : JobSnapshot(current);
+        object[] jobs = GraphiteSnapshotFacts.Jobs(Journal.Entries, _converterWorkspace.Jobs.Select(ConverterFacts).ToArray());
+        Dictionary<string, string> picked;
+        lock (_gate) picked = new Dictionary<string, string>(_pickedFolders, StringComparer.Ordinal);
         var moduleFields = new Dictionary<string, object>(StringComparer.Ordinal)
         {
             ["agent-status"] = mode == "platform"
@@ -272,8 +294,7 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
                 ? _runtimeServices.CommonFolders.Folders : Array.Empty<CommonSmbFolder>(),
             ["folderStatus"] = _runtimeServices.CommonFolderStatus,
             ["legacyTransfer"] = LegacyTransferSnapshot(),
-            ["jobs"] = history,
-            ["history"] = history,
+            ["jobs"] = jobs,
             ["availability"] = new
             {
                 agentControls = _connectorHost.CanControlBackgroundConnection,
@@ -295,8 +316,18 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
                 platform = new { status = _commonAccess.IsSelected ? commonStatus : PlatformStatus(), hasSavedCredential = _commonAccess.IsSelected ? _commonAccess.HasStoredCredential : _platformConnection.Connection.HasStoredCredential }
             },
             ["cadSessions"] = _cadSessions,
-            ["job"] = job,
             ["notice"] = notice,
+            ["account"] = _commonAccess.IsSelected
+                ? ConnectorAccountFacts.Build(Environment.MachineName, _commonAccess.LastOverlay, _commonAccess.GatewayUri)
+                : null,
+            ["teklaStandard"] = GraphiteSnapshotFacts.TeklaStandard(_connectorHost.Settings, picked),
+            ["tekla"] = TeklaSnapshot(),
+            ["update"] = GraphiteSnapshotFacts.Update(_connectorHost.UpdateInfo, _connectorHost.HasPendingUpdate),
+            ["about"] = AboutSnapshot(),
+            ["agrInstall"] = _platformTools.AgrInstallProgress is { } install
+                ? new { phase = install.Phase, completedBytes = install.CompletedBytes, totalBytes = install.TotalBytes }
+                : null,
+            ["confirmation"] = GraphiteSnapshotFacts.Confirmation(_confirmations.Current),
             ["uiTheme"] = _uiTheme,
             ["windowMaximized"] = _windowMaximized,
             ["nativeCaption"] = _nativeCaption,
@@ -354,7 +385,16 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
                 else StartOperation(_connectorHost.DisconnectAsync, request.Command, cancellationToken);
                 break;
             case "update-check":
-                StartOperation(() => _connectorHost.CheckUpdatesAsync(showDialogs: true), request.Command, cancellationToken);
+                StartOperation(CheckUpdatesAsync, request.Command, cancellationToken);
+                break;
+            case "confirm-answer":
+                // Explicit answer of the page dialog. Only the id of the confirmation the native action is waiting
+                // for is accepted, once; the message itself came through the trusted-document RPC channel.
+                if (!_confirmations.Answer(ReadString(request.Payload, "target"), ReadBooleanField(request.Payload, "accept", false)))
+                    return Availability(false, "Это подтверждение уже не действует.");
+                break;
+            case "drop-input":
+                DropInput(ReadString(request.Payload, "target"), request.DroppedPaths ?? Array.Empty<string>());
                 break;
             case "update-download":
                 StartSupportAction(DesktopSupportAction.DownloadPendingUpdate, request.Command, cancellationToken);
@@ -425,6 +465,7 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
                 break;
             case "history-clear":
                 ClearHistory();
+                Journal.RemoveFinished();
                 break;
             case "settings-store":
                 StartSavePreferences(request.Payload, reconnect: false, request.Command, cancellationToken);
@@ -433,13 +474,17 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
                 StartAsyncCommand(Require(_patching, "Патчинг IFC").DetectCommand, request.Command, cancellationToken);
                 break;
             case "ifc-apply":
-                ApplyPatchPickerPaths();
-                StartAsyncCommand(Require(_patching, "Патчинг IFC").ApplyCommand, request.Command, cancellationToken);
-                break;
             case "ifc-rollback":
+            {
                 ApplyPatchPickerPaths();
-                StartAsyncCommand(Require(_patching, "Патчинг IFC").RollbackCommand, request.Command, cancellationToken);
+                var patching = Require(_patching, "Патчинг IFC");
+                var apply = request.Command == "ifc-apply";
+                StartJournaledCommand(apply ? patching.ApplyCommand : patching.RollbackCommand, request.Command, "patch",
+                    apply ? "Установка патча IFC-экспорта" : "Возврат исходных файлов IFC-экспорта",
+                    apply ? "Замена файлов IFC-экспорта" : "Возврат исходных файлов",
+                    () => patching.LastOperationOutcome, () => patching.ResultMessage, cancellationToken);
                 break;
+            }
             case "ifc-log":
                 Execute(Require(_patching, "Патчинг IFC").OpenLogCommand);
                 break;
@@ -467,8 +512,13 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
                 {
                     var resource = SelectedFolderResource();
                     var drive = _runtimeServices.CommonFolders.Folders.FirstOrDefault(folder => folder.ResourceId == resource)?.Drive ?? ReadSafeField("drive");
+                    var folderName = _runtimeServices.CommonFolders.Folders.FirstOrDefault(folder => folder.ResourceId == resource)?.DisplayName ?? "Папка";
                     StartOperation(() => _runtimeServices.CommonFolders.UnmountAsync(resource, drive,
-                        () => _confirmFolderDisconnect?.Invoke(drive) ?? Task.FromResult(false), cancellationToken), request.Command, cancellationToken);
+                        () => ConfirmAsync(new PageConfirmation(
+                            $"Отключить диск {drive}?",
+                            $"Папка «{folderName}» перестанет быть видна как диск {drive}. Файлы на сервере не меняются.",
+                            [$"Закройте файлы, открытые с диска {drive}.", "Открыть папку можно снова в любой момент."],
+                            null, "Отключить", Danger: true)), cancellationToken), request.Command, cancellationToken);
                 }
                 else StartOperation(() => _connectorHost.UnmountVpnShareAsync(ReadSafeField("drive")), request.Command, cancellationToken);
                 break;
@@ -839,18 +889,26 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
                 $"granted={readiness.LegacyShareGranted}, incomplete={preflight.Incomplete}).");
             return ("Перевод недоступен. " + string.Join(" ", preflight.Blockers), "error");
         }
-        var warning = preflight.Warnings.Count == 0 ? string.Empty : "\n\nВнимание: " + string.Join(" ", preflight.Warnings);
-        if (!await ConfirmLegacyAsync("Перевести компьютер на Платформа Коннектор?\n\n" +
-                "Прежний Structura Connector будет закрыт, а его автозапуск отключён. Будут сняты все подключения " +
-                "Windows к серверу папки BIM_Models без буквы диска, в том числе созданные Tekla, AutoCAD или " +
-                "проводником: они работают под учётной записью прежнего коннектора и не дают подключить папку здесь. " +
-                "Его токен, настройки и защищённый туннель для Tekla не изменяются. " +
-                "Вернуть прежний коннектор можно кнопкой «Вернуть прежний коннектор» в настройках." + warning))
+        var note = "Закройте файлы, открытые из BIM_Models." +
+            (preflight.Warnings.Count == 0 ? string.Empty : " Внимание: " + string.Join(" ", preflight.Warnings));
+        if (!await ConfirmAsync(new PageConfirmation(
+                "Перевести компьютер на Платформа Коннектор?",
+                "После перевода BIM_Models открывается здесь, а прежний коннектор не мешает.",
+                [
+                    "Прежний Structura Connector закроется и не будет запускаться с Windows.",
+                    "Будут сняты подключения Windows к серверу BIM_Models без буквы диска, в том числе созданные Tekla, " +
+                    "AutoCAD или проводником под учётной записью прежнего коннектора.",
+                    "Его токен, настройки и VPN не изменяются — Tekla MultiUser работает как раньше.",
+                    "Вернуть прежний коннектор можно одной кнопкой в «Настройках»."
+                ],
+                note, "Перевести", Danger: false, Cancel: "Не сейчас")))
             return ("Перевод отменён.", "info");
 
-        var result = await service.TransferAsync(new LegacyTransferRequest(true, readiness, () => ConfirmLegacyAsync(
-            "Прежний Structura Connector не закрылся сам. Завершить его принудительно?\n\n" +
-            "Незавершённые действия прежнего коннектора будут прерваны.")), cancellationToken);
+        var result = await service.TransferAsync(new LegacyTransferRequest(true, readiness, () => ConfirmAsync(new PageConfirmation(
+            "Завершить прежний коннектор принудительно?",
+            "Прежний Structura Connector не закрылся сам.",
+            ["Незавершённые действия прежнего коннектора будут прерваны."],
+            null, "Завершить", Danger: true))), cancellationToken);
         _connectorHost.Log($"Legacy connector transfer {result.Outcome} ({result.Code}).");
         if (result.Outcome == LegacyTransferOutcome.Completed) await RefreshLegacyFolderFlagsAsync();
         return (result.Message, OutcomeKind(result.Outcome));
@@ -860,9 +918,15 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
     {
         var service = _runtimeServices.LegacyTransfer;
         if (!service.ReadStatus().CanRestore) return ("Компьютер не переведён: прежний коннектор работает как раньше.", "info");
-        if (!await ConfirmLegacyAsync("Вернуть прежний Structura Connector?\n\n" +
-                "Диск Платформа Коннектор с папкой BIM_Models будет отключён, автозапуск прежнего коннектора " +
-                "восстановлен, а сам он запущен. Папку BIM_Models снова будет обслуживать прежний коннектор."))
+        if (!await ConfirmAsync(new PageConfirmation(
+                "Вернуть прежний Structura Connector?",
+                "Папку BIM_Models снова будет обслуживать прежний коннектор.",
+                [
+                    "Диск Платформа Коннектор с папкой BIM_Models будет отключён.",
+                    "Автозапуск прежнего коннектора будет восстановлен, а сам он запущен.",
+                    "Перевести компьютер снова можно в любой момент."
+                ],
+                "Закройте файлы, открытые из BIM_Models.", "Вернуть", Danger: true)))
             return ("Возврат отменён.", "info");
 
         var result = await service.RestoreAsync(
@@ -896,9 +960,6 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
             _connectorHost.Log($"Legacy connector folder refresh failed ({ex.GetType().Name}).");
         }
     }
-
-    private async Task<bool> ConfirmLegacyAsync(string message) =>
-        _confirmLegacyAction is not null && await _confirmLegacyAction(message);
 
     private LegacyTransferStatus ReadLegacyStatus()
     {
@@ -1031,7 +1092,7 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
         lock (_gate)
         {
             _pickedFolders[target] = path;
-            _fields[target] = new DirectoryInfo(path).Name;
+            _fields[target] = path;
             if (target is "ifc-output" or "output-root") _converterWorkspace.OutputDirectory = path;
         }
     }
@@ -1151,7 +1212,15 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
         {
             await operation();
             var outcome = LastOutcome(name);
-            lock (_gate) _notice = Notice(name, OutcomeMessage(outcome, name), OutcomeKind(outcome));
+            // The module's own Russian result text is more precise than the generic outcome line.
+            var detail = name == "sharing-config" && outcome is OperationOutcome.Rejected or OperationOutcome.Failed
+                ? ConnectorJobJournal.StepText(_modelSharing?.ResultMessage) : null;
+            lock (_gate)
+            {
+                _notice = _operationResults.Remove(name, out var own)
+                    ? Notice(name, own.Message, own.Kind)
+                    : Notice(name, detail ?? OutcomeMessage(outcome, name), OutcomeKind(outcome));
+            }
         }
         catch (OperationCanceledException)
         {
@@ -1174,6 +1243,10 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
                 "Платформа Коннектор».", "error");
             _connectorHost.Log($"Graphite native {name} failed ({ex.GetType().Name}, {ex.Code}, " +
                 $"win32 {(ex.InnerException as Win32Exception)?.NativeErrorCode}).");
+        }
+        catch (CommonSmbAccessException ex) when (ex.Code == "smb_unmount_not_confirmed")
+        {
+            lock (_gate) _notice = Notice(name, "Отключение диска отменено.", "info");
         }
         catch (CommonSmbAccessException ex) when (ex.Code == "smb_legacy_client_active")
         {
@@ -1225,6 +1298,7 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
         OperationOutcome.Succeeded => "Готово.",
         OperationOutcome.Cancelled => "Действие отменено.",
         OperationOutcome.Rejected when command is "ifc-apply" or "ifc-rollback" => "Закройте Tekla Structures и повторите действие.",
+        OperationOutcome.Rejected when command is "sharing-config" => "Model Sharing не настроен. Проверьте условия на вкладке и повторите.",
         OperationOutcome.Rejected => "Действие недоступно. Проверьте подключение и состояние приложения.",
         OperationOutcome.Failed => "Действие не выполнено. Подробности доступны в журнале.",
         _ => "Состояние обновлено."
@@ -1290,22 +1364,37 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
         if (job is not null) _converterWorkspace.SelectedJob = job;
     }
 
-    private object JobSnapshot(ConverterWorkspaceJob job)
+    private ConverterJobFacts ConverterFacts(ConverterWorkspaceJob job)
     {
-        string mode = job.Product == ConnectorProductId.Platform ? "platform" : "structura";
-        return new
+        var (input, output) = ConverterSizes(job);
+        return new ConverterJobFacts(
+            job.RequestId,
+            job.ExecutorId is ConverterWorkspaceViewModel.IfcOptimizeExecutor or ConverterWorkspaceViewModel.IfcAnalyzeExecutor ? "ifc" : "fbx",
+            job.Operation == ConverterJobOperation.Analyze ? "analyze" : "optimize",
+            job.State,
+            job.Progress,
+            job.Product == ConnectorProductId.Platform ? "platform" : "structura",
+            SafeResultName(job.InputPath),
+            SafeResultName(job.OutputPath),
+            !string.IsNullOrWhiteSpace(job.OutputPath),
+            !string.IsNullOrWhiteSpace(job.ReportPath),
+            job.Operation == ConverterJobOperation.Optimize && !string.IsNullOrWhiteSpace(job.ReportPath),
+            input, output);
+    }
+
+    /// <summary>Sizes before and after: the source file and the published result; read once per finished job.</summary>
+    private (long? Input, long? Output) ConverterSizes(ConverterWorkspaceJob job)
+    {
+        lock (_gate)
+            if (_converterSizes.TryGetValue(job.RequestId, out var cached)) return cached;
+        static long? Size(string path)
         {
-            id = job.RequestId,
-            mode,
-            kind = job.ExecutorId is ConverterWorkspaceViewModel.IfcOptimizeExecutor or ConverterWorkspaceViewModel.IfcAnalyzeExecutor ? "ifc" : "fbx",
-            operation = job.Operation == ConverterJobOperation.Analyze ? "analyze" : "optimize",
-            hasResult = !string.IsNullOrWhiteSpace(job.OutputPath),
-            hasReport = !string.IsNullOrWhiteSpace(job.ReportPath),
-            hasValidation = job.Operation == ConverterJobOperation.Optimize && !string.IsNullOrWhiteSpace(job.ReportPath),
-            status = NormalizeJobState(job.State),
-            progress = Math.Clamp(job.Progress ?? 0, 0, 100),
-            output = SafeResultName(job.OutputPath)
-        };
+            try { return !string.IsNullOrWhiteSpace(path) && File.Exists(path) ? new FileInfo(path).Length : null; }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException) { return null; }
+        }
+        var sizes = (Size(job.InputPath), Size(job.OutputPath));
+        if (GraphiteCommandRules.IsFinishedJobState(job.State)) lock (_gate) _converterSizes[job.RequestId] = sizes;
+        return sizes;
     }
 
     private string CurrentFileState(NativeFile file)
@@ -1331,6 +1420,156 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
     }
 
     private void OnPropertyChanged(object? sender, PropertyChangedEventArgs args) => PublishSnapshot();
+
+    private void OnRuntimeJobPicked(ConnectorJobEnvelope job)
+    {
+        try { Journal.Admit(job); }
+        catch (Exception ex) { _connectorHost.Log($"Graphite job journal admission failed ({ex.GetType().Name})."); }
+    }
+
+    private void OnRuntimeJobStatus(ConnectorJobStatusEnvelope status)
+    {
+        try { Journal.Observe(status); }
+        catch (Exception ex) { _connectorHost.Log($"Graphite job journal update failed ({ex.GetType().Name})."); }
+    }
+
+    /// <summary>«Проверить обновления» without native dialogs: the outcome is the notice of the command.</summary>
+    private async Task CheckUpdatesAsync()
+    {
+        var before = _connectorHost.UpdateInfo.CheckedAtUtc;
+        await _connectorHost.CheckUpdatesAsync(showDialogs: false);
+        var info = _connectorHost.UpdateInfo;
+        if (info.CheckFailed) throw UserError("Не удалось проверить обновления. Проверьте подключение к интернету.");
+        if (info.CheckedAtUtc == before) throw UserError("Проверка обновлений сейчас недоступна для этой установки.");
+        lock (_gate) _operationResults["update-check"] = _connectorHost.HasPendingUpdate
+            ? ("Доступна новая версия" + (DesktopUpdateNotes.SafeVersion(info.Version) is { } version ? " " + version : "") + ".", "ok")
+            : ("Установлена актуальная версия.", "info");
+    }
+
+    /// <summary>Runs a module command as a local journal entry; the module's own outcome decides its result.</summary>
+    private void StartJournaledCommand(ICommand command, string name, string kind, string title, string firstStep,
+        Func<OperationOutcome> outcome, Func<string> resultMessage, CancellationToken cancellationToken)
+    {
+        if (command is not AsyncRelayCommand asyncCommand)
+            throw new InvalidOperationException("Команда не поддерживает наблюдаемое async-выполнение.");
+        if (!asyncCommand.CanExecute(null)) throw UserError("Действие сейчас недоступно.");
+        StartOperation(async () =>
+        {
+            var progress = Journal.BeginLocal(kind, title, "Tekla Structures", firstStep);
+            try
+            {
+                await asyncCommand.ExecuteAsync();
+            }
+            catch (Exception)
+            {
+                progress.Fail("Действие не выполнено. Подробности доступны в журнале.");
+                throw;
+            }
+            var result = outcome();
+            // Declined in the page dialog: nothing was done, so the journal keeps no entry.
+            if (result is OperationOutcome.Cancelled or OperationOutcome.None) { progress.Discard(); return; }
+            var text = ConnectorJobJournal.StepText(resultMessage()?.Split('\n', 2)[0]);
+            if (result == OperationOutcome.Succeeded) progress.Succeed(text);
+            else progress.Fail(text ?? OutcomeMessage(result, name));
+        }, name, cancellationToken);
+    }
+
+    /// <summary>
+    /// Files dropped on the window: a user selection like the picker's, validated by the same rules (fully
+    /// qualified existing files of the expected type, at most 128 IFC files or one ZIP/folder for FBX).
+    /// </summary>
+    private void DropInput(string target, IReadOnlyList<string> paths)
+    {
+        if (paths.Count == 0) throw UserError("Перетащите файлы из проводника.");
+        switch (target)
+        {
+            case "ifc-input":
+            {
+                if (paths.Count > 128 || paths.Any(path => !Path.IsPathFullyQualified(path) || !File.Exists(path) ||
+                        !string.Equals(Path.GetExtension(path), ".ifc", StringComparison.OrdinalIgnoreCase)))
+                    throw UserError("Перетащите не более 128 IFC-файлов.");
+                lock (_gate)
+                    foreach (string path in paths)
+                        if (!_ifcFiles.Any(file => string.Equals(file.Path, path, StringComparison.OrdinalIgnoreCase)))
+                            _ifcFiles.Add(NativeFile.FromPath(path));
+                break;
+            }
+            case "zip-input":
+            {
+                var path = paths.Count == 1 ? paths[0] : null;
+                var zip = path is not null && Path.IsPathFullyQualified(path) && File.Exists(path) &&
+                          string.Equals(Path.GetExtension(path), ".zip", StringComparison.OrdinalIgnoreCase);
+                var folder = path is not null && Path.IsPathFullyQualified(path) && Directory.Exists(path);
+                if (!zip && !folder) throw UserError("Перетащите один ZIP-архив или одну папку с FBX.");
+                lock (_gate) { _files.Clear(); _files.Add(NativeFile.FromPath(path!)); }
+                break;
+            }
+            default:
+                throw Unavailable("Неизвестный тип выбора файла.");
+        }
+    }
+
+    /// <summary>Tekla as Bridge.Desktop reported it at the last check: version, open model, bridge address and time.</summary>
+    private object TeklaSnapshot()
+    {
+        var info = _platformTools.TeklaInfo;
+        return new
+        {
+            connected = info?.Connected == true,
+            version = info?.TeklaVersion,
+            model = info?.ModelName,
+            bridgeVersion = info?.BridgeVersion,
+            bridgeAddress = new Uri(global::Platform.Cad.Tekla.Adapter.TeklaProviderAdapter.DefaultBridgeBaseUrl).Authority,
+            checkedAt = _platformTools.TeklaCheckedAtUtc?.ToString("O", System.Globalization.CultureInfo.InvariantCulture)
+        };
+    }
+
+    /// <summary>«О программе»: version and build of this package and versions of its components.</summary>
+    private object AboutSnapshot()
+    {
+        lock (_gate)
+        {
+            if (!_webViewVersionRead)
+            {
+                _webViewVersionRead = true;
+                try { _webViewVersion = DesktopUpdateNotes.SafeVersion(Microsoft.Web.WebView2.Core.CoreWebView2Environment.GetAvailableBrowserVersionString()); }
+                catch (Exception) { _webViewVersion = null; }
+            }
+            if (!_ifcEngineVersionRead)
+            {
+                _ifcEngineVersionRead = true;
+                _ifcEngineVersion = ReadIfcEngineVersion();
+            }
+        }
+        return new
+        {
+            version = ApplicationVersion,
+            build = ApplicationBuild,
+            netbird = _commonAccess.LastOverlay?.DaemonVersion,
+            webView2 = _webViewVersion,
+            ifcEngine = _ifcEngineVersion
+        };
+    }
+
+    /// <summary>Version of the bundled IFC engine from the verified engine manifest written at packaging.</summary>
+    private string? ReadIfcEngineVersion()
+    {
+        var manifest = Path.Combine(AppContext.BaseDirectory, "workers", "engine-manifest.json");
+        try
+        {
+            if (!File.Exists(manifest) || new FileInfo(manifest).Length > 64 * 1024) return null;
+            using var document = JsonDocument.Parse(File.ReadAllText(manifest));
+            return document.RootElement.TryGetProperty("ifcOptimizer", out var engine) &&
+                   engine.TryGetProperty("version", out var version) && version.ValueKind == JsonValueKind.String
+                ? DesktopUpdateNotes.SafeVersion(version.GetString())
+                : null;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
+        {
+            _connectorHost.Log($"Graphite: IFC engine manifest unavailable ({ex.GetType().Name}).");
+            return null;
+        }
+    }
 
     /// <summary>The page title bar cannot move the window (WebView2 without non-client regions): the system caption is used.</summary>
     public void UseNativeCaption()
@@ -1446,6 +1685,11 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
         if (_disposed) return;
         _disposed = true;
         _lifetime.Cancel();
+        _confirmations.Dispose();
+        _runtimeServices.Host.JobPicked -= OnRuntimeJobPicked;
+        _runtimeServices.Host.JobStatusChanged -= OnRuntimeJobStatus;
+        Journal.Changed -= PublishSnapshot;
+        _confirmations.Changed -= PublishSnapshot;
         await _runtimeServices.CommonOperations.DisposeAsync();
         if (_converterWorkspace.CancelCommand.CanExecute(null)) _converterWorkspace.CancelCommand.Execute(null);
         if (_platformTools.CancelCommand.CanExecute(null)) _platformTools.CancelCommand.Execute(null);
@@ -1479,11 +1723,6 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
     private static GraphiteUserException Unavailable(string message) => new(message);
     private static GraphiteUserException UserError(string message) => new(message);
     private static string Allowed(string value, HashSet<string> allowed, string fallback) => allowed.Contains(value) ? value : fallback;
-    private static string NormalizeJobState(string state) => state switch
-    {
-        "Готово" => "Готово", "Отменено" => "Отменено", "Ошибка" => "Ошибка", "Превышено время" => "Ошибка",
-        "В очереди" or "Принято исполнителем" or "Выполняется" => "Выполняется", _ => "—"
-    };
     private static string SafeResultName(string path) => string.IsNullOrWhiteSpace(path) ? "" : Path.GetFileName(path);
     private string SafeModelSharingStatus() => _modelSharing switch
     {
@@ -1528,6 +1767,14 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
                informationalVersion.All(character => char.IsAsciiLetterOrDigit(character) || character is '.' or '-' or '_')
             ? informationalVersion
             : "—";
+    }
+    /// <summary>Short source revision of this build (the «+sha» suffix of the informational version), when present.</summary>
+    private static string? ResolveApplicationBuild()
+    {
+        var parts = typeof(GraphiteDesktopController).Assembly
+            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion.Split('+', 2);
+        var build = parts is { Length: 2 } ? parts[1].Trim() : null;
+        return build is { Length: >= 7 } && build.All(char.IsAsciiHexDigit) ? build[..7].ToLowerInvariant() : null;
     }
     private static object? SafePrimitive(JsonElement value) => value.ValueKind switch
     {

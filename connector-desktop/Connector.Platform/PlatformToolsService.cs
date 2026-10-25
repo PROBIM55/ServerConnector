@@ -32,15 +32,22 @@ public sealed class PlatformToolsService : IDisposable
     public Task<AgrManagedRuntimeInstallResult> InstallAgrAsync(IProgress<AgrRuntimeInstallProgress>? progress, CancellationToken cancellationToken)
         => _agr.EnsureInstalledAsync(progress, cancellationToken);
 
-    public async Task<PlatformToolResult> ProbeTeklaAsync(CancellationToken cancellationToken)
+    /// <summary>
+    /// Read-only status of Bridge.Desktop (/capabilities): whether Tekla is connected, its version and the open
+    /// model name. The default profile never starts Tekla or the bridge for this check.
+    /// </summary>
+    public async Task<PlatformToolResult<PlatformTeklaStatus>> ProbeTeklaAsync(CancellationToken cancellationToken)
     {
-        var payload = JsonSerializer.SerializeToElement(new { endpoint = "/health", interactive = false });
+        var payload = JsonSerializer.SerializeToElement(new { endpoint = "/capabilities", interactive = false });
         var job = new ConnectorJobEnvelope(1, Guid.NewGuid().ToString("N"), "platform-tools", CadProvider.Tekla,
             JobOperation.Healthcheck, DateTime.UtcNow, payload, ExecutorId: ConnectorExecutorIds.Tekla);
         var result = await _tekla.ExecuteAsync(job, cancellationToken);
-        return new(result.IsSuccess,
-            result.Message ?? (result.IsSuccess ? "Bridge Tekla доступен." : "Bridge Tekla недоступен."),
-            result.ErrorCode);
+        if (!result.IsSuccess)
+            return PlatformToolResult<PlatformTeklaStatus>.Failure(result.ErrorCode ?? "TEKLA_BRIDGE_UNAVAILABLE",
+                "Bridge Tekla недоступен.");
+        var status = PlatformTeklaStatus.FromCapabilities(result.Result);
+        return PlatformToolResult<PlatformTeklaStatus>.Success(status,
+            status.Connected ? "Связь с Tekla установлена." : "Мост работает, но Tekla не подключена.");
     }
 
     public async Task<PlatformToolResult<PlatformTeklaBridgeState>> EnsureTeklaBridgeAsync(
@@ -214,3 +221,30 @@ public sealed record PlatformAutoCadPing(
     int? ModelSpaceCount);
 
 public sealed record PlatformTeklaBridgeState(bool Healthy, string Mechanism);
+
+/// <summary>Display facts of the Tekla side: connection, Tekla version, open model and bridge version (no paths).</summary>
+public sealed record PlatformTeklaStatus(bool Connected, string? TeklaVersion, string? ModelName, string? BridgeVersion)
+{
+    /// <summary>Reads the adapter result of GET /capabilities: { response: { bridgeVersion, tekla: { connected, version, modelName } } }.</summary>
+    public static PlatformTeklaStatus FromCapabilities(JsonElement? result)
+    {
+        if (result is not { ValueKind: JsonValueKind.Object } root ||
+            !root.TryGetProperty("response", out var response) || response.ValueKind != JsonValueKind.Object)
+            return new(false, null, null, null);
+        var bridgeVersion = Text(response, "bridgeVersion");
+        if (!response.TryGetProperty("tekla", out var tekla) || tekla.ValueKind != JsonValueKind.Object)
+            return new(false, null, null, bridgeVersion);
+        var connected = tekla.TryGetProperty("connected", out var value) && value.ValueKind == JsonValueKind.True;
+        return new(connected, Text(tekla, "version"), connected ? Text(tekla, "modelName") : null, bridgeVersion);
+    }
+
+    private static string? Text(JsonElement owner, string name)
+    {
+        if (!owner.TryGetProperty(name, out var value) || value.ValueKind != JsonValueKind.String) return null;
+        var text = value.GetString()?.Trim();
+        if (string.IsNullOrEmpty(text) || text.Length > 120 || text.Any(char.IsControl) || text.Contains('\\') || text.Contains('/'))
+            return null;
+        // The bridge reports its informational version with a source hash suffix; the page shows the number.
+        return name == "bridgeVersion" ? text.Split('+', 2)[0] : text;
+    }
+}

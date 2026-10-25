@@ -12,21 +12,16 @@ public sealed class PatchingModule : IFeatureModule
 
     public PatchingModule(IfcExportPatchService? service = null)
     {
-        _viewModel = new PatchingViewModel(service)
-        {
-            // any-user self-patch guardrail: confirm before touching licensed Tekla binaries
-            ConfirmHandler = msg =>
-                System.Windows.MessageBox.Show(msg, "Патчинг Tekla", MessageBoxButton.OKCancel, MessageBoxImage.Warning)
-                    == MessageBoxResult.OK
-        };
+        // Any-user self-patch guardrail: the shell supplies the confirmation (a dialog of the page) before
+        // licensed Tekla binaries are touched; without it the patch is not applied.
+        _viewModel = new PatchingViewModel(service);
         _view = new PatchingView { DataContext = _viewModel };
     }
 
     public string Title => "Патчинг";
     public FrameworkElement View => _view;
 
-    // Shell overrides the default owner-less MessageBox with a window-owned themed dialog (app-consistent).
-    public Func<string, bool>? ConfirmHandler { get => _viewModel.ConfirmHandler; set => _viewModel.ConfirmHandler = value; }
+    public Func<PageConfirmation, Task<bool>>? ConfirmAsync { get => _viewModel.ConfirmAsync; set => _viewModel.ConfirmAsync = value; }
 
     public Task OnActivatedAsync()
     {

@@ -14,18 +14,9 @@ public sealed class ModelSharingModule : IFeatureModule
 
     public ModelSharingModule(ModelSharingProvisioningService? service = null)
     {
-        _viewModel = new ModelSharingViewModel(service)
-        {
-            // Confirm before touching licensed Tekla binaries (mirrors the legacy ThemedDialogs Yes/No prompt;
-            // the shell may override this with a window-owned themed dialog after composition).
-            ConfirmHandler = msg =>
-                System.Windows.MessageBox.Show(msg, "Model Sharing", MessageBoxButton.YesNo, MessageBoxImage.Question)
-                    == MessageBoxResult.Yes,
-            // Result / status notices (mirrors the legacy ThemedDialogs OK prompts). isError chooses the icon.
-            ShowMessage = (msg, isError) =>
-                System.Windows.MessageBox.Show(msg, "Model Sharing", MessageBoxButton.OK,
-                    isError ? MessageBoxImage.Warning : MessageBoxImage.Information)
-        };
+        // The shell supplies the confirmation (a dialog of the page) and the progress (an entry of «Задания»);
+        // the result reaches the page as the outcome of the command.
+        _viewModel = new ModelSharingViewModel(service);
         _view = new ModelSharingView { DataContext = _viewModel };
     }
 
@@ -34,12 +25,11 @@ public sealed class ModelSharingModule : IFeatureModule
 
     // Shell wires these after construction: Log -> AppendLog; OnProvisioned -> persist ModelSharing* keys + Save();
     // Initialize -> push current device identity / server endpoint / persisted bin / Extensions fallback into the VM.
-    // ConfirmHandler/ShowMessage default to plain MessageBox (ctor) but the shell overrides them with window-owned
-    // themed dialogs, mirroring the VPN module.
+    // ConfirmAsync and BeginProgress are supplied by the shell; without a confirmation nothing is changed.
     public Action<string>? Log { get => _viewModel.Log; set => _viewModel.Log = value; }
     public Action<ModelSharingProvisionedInfo>? OnProvisioned { get => _viewModel.OnProvisioned; set => _viewModel.OnProvisioned = value; }
-    public Func<string, bool>? ConfirmHandler { get => _viewModel.ConfirmHandler; set => _viewModel.ConfirmHandler = value; }
-    public Action<string, bool>? ShowMessage { get => _viewModel.ShowMessage; set => _viewModel.ShowMessage = value; }
+    public Func<PageConfirmation, Task<bool>>? ConfirmAsync { get => _viewModel.ConfirmAsync; set => _viewModel.ConfirmAsync = value; }
+    public Func<ModelSharingProgressHandle?>? BeginProgress { get => _viewModel.BeginProgress; set => _viewModel.BeginProgress = value; }
 
     public void Initialize(ModelSharingIdentity identity, string serverHost, int serverPort,
         string persistedTeklaBin, string extensionsLocalPath)

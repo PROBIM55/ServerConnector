@@ -23,7 +23,39 @@ public sealed record NetworkOverlaySnapshot(
     IReadOnlyList<IPAddress> AssignedInternalAddresses,
     DateTimeOffset ObservedAtUtc,
     string DiagnosticCode,
-    Uri? ManagementUri = null);
+    Uri? ManagementUri = null,
+    string? DaemonVersion = null,
+    IReadOnlyList<NetworkOverlayPeer>? Peers = null);
+
+/// <summary>
+/// A remote peer as the local NetBird daemon reports it (display facts only: overlay address, routed networks
+/// and whether the tunnel is direct or relayed). Never carries keys or credentials.
+/// </summary>
+public sealed record NetworkOverlayPeer(IPAddress Address, bool Connected, bool Relayed, IReadOnlyList<string> Networks)
+{
+    /// <summary>True when the peer is the destination itself or routes a network that contains it.</summary>
+    public bool Serves(IPAddress destination)
+    {
+        if (Address.Equals(destination)) return true;
+        foreach (var network in Networks)
+        {
+            var parts = network.Split('/', 2);
+            if (parts.Length != 2 || !IPAddress.TryParse(parts[0], out var prefix) || !int.TryParse(parts[1], out var bits) ||
+                prefix.AddressFamily != destination.AddressFamily) continue;
+            var a = prefix.GetAddressBytes();
+            var b = destination.GetAddressBytes();
+            if (bits < 0 || bits > a.Length * 8) continue;
+            var matches = true;
+            for (var bit = 0; bit < bits && matches; bit++)
+            {
+                var mask = (byte)(0x80 >> (bit % 8));
+                matches = (a[bit / 8] & mask) == (b[bit / 8] & mask);
+            }
+            if (matches) return true;
+        }
+        return false;
+    }
+}
 
 public interface INetworkOverlayClient
 {

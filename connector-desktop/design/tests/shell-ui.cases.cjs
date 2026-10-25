@@ -101,7 +101,7 @@ test('palette is built from the registry and the snapshot, not from a fixed list
   const labels = PC.sections.palette(state, 'обнов').map(item => item.label);
   assert.equal(labels[0], 'Обновить стандарт Tekla');
   assert.ok(labels.includes('Проверить обновления'));
-  assert.ok(labels.includes('Установить обновление'));
+  assert.ok(labels.includes('Установить обновление 1.1.13'));
   assert.ok(PC.sections.palette(state, 'BIM').some(item => item.kind === 'Папка'));
   assert.ok(PC.sections.palette(state, 'Анализ').some(item => item.kind === 'Задание'));
   const noTekla = stateFrom(PC, withGrants(['folders'], []));
@@ -122,8 +122,11 @@ test('a new section is one registry entry; switched-off sections never appear', 
 test('jobs: filters, detail actions and the clear button use converter commands', () => {
   const state = stateFrom(PC, F.signedIn(), { page: 'jobs', jobId: 'j-ifc' });
   const html = PC.pages.jobs(state);
-  assert.match(html, />Все<span style="opacity: .65; margin-left: 6px">4<\/span>/);
-  assert.match(html, />Ошибки<span style="opacity: .65; margin-left: 6px">1<\/span>/);
+  assert.match(html, />Все<span style="opacity: .65; margin-left: 6px">7<\/span>/);
+  assert.match(html, />Ошибки<span style="opacity: .65; margin-left: 6px">2<\/span>/);
+  assert.match(html, />Из Платформы<span style="opacity: .65; margin-left: 6px">3<\/span>/);
+  assert.match(html, />На этом ПК<span style="opacity: .65; margin-left: 6px">4<\/span>/);
+  assert.match(html, /<span class="lbl">Размер<\/span><span class="ellipsis">4,5 МБ → 3,1 МБ<\/span>/);
   assert.match(html, /data-cmd="results" data-section="converters" data-target="j-ifc">Открыть результат/);
   assert.match(html, /data-cmd="ifc-validation" data-section="converters" data-target="j-ifc">Проверить результат/);
   assert.match(html, /data-cmd="history-clear" data-section="converters">Очистить завершённые/);

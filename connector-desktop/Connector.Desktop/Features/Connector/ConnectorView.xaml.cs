@@ -65,13 +65,21 @@ public partial class ConnectorView : System.Windows.Controls.UserControl
     // VERBATIM from MainWindow.UpdateAction_Click: no pending update -> check; else install (confirm-before-run).
     private async void UpdateAction_Click(object sender, RoutedEventArgs e)
     {
-        if (!_host.HasPendingUpdate)
+        try
         {
-            await _host.CheckUpdatesAsync(showDialogs: true);
-            return;
-        }
+            if (!_host.HasPendingUpdate)
+            {
+                await _host.CheckUpdatesAsync(showDialogs: true);
+                return;
+            }
 
-        await _host.InstallPendingUpdateAsync(confirmBeforeRun: true);
+            await _host.InstallPendingUpdateAsync(confirmBeforeRun: true);
+        }
+        catch (Exception ex)
+        {
+            // The page is the update UI; this collapsed legacy button only records the refusal.
+            _host.Log("Обновление: " + ex.Message);
+        }
     }
 
     // VERBATIM from MainWindow.ShowReleaseNotes_Click: open ReleaseNotesWindow owned by the shell window. The
@@ -86,7 +94,7 @@ public partial class ConnectorView : System.Windows.Controls.UserControl
     }
 
     // VERBATIM from MainWindow.TeklaUpdateAction_Click: the Tekla-mirror sync button routes to the Стандарт module's
-    // interactive sync (OperationProgressWindow + "already running" notice). Fire-and-forget; status mirrors back via
+    // interactive sync (an entry of the page journal). Fire-and-forget; status mirrors back via
     // the shell's OnTeklaStatusChanged -> SetTeklaMirror push.
     private void TeklaUpdateAction_Click(object sender, RoutedEventArgs e)
     {

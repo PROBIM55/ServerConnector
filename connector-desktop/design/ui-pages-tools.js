@@ -26,39 +26,53 @@
     ['ext', 'Расширения', 'Дополнительные инструменты Tekla', 'extensions-version'],
     ['lib', 'Библиотеки Grasshopper', 'Общие библиотеки компонентов', 'libraries-version']
   ];
+  const teklaName = state => 'Tekla Structures' + (state.tekla?.version ? ' ' + state.tekla.version : '');
 
   const bridgeBlock = state => {
     const br = M.bridge(state);
     if (br.state === 'down') return `<section style="display: flex; flex-wrap: wrap; align-items: center; gap: 16px; padding: 16px 18px; border-radius: 12px; background: var(--warnSoft); border: 1px solid var(--warn)">
 <span style="width: 40px; height: 40px; border-radius: 10px; background: var(--raised); color: var(--warnInk); display: grid; place-items: center; font-weight: 800">!</span>
-<div style="flex: 1; min-width: 260px"><div style="font-weight: 750; color: var(--warnInk)">Tekla не отвечает</div><div style="color: var(--text2)">Откройте модель в Tekla Structures и нажмите «Подключить». Задания Платформы для Tekla подождут.</div></div>
+<div style="flex: 1; min-width: 260px"><div style="font-weight: 750; color: var(--warnInk)">Tekla не отвечает</div><div style="color: var(--text2)">Откройте модель в ${esc(teklaName(state))} и нажмите «Подключить». Задания Платформы для Tekla подождут.</div></div>
 ${button('Подключить Tekla', 'b b-pri', { cmd: 'bridge-start' })}</section>`;
     const ok = br.state === 'ok';
-    return `<section class="card" style="display: grid; grid-template-columns: minmax(0, 1fr); overflow: hidden">
-<div style="padding: 16px 18px; display: flex; flex-direction: column; gap: 4px"><span class="lbl">Мост к Tekla</span><span style="display: flex; align-items: center; gap: 8px; font-size: 16px; font-weight: 750">${dot9(ok ? 'var(--ok)' : 'var(--dim)')}${ok ? 'Работает' : 'Не проверено'}</span><span class="lbl">${esc(br.text)}</span></div>
+    const running = M.jobs(state).find(job => job.running && job.kind === 'tekla' && job.source === 'platform');
+    const bridgeMeta = [br.address, br.checkedAt ? M.time.checkedText(br.checkedAt) : ''].filter(Boolean).join(' · ') || br.text;
+    return `<section class="card" style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); overflow: hidden">
+<div style="padding: 16px 18px; display: flex; flex-direction: column; gap: 4px; border-right: 1px solid var(--line); min-width: 0"><span class="lbl">Открытая модель</span><span style="font-size: 16px; font-weight: 750" class="ellipsis">${esc(br.model || (ok ? 'Модель не определена' : 'Не проверено'))}</span><span class="lbl">${esc(teklaName(state))}</span></div>
+<div style="padding: 16px 18px; display: flex; flex-direction: column; gap: 4px; border-right: 1px solid var(--line); min-width: 0"><span class="lbl">Мост к Tekla</span><span style="display: flex; align-items: center; gap: 8px; font-size: 16px; font-weight: 750">${dot9(ok ? 'var(--ok)' : 'var(--dim)')}${ok ? 'Работает' : 'Не проверено'}</span><span class="lbl ellipsis">${esc(bridgeMeta)}</span></div>
+<div style="padding: 16px 18px; display: flex; flex-direction: column; gap: 4px; min-width: 0"><span class="lbl">Из Платформы сейчас</span><span style="font-size: 16px; font-weight: 750" class="ellipsis">${esc(running ? running.title + ' · ' + running.progress + ' %' : 'Заданий нет')}</span>${running ? button('Открыть задание', 'b-ghost', { ui: 'job', style: 'align-self: flex-start; padding: 0', data: { id: running.id } }) : '<span class="lbl">Задания появятся, когда Платформа их отправит</span>'}</div>
 </section>`;
   };
 
-  const standardTab = state => `<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px">
-<span style="flex: 1; min-width: 260px; color: var(--dim)">Перед обновлением закройте Tekla — иначе файлы заняты.</span>
+  const standardTab = state => {
+    const std = M.standard(state);
+    const byId = Object.fromEntries(std.sections.map(s => [s.id, s]));
+    const source = std.source ? `Источник: ${std.source}${std.checkedAt ? ' · ' + M.time.checkedText(std.checkedAt) : ''}. ` : '';
+    return `<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px">
+<span style="flex: 1; min-width: 260px; color: var(--dim)">${esc(source)}Перед обновлением закройте Tekla — иначе файлы заняты.</span>
 ${button('Журнал синхронизации', 'b-ghost', { cmd: 'firm-log' })}
 ${button('Обновить всё', 'b b-pri', { cmd: 'firm-sync-all' })}
 </div>
 <div style="display: flex; flex-direction: column; gap: 10px">${STANDARD.map(([id, name, desc, versionKey]) => {
-    const path = field(state, id + '-path', '');
-    const installed = String(state.module[versionKey] || '').trim() || 'Не синхронизировано';
-    const synced = installed !== 'Не синхронизировано';
-    const status = !path ? ['Нужна папка', 't-idle'] : synced ? ['Установлено', 't-ok'] : ['Не синхронизировано', 't-warn'];
+    const section = byId[id];
+    const path = section ? section.path : field(state, id + '-path', '');
+    const installed = section ? section.installed || 'не установлено' : String(state.module[versionKey] || '').trim() || 'Не синхронизировано';
+    const synced = section ? !!section.installed : installed !== 'Не синхронизировано';
+    const update = section?.updateAvailable === true;
+    const status = !path ? ['Нужна папка', 't-idle'] : section?.failed ? ['Ошибка обновления', 't-bad'] : update ? ['Есть обновление', 't-warn']
+      : synced ? ['Актуально', 't-ok'] : ['Не синхронизировано', 't-warn'];
     const action = !path ? button('Выбрать папку', 'b b-sm b-sec', { cmd: 'choose-folder', style: 'min-width: 116px', data: { target: id + '-path' } })
-      : button('Обновить', 'b b-sm ' + (synced ? 'b-sec' : 'b-pri'), { cmd: id + '-sync', style: 'min-width: 116px' });
+      : update || !synced || section?.failed ? button('Обновить', 'b b-sm b-pri', { cmd: id + '-sync', style: 'min-width: 116px' })
+      : button('Открыть папку', 'b b-sm b-sec', { cmd: id + '-open', style: 'min-width: 116px' });
     return `<section class="card" style="display: flex; flex-wrap: wrap; align-items: center; gap: 18px; padding: 16px 18px">
 <div style="flex: 1 1 200px; min-width: 0"><div style="font-weight: 750; font-size: 14.5px">${name}</div><div class="lbl">${desc}</div></div>
-<div style="flex: 1 1 190px; display: flex; align-items: center; gap: 8px"><span class="mono" style="padding: 3px 8px; border-radius: 6px; background: var(--hover)">${esc(installed)}</span></div>
-<div style="flex: 2 1 240px; min-width: 0; display: flex; flex-direction: column; gap: 2px"><span class="mono ellipsis" style="display: block; color: var(--text2)">${esc(path || 'Папка не выбрана')}</span><span style="display: flex; gap: 14px">${choose(id + '-path', 'Изменить папку')}${path ? button('Открыть папку', 'b-ghost', { cmd: id + '-open', style: 'padding: 0' }) : ''}</span></div>
+<div style="flex: 0 0 auto; display: flex; align-items: center; gap: 8px; white-space: nowrap"><span class="mono" style="padding: 3px 8px; border-radius: 6px; background: var(--hover)">${esc(installed)}</span>${update ? `<span style="color: var(--dim)">→</span><span class="mono" style="padding: 3px 8px; border-radius: 6px; background: var(--warnSoft); color: var(--warnInk)">${esc(section.available)}</span>` : ''}</div>
+<div style="flex: 2 1 160px; min-width: 0; display: flex; flex-direction: column; gap: 2px"><span class="mono ellipsis" style="display: block; color: var(--text2)" title="${esc(path)}">${esc(path || 'Папка не выбрана')}</span><span style="display: flex; gap: 14px">${choose(id + '-path', 'Изменить папку')}</span></div>
 ${chip(status[0], status[1], 'align-self: center')}
 ${action}
 </section>`;
   }).join('')}</div>`;
+  };
 
   const sharingTab = state => {
     const status = String(state.module['sharing-status'] || 'Не проверено');
@@ -66,13 +80,13 @@ ${action}
     return `<div class="split">
 <section class="card" style="flex: 3 1 440px; padding: 20px; display: flex; flex-direction: column; gap: 16px">
 <h2 class="h2">Tekla Model Sharing</h2>
-<div class="kv"><span class="lbl">Установка Tekla</span><span style="display: flex; flex-wrap: wrap; gap: 10px; align-items: center"><span class="mono">${esc(field(state, 'sharing-bin', 'Не выбрана'))}</span>${choose('sharing-bin')}</span><span class="lbl">Совместная работа</span><span style="display: flex; align-items: center; gap: 8px">${dot8(color)}${esc(status)}</span></div>
-<div class="note" style="background: var(--warnSoft); color: var(--warnInk)">Перед настройкой закройте Tekla Structures.</div>
+<div class="kv"><span class="lbl">Установка Tekla</span><span style="display: flex; flex-wrap: wrap; gap: 10px; align-items: center"><span class="mono">${esc(field(state, 'sharing-bin', 'Не выбрана'))}</span>${choose('sharing-bin')}</span>${state.tekla?.version ? `<span class="lbl">Версия</span><span>${esc(teklaName(state))}</span>` : ''}<span class="lbl">Совместная работа</span><span style="display: flex; align-items: center; gap: 8px">${dot8(color)}${esc(status)}</span></div>
+<div class="note" style="background: var(--warnSoft); color: var(--warnInk)">Перед настройкой закройте Tekla Structures. Коннектор предупредит, если она открыта.</div>
 <div class="acts">${button('Настроить Model Sharing', 'b b-pri', { cmd: 'sharing-config' })}${button('Проверить', 'b b-sec', { cmd: 'sharing-check' })}${button('Журнал Model Sharing', 'b-ghost', { cmd: 'sharing-log' })}</div>
 </section>
 <section class="card" style="flex: 2 1 280px; padding: 20px; display: flex; flex-direction: column; gap: 10px">
 <h2 class="h2">Что делает настройка</h2>
-<ul class="bullets"><li>Подключает службу кэша Model Sharing к выбранной установке Tekla.</li><li>Проверяет, что Tekla видит службу после настройки.</li><li>Ход виден в окне настройки, итог — в уведомлении.</li></ul>
+<ul class="bullets"><li>Подключает службу кэша Model Sharing к выбранной установке Tekla.</li><li>Проверяет, что Tekla видит службу после настройки.</li><li>Ход и итог видны в «Заданиях».</li></ul>
 </section></div>`;
   };
 
@@ -96,7 +110,8 @@ ${action}
     let html = platform ? bridgeBlock(state) : '';
     if (structura) {
       const tab = TEKLA_TABS.some(t => t[0] === state.ui.teklaTab) ? state.ui.teklaTab : 'standard';
-      html += `<div role="tablist" aria-label="Разделы Tekla" class="tabs">${TEKLA_TABS.map(([id, label]) => `<button type="button" role="tab" data-ui="tab" data-id="${id}" aria-selected="${tab === id}">${label}</button>`).join('')}</div>`;
+      const badge = { standard: M.standard(state).updates.length > 0 };
+      html += `<div role="tablist" aria-label="Разделы Tekla" class="tabs">${TEKLA_TABS.map(([id, label]) => `<button type="button" role="tab" data-ui="tab" data-id="${id}" aria-selected="${tab === id}">${label}${badge[id] ? '<span class="tab-badge" title="Есть обновление"></span>' : ''}</button>`).join('')}</div>`;
       html += ({ standard: standardTab, sharing: sharingTab, ifc: patchTab })[tab](state);
     }
     return html;
@@ -156,19 +171,28 @@ ${button('Вернуть прежний коннектор', 'b b-sec', { cmd: '
       else actions = `<select aria-label="Буква диска" class="sel" data-ui="drive" data-id="${esc(folder.resourceId)}">${DRIVES.map(d => `<option${d === drive ? ' selected' : ''}>${d}</option>`).join('')}</select>`
         + button('Подключить диск', 'b b-pri', { cmd: 'models-mount', data: { ...fields, 'field-drive': drive } })
         + button('Открыть', 'b b-sec', { cmd: 'models-open', data: fields });
+      const route = folder.viaLegacyConnector ? 'прежний Structura Connector' : 'защищённое соединение NetBird';
       return `<section class="card" style="padding: 18px; display: flex; flex-direction: column; gap: 14px">
 <div style="display: flex; align-items: flex-start; gap: 12px">${folderIcon}<div style="flex: 1; min-width: 0"><div style="font-weight: 750; font-size: 15px" class="ellipsis">${esc(folder.displayName)}</div><div class="lbl">Назначена администратором</div></div>${chip(state3[0], state3[1])}</div>
-<div style="display: grid; grid-template-columns: 90px minmax(0, 1fr); gap: 6px 12px; font-size: 13px"><span class="lbl">Через</span><span>${folder.viaLegacyConnector ? 'прежний Structura Connector' : 'защищённое соединение Платформы'}</span></div>
+${folder.unc ? `<div class="mono ellipsis" style="padding: 9px 12px; border-radius: 8px; background: var(--field); border: 1px solid var(--line); color: var(--text2)" title="${esc(folder.unc)}">${esc(folder.unc)}</div>` : ''}
+<div style="display: grid; grid-template-columns: 90px minmax(0, 1fr); gap: 6px 12px; font-size: 13px"><span class="lbl">Через</span><span>${route}</span>${folder.unc ? `<span class="lbl">Права</span><span>${folder.canWrite ? 'чтение и запись' : 'только чтение'}</span>` : ''}</div>
 ${actions ? `<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px">${actions}</div>` : ''}
 </section>`;
     }).join('')}</div>`;
     const conn = M.connection(state);
-    html += `<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px; color: var(--dim)">${dot8(conn.ready ? 'var(--ok)' : 'var(--warn)')}<span style="flex: 1; min-width: 260px">Защищённое соединение: ${esc(conn.ready ? 'подключено' : state.status)}. Папки назначает администратор компании.</span>${button('Проверить соединение', 'b-ghost', { cmd: 'vpn-check' })}</div>`;
+    const net = state.account;
+    const route = net?.route === 'direct' ? 'напрямую' : net?.route === 'relay' ? 'через relay' : '';
+    const detail = conn.ready ? [route, net?.gateway ? 'шлюз ' + net.gateway : ''].filter(Boolean).join(', ') || 'подключено' : state.status;
+    html += `<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px; color: var(--dim)">${dot8(conn.ready ? 'var(--ok)' : 'var(--warn)')}<span style="flex: 1; min-width: 260px">Защищённое соединение NetBird: ${esc(detail)}. Папки назначает администратор компании.</span>${button('Проверить соединение', 'b-ghost', { cmd: 'vpn-check' })}</div>`;
     return html;
   };
 
   /* ---- Конвертеры ----------------------------------------------------------------------------------- */
   const lastJob = (state, kind) => { const own = M.jobs(state).filter(job => job.kind === kind); return own.find(job => !job.running) || own[0] || null; };
+  /** IFC: size before → after from the source and the published result; FBX: the conversion time. */
+  const resultFact = job => job.kind === 'ifc'
+    ? (job.inputBytes ? `<span class="lbl">Размер</span><span>${esc(size(job.inputBytes) + (job.outputBytes ? ' → ' + size(job.outputBytes) : ''))}</span>` : '')
+    : (job.duration && !job.running ? `<span class="lbl">Время</span><span>${esc(job.duration)}</span>` : '');
   const uploadIcon = `<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color: var(--accentInk)"><path d="M12 15V4M7.5 8.5 12 4l4.5 4.5M4 15v3.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V15"></path></svg>`;
 
   PC.pages.converters = state => {
@@ -179,9 +203,9 @@ ${actions ? `<div style="display: flex; flex-wrap: wrap; align-items: center; ga
     const files = ifc ? state.ifcFiles : state.files;
     const conv = ifc
       ? { listTitle: 'Файлы IFC', tools: [button('Добавить файлы', 'b b-sm b-sec', { cmd: 'pick-input', data: { target: 'ifc-input' } }), button('Очистить завершённые', 'b b-sm b-sec', { cmd: 'ifc-clear-finished', disabled: !files.some(f => /Готово|Ошибка|Отменено/.test(f.status)) })],
-          dropTitle: 'Выберите IFC-файлы', dropHint: 'До 128 файлов за раз. Исходники не меняются.', pick: 'ifc-input', output: 'ifc-output' }
+          dropTitle: 'Перетащите IFC-файлы сюда', dropHint: 'Или нажмите, чтобы выбрать. До 128 файлов за раз. Исходники не меняются.', pick: 'ifc-input', output: 'ifc-output' }
       : { listTitle: 'Исходные модели', tools: [button('Добавить ZIP', 'b b-sm b-sec', { cmd: 'pick-input', data: { target: 'zip-input' } }), button('Добавить папку', 'b b-sm b-sec', { cmd: 'pick-input', data: { target: 'folder-input' } })],
-          dropTitle: 'Выберите ZIP или папку с FBX', dropHint: 'Текстуры и сопутствующие файлы берутся из той же папки.', pick: 'zip-input', output: 'output-root' };
+          dropTitle: 'Перетащите ZIP или папку с FBX', dropHint: 'Или нажмите, чтобы выбрать. Текстуры и сопутствующие файлы берутся из той же папки.', pick: 'zip-input', output: 'output-root' };
     const rows = files.map((file, index) => `<div class="row" style="display: flex; flex-wrap: wrap; align-items: center; gap: 14px; padding: 12px 18px; border-top: 1px solid var(--line)"><span style="flex: 1; min-width: 200px; font-weight: 650" class="ellipsis">${esc(file.name)}</span><span class="lbl" style="min-width: 70px">${esc(size(file.size))}</span>${chip(file.status || 'Выбран', fileTone(file.status), 'align-self: center')}${button('×', '', { cmd: ifc ? 'ifc-remove' : 'files-clear', aria: 'Убрать из списка', disabled: !!running, data: ifc ? { index: String(index) } : {}, style: 'width: 28px; height: 28px; border-radius: 6px; border: 0; background: transparent; color: var(--dim); cursor: pointer; font-size: 16px' })}</div>`).join('');
     const profile = state.ui.picks['ifc-profile'] === 'compact' ? 'compact' : 'exact';
     const radio = (id, title, hint) => `<label class="radio${profile === id ? ' on' : ''}"><input type="radio" name="profile" data-ui="profile" value="${id}"${profile === id ? ' checked' : ''} style="accent-color: var(--accent); margin-top: 3px"><span><span style="display: block; font-weight: 650">${title}</span><span class="lbl">${hint}</span></span></label>`;
@@ -200,7 +224,7 @@ ${actions ? `<div style="display: flex; flex-wrap: wrap; align-items: center; ga
 <div class="split">
 <section class="card" style="flex: 3 1 460px; min-width: 0; overflow: hidden">
 <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 14px 18px"><h2 class="h2" style="flex: 1">${conv.listTitle}</h2>${conv.tools.join('')}</div>
-<button type="button" data-cmd="pick-input" data-target="${conv.pick}" style="margin: 0 18px 14px; width: calc(100% - 36px); padding: 18px; border-radius: 12px; border: 1.5px dashed var(--line2); background: var(--field); display: flex; align-items: center; gap: 14px; color: inherit; text-align: left; cursor: pointer; font: inherit; box-sizing: border-box">
+<button type="button" data-cmd="pick-input" data-target="${conv.pick}" data-drop="${conv.pick}" class="dropzone" style="margin: 0 18px 14px; width: calc(100% - 36px); padding: 18px; border-radius: 12px; border: 1.5px dashed var(--line2); background: var(--field); display: flex; align-items: center; gap: 14px; color: inherit; text-align: left; cursor: pointer; font: inherit; box-sizing: border-box">
 ${uploadIcon}<div><div style="font-weight: 700">${conv.dropTitle}</div><div class="lbl">${conv.dropHint}</div></div></button>
 ${rows}
 </section>
@@ -208,12 +232,12 @@ ${rows}
 <section class="card" style="padding: 18px; display: flex; flex-direction: column; gap: 12px">
 <h2 class="h2">Параметры</h2>
 ${ifc ? `<div style="display: flex; flex-direction: column; gap: 8px">${radio('exact', 'Точный', 'Без потери данных: только сжатие и очистка дублей')}${radio('compact', 'Компактный', 'Сильнее уменьшает файл, упрощает геометрию')}</div>` : ''}
-<div style="display: grid; grid-template-columns: 90px minmax(0, 1fr); gap: 8px 12px; align-items: baseline"><span class="lbl">Результат</span><span style="display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline"><span class="mono">${esc(field(state, conv.output, 'Папка по умолчанию'))}</span>${choose(conv.output)}</span>${ifc ? '' : '<span class="lbl">Формат</span><span>GLB + текстуры в ZIP, исходники не меняются</span>'}</div>
+<div style="display: grid; grid-template-columns: 90px minmax(0, 1fr); gap: 8px 12px; align-items: baseline"><span class="lbl">Результат</span><span style="display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline; min-width: 0"><span class="mono" style="overflow-wrap: anywhere">${esc(field(state, conv.output, 'Папка по умолчанию'))}</span>${choose(conv.output)}</span>${ifc ? (state.about?.ifcEngine ? `<span class="lbl">Движок</span><span>IFC ${esc(state.about.ifcEngine)}</span>` : '') : '<span class="lbl">Формат</span><span>GLB + текстуры в ZIP, исходники не меняются</span>'}</div>
 <div class="acts">${run}</div>
 </section>
 <section class="card" style="padding: 18px; display: flex; flex-direction: column; gap: 10px">
 <h2 class="h2">Результат</h2>
-${job ? `<div style="display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 6px 12px"><span class="lbl">Файл</span><span class="ellipsis">${esc(job.output || '—')}</span><span class="lbl">Состояние</span><span>${esc(job.statusText)}</span></div>
+${job ? `<div style="display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 6px 12px"><span class="lbl">Файл</span><span class="ellipsis">${esc(job.output || job.subject || '—')}</span>${resultFact(job)}<span class="lbl">Состояние</span><span>${esc(job.statusText)}</span></div>
 <div class="acts">${resultActions}</div>` : `<div class="lbl" style="font-size: 13px">Результат появится после обработки.</div>`}
 </section></div></div>`;
   };
@@ -231,6 +255,17 @@ ${job ? `<div style="display: grid; grid-template-columns: 110px minmax(0, 1fr);
       actions: [['Проверить готовность', 'b-pri', 'agr-probe'], ['Установить Blender', 'b-sec', 'agr-install']] }
   };
 
+  /** Download progress in megabytes reported by the installer; afterwards its phase (verification, unpacking, trial run). */
+  const installProgress = (state, info) => {
+    const p = state.agrInstall;
+    const mb = bytes => Math.floor(bytes / (1024 * 1024)).toLocaleString('ru-RU');
+    const download = p && p.phase === 'download' && p.total;
+    const label = !p ? 'Загрузка и установка' : download ? 'Загрузка архива' : p.phase === 'extract' ? 'Распаковка' : p.phase === 'preflight' ? 'Пробный запуск' : 'Установка';
+    const value = download ? `${mb(p.done)} из ${mb(p.total)} МБ` : info.text;
+    const bar = download ? `<span class="bar"><span style="width: ${Math.min(100, Math.round(p.done * 100 / p.total))}%"></span></span>` : '<span class="bar indeterminate"><span></span></span>';
+    return `<div style="display: flex; flex-direction: column; gap: 6px"><span style="display: flex; justify-content: space-between; gap: 10px"><span>${label}</span><span class="lbl">${esc(value)}</span></span>${bar}<span class="lbl">После загрузки — проверка подлинности, распаковка и пробный запуск.</span></div>`;
+  };
+
   PC.pages.agr = state => {
     const info = M.agr(state);
     const a = AGR[info.state];
@@ -241,7 +276,7 @@ ${job ? `<div style="display: grid; grid-template-columns: 110px minmax(0, 1fr);
     return `<section class="card" style="display: flex; flex-wrap: wrap; gap: 24px; padding: 22px; align-items: flex-start">
 <div style="flex: 2 1 380px; display: flex; flex-direction: column; gap: 14px">
 <div style="display: flex; align-items: center; gap: 14px"><span style="width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; font-weight: 800; font-size: 18px; background: var(--${a.icon[0]}); color: var(--${a.icon[1]});">B</span><div><div style="font-size: 17px; font-weight: 800">${esc(a.title.replace('{B}', blenderName(state)))}</div><div class="lbl" style="font-size: 13px">${esc(a.hint)}</div></div></div>
-${info.state === 'installing' ? `<div style="display: flex; flex-direction: column; gap: 6px"><span style="display: flex; justify-content: space-between; gap: 10px"><span>Загрузка и установка</span><span class="lbl">${esc(info.text)}</span></span><span class="bar indeterminate"><span></span></span><span class="lbl">После загрузки — проверка подлинности, распаковка и пробный запуск.</span></div>` : ''}
+${info.state === 'installing' ? installProgress(state, info) : ''}
 <div style="display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 8px 14px"><span class="lbl">Состояние</span><span>${esc(info.text)}</span>${facts}</div>
 <div class="acts">${a.actions.map(([label, cls, cmd]) => button(label, 'b ' + cls, { cmd })).join('')}</div>
 </div>

@@ -528,9 +528,10 @@ public sealed class CommonSmbAccessServiceTests
         var json = JsonSerializer.Serialize(folders);
         Assert.DoesNotContain("top-secret-password", json, StringComparison.Ordinal);
         Assert.DoesNotContain("SMBHOST", json, StringComparison.Ordinal);
-        Assert.DoesNotContain("100.64.1.20", json, StringComparison.Ordinal);
+        Assert.DoesNotContain("cnb_device", json, StringComparison.Ordinal);
         var folder = Assert.Single(folders);
-        Assert.Equal(new CommonSmbFolder("docs", "Projects", "Z:"), folder);
+        // The share address and the read-only grant are display facts of the folder card; credentials never are.
+        Assert.Equal(new CommonSmbFolder("docs", "Projects", "Z:", ShareUnc: @"\\100.64.1.20\Projects", CanWrite: false), folder);
         Assert.Equal("Z:" + Path.DirectorySeparatorChar, await fixture.Service.GetFolderToOpenAsync("docs"));
         Assert.All(fixture.Transport.Requests, request =>
         {

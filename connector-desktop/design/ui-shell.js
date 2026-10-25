@@ -44,9 +44,12 @@ ${windowButtons}</header>`;
     const group = name => visible.filter(entry => entry.group === name).map(entry => navButton(state, entry)).join('');
     const conn = M.connection(state);
     const tools = group('tools');
+    const account = state.account;
+    const net = M.network(state);
+    const fact = (label, value) => value ? `<span class="lbl">${label}</span><span>${esc(value)}</span>` : '';
     const popover = state.ui.accountOpen ? `<div class="card popover" data-ui="popover">
 <div style="display: flex; align-items: center; gap: 8px"><span style="width: 8px; height: 8px; border-radius: 50%; background: ${conn.ready ? 'var(--ok)' : 'var(--warn)'}"></span><strong>${esc(conn.chip[0])}</strong></div>
-<div style="display: grid; grid-template-columns: 86px minmax(0, 1fr); gap: 6px 10px; font-size: 12.5px"><span class="lbl">Доступ</span><span>${esc(accessText(state))}</span></div>
+<div style="display: grid; grid-template-columns: 86px minmax(0, 1fr); gap: 6px 10px; font-size: 12.5px">${fact('Устройство', account?.device)}${fact('Сеть', net.route ? 'NetBird · ' + net.route : account?.address ? 'NetBird' : '')}${fact('Адрес', account?.address)}<span class="lbl">Доступ</span><span>${esc(accessText(state))}</span></div>
 <div style="display: flex; gap: 8px">${button('Переподключить', 'b b-sec b-sm', { cmd: 'reconnect', style: 'flex: 1', data: { section: 'settings' } })}${button('Выйти', 'b b-danger b-sm', { cmd: 'signout', style: 'flex: 1', data: { section: 'settings' } })}</div>
 </div>` : '';
     return `<aside class="side" aria-label="Разделы">
@@ -55,8 +58,8 @@ ${tools ? '<div class="sep"></div>' + tools : ''}
 <div class="grow"></div>
 ${group('bottom')}
 <button type="button" data-ui="account" aria-expanded="${state.ui.accountOpen}" class="account row">
-<span class="avatar">${icon('user', 16)}</span>
-<span style="display: flex; flex-direction: column; min-width: 0; flex: 1"><span class="ellipsis" style="font-weight: 650; font-size: 13px">Учётная запись</span><span class="lbl ellipsis">${esc(conn.chip[0])}</span></span>
+<span class="avatar">${account?.device ? esc(account.device.replace(/[^\p{L}\p{N}]/gu, '').slice(0, 2).toUpperCase()) || icon('user', 16) : icon('user', 16)}</span>
+<span style="display: flex; flex-direction: column; min-width: 0; flex: 1"><span class="ellipsis" style="font-weight: 650; font-size: 13px">${esc(account?.device || 'Учётная запись')}</span><span class="lbl ellipsis">${esc(account?.device && conn.ready && account.address ? account.address + (net.route ? ' · ' + net.route : '') : conn.chip[0])}</span></span>
 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" style="color: var(--dim)"><path d="m7 15 5-5 5 5"></path></svg>
 </button>
 ${popover}
@@ -94,27 +97,38 @@ ${entry.page(state)}
   };
 
   /* ---- confirmation dialogs (Main.dc.html dialogs) ------------------------------------------------- */
+  // One confirmation per action. A native action that needs the user's consent (drive disconnection, transfer
+  // and return of the previous connector, Model Sharing, IFC patch) asks through the snapshot «confirmation»;
+  // the answer is the explicit «confirm-answer» command with its id. The update is confirmed here before
+  // «update-apply», which then runs without another question.
   const DIALOGS = {
-    // One confirmation per action. Transfer, drive disconnection and Model Sharing are confirmed natively by the
-    // controller (the document may request them but never confirm); the update is confirmed here, as by the toast.
     update: state => {
       const running = M.runningJob(state);
-      return { title: 'Установить новую версию?', text: running ? `Коннектор дождётся окончания задания «${running.title}», перезапустится и подключится сам.` : 'Коннектор перезапустится и подключится сам.',
+      const version = state.update?.version;
+      return { title: version ? `Установить версию ${version}?` : 'Установить новую версию?', text: running ? `Коннектор дождётся окончания задания «${running.title}», перезапустится и подключится сам.` : 'Коннектор перезапустится и подключится сам.',
         items: ['Учётная запись и настройки сохранятся.', 'Windows может спросить разрешение на установку.'], note: '', primary: 'Установить', primaryCls: 'b-pri', cancel: 'Позже',
         confirm: { cmd: 'update-apply', section: 'settings' } };
     }
   };
-  const dialogModel = state => state.ui.dialog && DIALOGS[state.ui.dialog.name] ? DIALOGS[state.ui.dialog.name](state, state.ui.dialog.args || {}) : null;
+  /** The native confirmation waiting for an answer takes precedence over a page dialog. */
+  const dialogModel = state => {
+    const c = state.confirmation;
+    if (c) return { title: c.title, text: c.text, items: c.items, note: c.note, primary: c.primary, primaryCls: c.danger ? 'b-danger' : 'b-pri', cancel: c.cancel,
+      native: true, answer: accept => ({ cmd: 'confirm-answer', target: c.id, 'field-accept': accept }) };
+    return state.ui.dialog && DIALOGS[state.ui.dialog.name] ? DIALOGS[state.ui.dialog.name](state, state.ui.dialog.args || {}) : null;
+  };
 
   const dialog = state => {
     const d = dialogModel(state);
     if (!d) return '';
+    const cancel = d.native ? button(d.cancel, 'b b-sec', { cmd: 'confirm-answer', data: { target: d.answer(false).target, 'field-accept': 'false' } }) : button(d.cancel, 'b b-sec', { ui: 'close-dialog' });
+    const primary = d.native ? button(d.primary, 'b ' + d.primaryCls, { cmd: 'confirm-answer', data: { target: d.answer(true).target, 'field-accept': 'true' } }) : button(d.primary, 'b ' + d.primaryCls, { ui: 'confirm' });
     return `<div class="scrim" data-ui="scrim-dialog"><div class="card dialog" role="dialog" aria-modal="true" aria-label="${esc(d.title)}">
 <h2>${esc(d.title)}</h2>
-<div style="color: var(--text2)">${esc(d.text)}</div>
-<ul style="margin: 0; padding-left: 18px; color: var(--text2); display: flex; flex-direction: column; gap: 4px">${d.items.map(t => `<li>${esc(t)}</li>`).join('')}</ul>
+${d.text ? `<div style="color: var(--text2)">${esc(d.text)}</div>` : ''}
+${d.items.length ? `<ul style="margin: 0; padding-left: 18px; color: var(--text2); display: flex; flex-direction: column; gap: 4px">${d.items.map(t => `<li style="overflow-wrap: anywhere">${esc(t)}</li>`).join('')}</ul>` : ''}
 ${d.note ? `<div class="note" style="background: var(--warnSoft); color: var(--warnInk)">${esc(d.note)}</div>` : ''}
-<div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px">${button(d.cancel, 'b b-sec', { ui: 'close-dialog' })}${button(d.primary, 'b ' + d.primaryCls, { ui: 'confirm' })}</div>
+<div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px">${cancel}${primary}</div>
 </div></div>`;
   };
 

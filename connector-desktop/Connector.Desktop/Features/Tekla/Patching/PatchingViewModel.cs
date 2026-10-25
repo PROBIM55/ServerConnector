@@ -17,7 +17,8 @@ public sealed class PatchingViewModel : ObservableObject
     private readonly IfcExportPatchService _service;
 
     // The View sets this to show a confirm dialog (returns true to proceed). Any-user self-patch guardrail.
-    public Func<string, bool>? ConfirmHandler { get; set; }
+    /// <summary>Confirmation shown by the page; null means there is no way to ask, and nothing is changed.</summary>
+    public Func<PageConfirmation, Task<bool>>? ConfirmAsync { get; set; }
 
     public PatchingViewModel(IfcExportPatchService? service = null)
     {
@@ -113,9 +114,11 @@ public sealed class PatchingViewModel : ObservableObject
             LastOperationOutcome = OperationOutcome.Rejected;
             return;
         }
-        var confirm = ConfirmHandler?.Invoke(
-            "Будут заменены системные файлы Tekla для расширения IFC-экспорта (с резервной копией для отката). " +
-            "Tekla должна быть закрыта. Продолжить?") ?? true;
+        var confirm = ConfirmAsync is { } ask && await ask(new PageConfirmation(
+            "Установить патч IFC-экспорта?",
+            "Коннектор заменит файлы IFC-экспорта Tekla на исправленные.",
+            ["Исходные файлы сохраняются — их можно вернуть кнопкой «Вернуть исходные файлы».", "Папка Tekla: " + TeklaBin],
+            "Tekla Structures должна быть закрыта.", "Установить", Danger: false));
         if (!confirm)
         {
             LastOperationOutcome = OperationOutcome.Cancelled;
@@ -145,6 +148,16 @@ public sealed class PatchingViewModel : ObservableObject
         {
             ResultMessage = "Сейчас запущена Tekla Structures. Закройте её и повторите.";
             LastOperationOutcome = OperationOutcome.Rejected;
+            return;
+        }
+        var confirm = ConfirmAsync is { } ask && await ask(new PageConfirmation(
+            "Вернуть исходные файлы Tekla?",
+            "Патч IFC-экспорта будет снят: коннектор вернёт сохранённые исходные файлы.",
+            ["Папка Tekla: " + TeklaBin, "Установить патч можно снова в любой момент."],
+            "Tekla Structures должна быть закрыта.", "Вернуть", Danger: true));
+        if (!confirm)
+        {
+            LastOperationOutcome = OperationOutcome.Cancelled;
             return;
         }
         IsBusy = true;

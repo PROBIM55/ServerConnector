@@ -9,28 +9,35 @@ const F = fixtures.variants;
 const click = selector => async page => { await page.locator(selector).first().click(); await page.waitForTimeout(30); };
 const nav = id => click(`[data-ui="go"][data-page="${id}"]`);
 const steps = (...list) => async page => { for (const step of list) await step(page); };
+// A native action asks after the page has been opened: the confirmation arrives with the next snapshot.
+const ask = (fixture, ...before) => async (page, emit) => { for (const step of before) await step(page); await emit(Object.assign(fixture(), { reset: false })); await page.waitForTimeout(30); };
 const typePalette = text => async page => { await page.keyboard.press('Control+K'); await page.locator('#palette-input').fill(text); await page.waitForTimeout(30); };
 
 const SCREENS = [
   ['P01_Home', F.signedIn, null],
   ['P02_Jobs', F.signedIn, steps(nav('jobs'), click('[data-ui="job"][data-id="j-run"]'))],
-  ['P03_JobsError', F.signedIn, steps(nav('jobs'), click('[data-ui="filter"][data-id="errors"]'), click('[data-ui="job"][data-id="j-ifc-err"]'))],
+  ['P02b_JobsPlatform', F.signedIn, steps(nav('jobs'), click('[data-ui="filter"][data-id="platform"]'))],
+  ['P02c_JobsLocal', F.signedIn, steps(nav('jobs'), click('[data-ui="filter"][data-id="local"]'), click('[data-ui="job"][data-id="j-std"]'))],
+  ['P03_JobsError', F.signedIn, steps(nav('jobs'), click('[data-ui="filter"][data-id="errors"]'), click('[data-ui="job"][data-id="j-agr-err"]'))],
   ['P04_JobsDone', F.signedIn, steps(nav('jobs'), click('[data-ui="job"][data-id="j-ifc"]'))],
   ['P05_Palette', F.signedIn, typePalette('обнов')],
   ['P06_Account', F.signedIn, click('[data-ui="account"]')],
   ['P07_TeklaStandard', F.signedIn, nav('tekla')],
   ['P08_TeklaSharing', F.signedIn, steps(nav('tekla'), click('[data-ui="tab"][data-id="sharing"]'))],
+  ['P09_TeklaSharingConfirm', F.signedIn, ask(F.confirmSharing, nav('tekla'), click('[data-ui="tab"][data-id="sharing"]'))],
   ['P10_TeklaIfc', F.signedIn, steps(nav('tekla'), click('[data-ui="tab"][data-id="ifc"]'))],
   ['P11_TeklaNoBridge', F.noBridge, nav('tekla')],
   ['P12_AutoCAD', F.signedIn, nav('autocad')],
   ['P13_FoldersNeighbor', F.signedIn, nav('folders')],
   ['P14_FoldersTransferred', F.transferred, nav('folders')],
+  ['P15_FoldersUnmount', F.transferred, ask(() => Object.assign(F.transferred(), { confirmation: F.confirmUnmount().confirmation }), nav('folders'))],
   ['P16_ConvIfc', F.signedIn, nav('converters')],
   ['P17_ConvFbx', F.signedIn, steps(nav('converters'), click('[data-ui="conv"][data-id="fbx"]'))],
   ['P18_AgrMissing', F.signedIn, nav('agr')],
   ['P19_AgrInstalling', F.agrInstalling, nav('agr')],
   ['P20_AgrReady', F.agrReady, nav('agr')],
   ['P21_Settings', F.signedIn, nav('settings')],
+  ['P22_SettingsTransfer', F.signedIn, ask(F.confirmTransfer, nav('settings'))],
   ['P23_SettingsUpdate', F.signedIn, steps(nav('settings'), click('[data-ui="dialog"][data-dialog="update"]'))],
   ['P24_SettingsLight', () => Object.assign(F.transferred(), { uiTheme: 'light' }), nav('settings')],
   ['S01_SignInStart', F.signedOut, null],

@@ -5,19 +5,32 @@
   PC.pages = PC.pages || {};
 
   const version = state => String(state.module['app-version'] || '').trim() || '—';
+  const row = (label, value, cls = '') => value ? `<span class="lbl">${label}</span><span${cls ? ` class="${cls}"` : ''}>${esc(value)}</span>` : '';
+
+  /** «Учётная запись и устройство»: what the connector knows about this computer (no e-mail or company: not known locally). */
+  const accountRows = state => {
+    const conn = M.connection(state);
+    const a = state.account;
+    const net = M.network(state).line;
+    const sections = PC.sections.visible(state).filter(s => s.module).map(s => s.title).join(', ') || 'Нет доступных разделов';
+    return row('Состояние', conn.chip[0]) + row('Устройство', a?.device) + row('Адрес в сети', a?.address, 'mono') + row('Соединение', net) + row('Разделы', sections);
+  };
+  PC.pages.accountRows = accountRows;
 
   PC.pages.settings = state => {
-    const conn = M.connection(state);
     const legacy = state.legacy || { status: '', transferred: false, canTransfer: false, canRestore: false };
-    const sections = PC.sections.visible(state).filter(s => s.module).map(s => s.title).join(', ') || 'Нет доступных разделов';
     const autostart = state.fields.autostart !== false;
+    const update = state.update || { version: '', notes: [], checkedAt: null };
+    const about = state.about || {};
+    const components = [about.netbird && 'NetBird ' + about.netbird, about.webView2 && 'WebView2 ' + about.webView2, about.ifcEngine && 'движок IFC ' + about.ifcEngine].filter(Boolean).join(' · ');
     const legacyButton = legacy.canRestore
       ? button('Вернуть прежний коннектор', 'b b-sec', { cmd: 'legacy-restore', style: 'align-self: flex-start' })
       : legacy.canTransfer ? button('Перевести компьютер на Платформа Коннектор', 'b b-pri', { cmd: 'legacy-transfer', style: 'align-self: flex-start' }) : '';
     return `<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px">
 <section class="card" style="padding: 20px; display: flex; flex-direction: column; gap: 14px">
 <h2 class="h2">Обновление</h2>
-<div style="display: flex; align-items: center; gap: 12px"><span class="mono" style="padding: 3px 8px; border-radius: 6px; background: var(--hover)">${esc(version(state))}</span>${state.updateAvailable ? `<span style="color: var(--dim)">→</span><span class="mono" style="padding: 3px 8px; border-radius: 6px; background: var(--okSoft); color: var(--okInk)">новая версия</span>` : `<span class="lbl">установлена эта версия</span>`}</div>
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px"><span class="mono" style="padding: 3px 8px; border-radius: 6px; background: var(--hover)">${esc(version(state))}</span>${state.updateAvailable ? `<span style="color: var(--dim)">→</span><span class="mono" style="padding: 3px 8px; border-radius: 6px; background: var(--okSoft); color: var(--okInk)">${esc(update.version || 'новая версия')}</span>` : `<span class="lbl">установлена эта версия</span>`}${update.checkedAt ? `<span class="lbl">${esc(M.time.checkedText(update.checkedAt))}</span>` : ''}</div>
+${state.updateAvailable && update.notes.length ? `<ul class="bullets" style="gap: 4px">${update.notes.map(line => `<li>${esc(line)}</li>`).join('')}</ul>` : ''}
 ${state.updateAvailable ? '<span style="color: var(--text2)">Обновление установится после текущего задания; коннектор перезапустится и подключится сам.</span>' : ''}
 <div class="acts">${state.updateAvailable ? button('Установить после текущего задания', 'b b-pri', { ui: 'dialog', data: { dialog: 'update' } }) : ''}${button('Проверить обновления', 'b b-sec', { cmd: 'update-check' })}</div>
 </section>
@@ -29,7 +42,7 @@ ${state.updateAvailable ? '<span style="color: var(--text2)">Обновлени�
 </section>
 <section class="card" style="padding: 20px; display: flex; flex-direction: column; gap: 12px">
 <h2 class="h2">Учётная запись и устройство</h2>
-<div style="display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 7px 12px"><span class="lbl">Состояние</span><span>${esc(conn.chip[0])}</span><span class="lbl">Разделы</span><span>${esc(sections)}</span></div>
+<div style="display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 7px 12px">${accountRows(state)}</div>
 <div style="display: flex; gap: 8px">${button('Переподключить', 'b b-sec b-sm', { cmd: 'reconnect' })}${button('Выйти', 'b b-danger b-sm', { cmd: 'signout' })}</div>
 </section>
 <section class="card" style="padding: 20px; display: flex; flex-direction: column; gap: 12px">
@@ -45,7 +58,7 @@ ${legacyButton}
 </section>
 <section class="card" style="padding: 20px; display: flex; flex-direction: column; gap: 12px">
 <h2 class="h2">О программе</h2>
-<div style="display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 7px 12px"><span class="lbl">Версия</span><span>${esc(version(state))}</span><span class="lbl">Сервер</span><span>bimplatforma.ru</span></div>
+<div style="display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 7px 12px">${row('Версия', version(state) + (about.build ? ' · сборка ' + about.build : ''))}${row('Сервер', 'bimplatforma.ru')}${row('Компоненты', components)}</div>
 ${button('Лицензии сторонних компонентов', 'b-ghost', { cmd: 'licenses-open', style: 'align-self: flex-start; padding: 0' })}
 </section>
 </div>`;
@@ -53,7 +66,7 @@ ${button('Лицензии сторонних компонентов', 'b-ghost'
 
   /* ---- sign-in -------------------------------------------------------------------------------------- */
   const STEPS = [
-    ['Вход в браузере', 'Учётная запись Structura и выбор компании'],
+    ['Вход в браузере', 'Учётная запись Платформы и выбор компании'],
     ['Защищённое соединение', 'NetBird ставится вместе с коннектором'],
     ['Сертификат устройства', 'Компьютер получает собственный ключ доступа'],
     ['Права и разделы', 'Tekla, AutoCAD, папки — по назначению администратора'],
@@ -69,7 +82,7 @@ ${button('Лицензии сторонних компонентов', 'b-ghost'
     else if (working) primary = { label: conn.signingOut ? 'Выходим из учётной записи…' : conn.waiting ? 'Ожидаем вход в браузере…' : 'Настраиваем подключение…', waiting: true };
     else if (conn.variant === 'error' && !conn.needsSignIn) primary = { label: 'Повторить подключение', cmd: conn.hasCredential ? 'reconnect' : 'connect' };
     else if (conn.hasCredential && !conn.needsSignIn) primary = { label: 'Повторить подключение', cmd: 'reconnect' };
-    else primary = { label: 'Войти через Structura', cmd: 'connect' };
+    else primary = { label: 'Войти через Платформу', cmd: 'connect' };
     // Cancelling before enrollment only abandons the browser request; with a stored device it is a sign-out.
     const secondary = conn.signingOut ? null
       : working || conn.variant === 'pending' ? { label: conn.hasCredential && !conn.waiting ? 'Выйти' : 'Отменить', cmd: 'signout' }
@@ -89,7 +102,7 @@ ${button('Лицензии сторонних компонентов', 'b-ghost'
 <section style="flex: 0 1 440px; display: flex; flex-direction: column; gap: 22px">
 <div style="display: flex; align-items: center; gap: 12px">${PC.logo(40, 2.4, 'var(--siPriInk)')}<div style="display: flex; flex-direction: column"><strong style="font-size: 18px; color: var(--siHead)">Платформа Коннектор</strong><span style="color: var(--siDim)">Связывает этот компьютер с Платформой и Structura</span></div></div>
 <h1>Войдите, чтобы подключить компьютер</h1>
-<p style="margin: 0; color: var(--siSub); font-size: 14px">Откроется браузер со страницей входа Structura. Пароль вводится там — коннектор его не видит. После входа выберите компанию, и всё настроится само.</p>
+<p style="margin: 0; color: var(--siSub); font-size: 14px">Откроется браузер со страницей входа Платформы (bimplatforma.ru). Пароль вводится там — коннектор его не видит. После входа выберите компанию, и всё настроится само.</p>
 ${conn.variant === 'error' ? `<div style="padding: 12px 14px; border-radius: 10px; background: var(--badSoft); color: var(--badInk)" role="alert">${esc(conn.errorText)}</div>` : ''}
 ${conn.variant === 'pending' ? `<div style="padding: 12px 14px; border-radius: 10px; background: var(--warnSoft); color: var(--warnInk)">Вход выполнен. Администратор ещё не выдал доступ к разделам — коннектор подключится сам, как только доступ появится.</div>` : ''}
 <div style="display: flex; flex-wrap: wrap; gap: 10px">

@@ -50,7 +50,7 @@
   }
 
   /* ---- native commands ------------------------------------------------------------------------------ */
-  function runCommand(command, data = {}) {
+  function runCommand(command, data = {}, files = null) {
     const bridge = window.CONNECTOR_DESKTOP_BRIDGE;
     const sectionId = data.section || state.ui.page;
     const entry = S.byId(sectionId);
@@ -62,11 +62,23 @@
       tekla: state.ui.teklaTab,
       fields: {}
     };
-    for (const [key, value] of Object.entries(data)) if (key.startsWith('field-')) payload.fields[key.slice(6)] = value;
+    // data-field-* attributes are strings; «true»/«false» become booleans (the explicit flag of «confirm-answer»).
+    for (const [key, value] of Object.entries(data)) if (key.startsWith('field-'))
+      payload.fields[key.slice(6)] = value === 'true' ? true : value === 'false' ? false : value;
     if (data.target !== undefined) payload.target = data.target;
     if (data.index !== undefined) payload.index = String(data.index);
     if (!bridge) { handleNotice(M.localNotice(state, command, 'Платформа Коннектор не отвечает. Перезапустите приложение.')); render(); return; }
-    bridge.invoke(command, payload);
+    bridge.invoke(command, payload, files);
+  }
+
+  /** Declines the native confirmation shown in the page (Escape, a click outside the dialog). */
+  function declineConfirmation() {
+    const c = state.confirmation;
+    if (!c) return false;
+    state.confirmation = null;
+    render();
+    runCommand('confirm-answer', { section: state.ui.page, target: c.id, 'field-accept': false });
+    return true;
   }
 
   /* ---- UI actions ----------------------------------------------------------------------------------- */
@@ -110,7 +122,7 @@
       case 'theme': setTheme(id); break;
       case 'account': state.ui.accountOpen = !state.ui.accountOpen; break;
       case 'dialog': state.ui.accountOpen = false; state.ui.dialog = { name: el.dataset.dialog, args: { id } }; break;
-      case 'close-dialog': state.ui.dialog = null; break;
+      case 'close-dialog': if (declineConfirmation()) return; state.ui.dialog = null; break;
       case 'confirm': {
         const model = PC.shell.dialogModel(state);
         state.ui.dialog = null;
@@ -118,7 +130,7 @@
         if (model) runCommand(model.confirm.cmd, model.confirm);
         return;
       }
-      case 'scrim-dialog': if (event.target === el) state.ui.dialog = null; else return; break;
+      case 'scrim-dialog': if (event.target !== el) return; if (declineConfirmation()) return; state.ui.dialog = null; break;
       case 'scrim-palette': if (event.target === el) state.ui.palette.open = false; else return; break;
       case 'palette': closeOverlays(); state.ui.palette = { open: true, query: '', index: 0 }; break;
       case 'palette-close': state.ui.palette.open = false; break;
@@ -137,7 +149,11 @@
     if (state.ui.accountOpen && !event.target.closest('[data-ui="account"]') &&
         (!event.target.closest('[data-ui="popover"]') || (el && el.dataset.cmd))) { state.ui.accountOpen = false; closed = true; }
     if (!el || el.disabled || !root.contains(el)) { if (closed) render(); return; }
-    if (el.dataset.cmd) { runCommand(el.dataset.cmd, dataOf(el)); if (closed) render(); return; }
+    if (el.dataset.cmd) {
+      // The answer closes the native confirmation at once; the next snapshot confirms it.
+      if (el.dataset.cmd === 'confirm-answer') { state.confirmation = null; closed = true; }
+      runCommand(el.dataset.cmd, dataOf(el)); if (closed) render(); return;
+    }
     onUi(el, event);
     if (closed && el.dataset.ui && ['popover', 'titlebar', 'drive', 'profile', 'autostart', 'toast-close'].includes(el.dataset.ui)) render();
   });
@@ -164,6 +180,7 @@
       event.preventDefault(); closeOverlays(); state.ui.palette = { open: true, query: '', index: 0 }; render(); return;
     }
     if (event.key === 'Escape') {
+      if (state.confirmation) { event.preventDefault(); declineConfirmation(); return; }
       if (state.ui.palette.open || state.ui.dialog || state.ui.accountOpen) { event.preventDefault(); closeOverlays(); render(); }
       return;
     }
@@ -176,6 +193,26 @@
       const list = document.getElementById('palette-list');
       if (list) list.innerHTML = PC.shell.paletteList(state);
     }
+  });
+
+  /* ---- files dropped on the window ----------------------------------------------------------------- */
+  // A drop anywhere else must not navigate the WebView to the file; a drop on a zone is a file selection.
+  const dropZone = event => event.target instanceof Element ? event.target.closest('[data-drop]') : null;
+  document.addEventListener('dragover', event => {
+    event.preventDefault();
+    const zone = dropZone(event);
+    if (event.dataTransfer) event.dataTransfer.dropEffect = zone ? 'copy' : 'none';
+    root.querySelectorAll('[data-drop].over').forEach(el => { if (el !== zone) el.classList.remove('over'); });
+    if (zone) zone.classList.add('over');
+  });
+  document.addEventListener('dragleave', event => { const zone = dropZone(event); if (zone && !zone.contains(event.relatedTarget)) zone.classList.remove('over'); });
+  document.addEventListener('drop', event => {
+    event.preventDefault();
+    const zone = dropZone(event);
+    root.querySelectorAll('[data-drop].over').forEach(el => el.classList.remove('over'));
+    const files = event.dataTransfer?.files;
+    if (!zone || !files || !files.length) return;
+    runCommand('drop-input', { section: 'converters', target: zone.dataset.drop }, files);
   });
 
   /* ---- native boundary ------------------------------------------------------------------------------ */

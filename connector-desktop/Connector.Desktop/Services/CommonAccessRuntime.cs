@@ -31,6 +31,7 @@ public sealed class CommonAccessRuntime : ICommonConnectorRequestTransport, IOve
     // be able to invalidate the replacement session.
     private long _accessSessionGeneration;
     private long _readyObservedGeneration;
+    private NetworkOverlaySnapshot? _lastOverlay;
 
     private CommonAccessRuntime(string statePath, CommonConnectorConnectionCoordinator? coordinator,
         Uri? controlPlaneBaseUri, Uri? netBirdManagementUri,
@@ -57,6 +58,10 @@ public sealed class CommonAccessRuntime : ICommonConnectorRequestTransport, IOve
     public Uri ControlPlaneBaseUri => _controlPlaneBaseUri ??
         throw new InvalidOperationException("Сервис заданий не настроен администратором.");
     public bool IsSmbDestinationAllowed(IPAddress address) => IsReady && _smbDestinations.Contains(address);
+    /// <summary>The latest overlay state observed by a protected request (or by the connection itself).</summary>
+    public NetworkOverlaySnapshot? LastOverlay => Volatile.Read(ref _lastOverlay) ?? Current?.Overlay;
+    /// <summary>Overlay address of the protected control plane: the gateway this computer reaches the server through.</summary>
+    public Uri? GatewayUri => _controlPlaneBaseUri;
     public string DisplayStatus => !IsConfigured ? "Подключение не настроено" :
         Volatile.Read(ref _vpnSetupRequired) != 0 ? "Требуется установка защищённого подключения" : Current?.Status switch
     {
@@ -212,8 +217,11 @@ public sealed class CommonAccessRuntime : ICommonConnectorRequestTransport, IOve
         ObserveConnectionState(requestGeneration);
         try
         {
-            return await RequireCoordinator().OpenProtectedServiceAsync(serviceId, relativeUri, cancellationToken)
+            var route = await RequireCoordinator().OpenProtectedServiceAsync(serviceId, relativeUri, cancellationToken)
                 .ConfigureAwait(false);
+            // Display facts only (address, NetBird version, direct/relayed route); the route itself stays private.
+            Volatile.Write(ref _lastOverlay, route.Overlay);
+            return route;
         }
         finally { ObserveConnectionState(requestGeneration); }
     }

@@ -40,11 +40,24 @@ const folder = (resourceId, displayName, drive = null, viaLegacyConnector = fals
     check(open.command === 'models-open' && open.payload.fields['share-resource'] === 'company' && open.payload.mode === 'structura', 'open-sends-folder-and-product', open);
     await page.screenshot({ path: path.join(output, 'folders-neighbour.png') });
 
-    // Disconnection and transfer are confirmed once, natively; the page sends the request directly.
+    // Disconnection and transfer are requested directly; the native action then asks once, in a page dialog,
+    // and waits for the explicit answer carrying the id of its confirmation.
     await page.click('[data-cmd="models-unmount"][data-field-share-resource="company"]');
-    check(await page.locator('[role="dialog"]').count() === 0, 'no-second-confirmation-in-page');
+    check(await page.locator('[role="dialog"]').count() === 0, 'no-page-first-confirmation');
     const unmount = await last();
     check(unmount.command === 'models-unmount' && unmount.payload.fields.drive === 'Z:' && unmount.payload.fields['share-resource'] === 'company', 'unmount-command', unmount);
+    await emit({ ...F.confirmUnmount(), reset: false });
+    check(await page.locator('[role="dialog"]').count() === 1, 'native-confirmation-is-one-page-dialog');
+    await page.screenshot({ path: path.join(output, 'folders-unmount-confirmation.png') });
+    await page.locator('[role="dialog"] [data-cmd="confirm-answer"][data-field-accept="true"]').click();
+    const answer = await last();
+    check(answer.command === 'confirm-answer' && answer.payload.target === 'fedcba9876543210fedcba9876543210' && answer.payload.fields.accept === true, 'confirmation-answer-carries-id-and-flag', answer);
+    check(await page.locator('[role="dialog"]').count() === 0, 'dialog-closes-on-answer');
+    await emit({ ...F.confirmUnmount(), reset: false });
+    await page.keyboard.press('Escape');
+    const declined = await last();
+    check(declined.command === 'confirm-answer' && declined.payload.fields.accept === false, 'escape-declines-confirmation', declined);
+    await emit({ ...F.signedIn(), reset: false });
 
     await page.locator('.banner [data-cmd="legacy-transfer"]').click();
     check((await last()).command === 'legacy-transfer', 'transfer-command');

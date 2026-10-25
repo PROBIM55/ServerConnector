@@ -94,6 +94,9 @@ public interface IConnectorHost
     // `if (_pendingUpdate is null)`). Satisfied by: MainWindow `_pendingUpdate is not null`.
     bool HasPendingUpdate { get; }
 
+    // Version and «Что нового» of the pending update and the time of the last successful check, for the page.
+    Services.DesktopUpdateInfo UpdateInfo => Services.DesktopUpdateInfo.None;
+
     // The Tekla-mirror sync button (ConnectorTeklaSyncButton). Satisfied by: MainWindow's
     // `_standard?.RunInteractiveSyncAsync()` (the existing Стандарт interactive sync, identical to the Стандарт-tab button).
     Task RunTeklaInteractiveSyncAsync();

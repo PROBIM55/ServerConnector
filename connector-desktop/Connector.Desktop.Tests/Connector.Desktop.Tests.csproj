@@ -55,6 +55,10 @@
     <Compile Include="..\Connector.Desktop\Services\CommonConnectionRecovery.cs" Link="Services\CommonConnectionRecovery.cs" />
     <Compile Include="..\Connector.Desktop\Services\SingleInstanceCoordinator.cs" Link="Services\SingleInstanceCoordinator.cs" />
     <Compile Include="..\Connector.Desktop\Services\TeklaStandardService.cs" Link="Services\TeklaStandardService.cs" />
+    <Compile Include="..\Connector.Desktop\Services\ConnectorAccountFacts.cs" Link="Services\ConnectorAccountFacts.cs" />
+    <Compile Include="..\Connector.Desktop\Services\ConnectorJobJournal.cs" Link="Services\ConnectorJobJournal.cs" />
+    <Compile Include="..\Connector.Desktop\Services\PageConfirmationBroker.cs" Link="Services\PageConfirmationBroker.cs" />
+    <Compile Include="..\Connector.Desktop\Services\DesktopUpdateNotes.cs" Link="Services\DesktopUpdateNotes.cs" />
     <ProjectReference Include="..\src\Connector.Network\Connector.Network.csproj" />
     <ProjectReference Include="..\src\Connector.CommonAccess.Runtime\Connector.CommonAccess.Runtime.csproj" />
     <ProjectReference Include="..\src\Connector.SmbAccess\Connector.SmbAccess.csproj" />
@@ -65,6 +69,7 @@
     <Compile Include="..\Connector.Desktop\Features\GraphiteWeb\GraphiteRpcRequest.cs" Link="GraphiteWeb\GraphiteRpcRequest.cs" />
     <Compile Include="..\Connector.Desktop\Features\GraphiteWeb\GraphiteWebSecurity.cs" Link="GraphiteWeb\GraphiteWebSecurity.cs" />
     <Compile Include="..\Connector.Desktop\Features\GraphiteWeb\GraphiteCommandRules.cs" Link="GraphiteWeb\GraphiteCommandRules.cs" />
+    <Compile Include="..\Connector.Desktop\Features\GraphiteWeb\GraphiteSnapshotFacts.cs" Link="GraphiteWeb\GraphiteSnapshotFacts.cs" />
   </ItemGroup>
 
   <ItemGroup>

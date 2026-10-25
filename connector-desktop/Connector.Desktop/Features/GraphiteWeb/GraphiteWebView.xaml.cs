@@ -343,6 +343,29 @@ public partial class GraphiteWebView : System.Windows.Controls.UserControl, IAsy
             "Content-Type: text/plain\r\nCache-Control: no-store");
     }
 
+    internal const string DropCommand = "drop-input";
+    private const int MaximumDroppedFiles = 128;
+
+    private static IReadOnlyList<string> ReadDroppedPaths(CoreWebView2WebMessageReceivedEventArgs eventArgs)
+    {
+        var paths = new List<string>();
+        try
+        {
+            var objects = eventArgs.AdditionalObjects;
+            if (objects is null) return paths;
+            foreach (var item in objects)
+            {
+                if (item is CoreWebView2File file && !string.IsNullOrWhiteSpace(file.Path)) paths.Add(file.Path);
+                if (paths.Count > MaximumDroppedFiles) break;
+            }
+        }
+        catch (Exception exception) when (exception is InvalidOperationException or System.Runtime.InteropServices.COMException or NotImplementedException)
+        {
+            // An old WebView2 runtime has no additional objects; the drop is then an empty selection.
+        }
+        return paths;
+    }
+
     private void OnWebMessageReceived(object? sender, CoreWebView2WebMessageReceivedEventArgs eventArgs)
     {
         if (_disposed ||
@@ -366,6 +389,10 @@ public partial class GraphiteWebView : System.Windows.Controls.UserControl, IAsy
             PostResponse(request.Id, false, null, InvalidRequestError());
             return;
         }
+
+        // Files dropped on the window arrive as WebView2 file objects of one command only; any other command
+        // ignores additional objects. The page cannot name a path: only files the user dropped carry one.
+        if (request.Command == DropCommand) request = request with { DroppedPaths = ReadDroppedPaths(eventArgs) };
 
         Func<GraphiteRpcRequest, CancellationToken, Task<object?>>? handler;
         lock (_stateLock)

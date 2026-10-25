@@ -13,8 +13,10 @@ namespace Connector.SmbAccess;
 
 /// <param name="ViaLegacyConnector">The legacy share is opened by the previous Structura Connector on this PC.</param>
 /// <param name="LegacyShare">This grant is the exact legacy share (BIM_Models), the subject of the K5 transfer.</param>
+/// <param name="ShareUnc">Display address of the granted share (\\host\share); never a credential.</param>
+/// <param name="CanWrite">The grant allows changes (Publish or Manage); otherwise the share is read-only.</param>
 public sealed record CommonSmbFolder(string ResourceId, string DisplayName, string? Drive, bool ViaLegacyConnector = false,
-    bool LegacyShare = false);
+    bool LegacyShare = false, string? ShareUnc = null, bool CanWrite = false);
 public sealed record CommonSmbRouteInvalidation(long RouteEpoch);
 
 public sealed class CommonSmbAccessException : Exception
@@ -27,7 +29,7 @@ public sealed class CommonSmbAccessException : Exception
 
 /// <summary>
 /// Consumes short-lived, server-issued SMB access and exposes only safe folder metadata.
-/// Credentials and UNC targets remain private and are never persisted.
+/// Credentials remain private and are never persisted; the UNC address and the read/write grant are display facts.
 /// </summary>
 public sealed class CommonSmbAccessService : IDisposable
 {
@@ -549,7 +551,8 @@ public sealed class CommonSmbAccessService : IDisposable
             }
             if (!allowed || !seenTargets.Add(normalizedUnc))
                 throw Error("smb_destination_denied", "The SMB destination is not an approved unique endpoint.");
-            resources.Add(new ValidatedResource(item.ResourceId, shareName, normalizedUnc, destination));
+            resources.Add(new ValidatedResource(item.ResourceId, shareName, normalizedUnc, destination,
+                item.Permissions.Any(permission => permission is ConnectorPermission.Publish or ConnectorPermission.Manage)));
         }
 
         return new ValidatedAccess(receipt.DeviceId, receipt.Revision, receipt.ExpiresAtUtc,
@@ -836,7 +839,8 @@ public sealed class CommonSmbAccessService : IDisposable
                 !SameTarget(await _port.GetTargetAsync(drive, cancellationToken).ConfigureAwait(false), resource.ShareUnc))
                 drive = null;
             folders.Add(new CommonSmbFolder(resource.ResourceId, resource.ShareName, drive,
-                drive is null && IsLegacyNeighbourActive(resource), IsLegacyShare(resource.ShareUnc)));
+                drive is null && IsLegacyNeighbourActive(resource), IsLegacyShare(resource.ShareUnc),
+                resource.ShareUnc, resource.CanWrite));
         }
         if (IsAuthorizationAdmissionCurrent(admission))
             Volatile.Write(ref _folders, Array.AsReadOnly(folders.ToArray()));
@@ -1024,7 +1028,8 @@ public sealed class CommonSmbAccessService : IDisposable
         string ResourceId,
         string ShareName,
         string ShareUnc,
-        IPAddress Destination);
+        IPAddress Destination,
+        bool CanWrite = false);
 
     private sealed record OwnedMapping(
         string ResourceId,

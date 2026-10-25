@@ -150,7 +150,9 @@ internal static class GraphiteWebSmoke
         var shell = CreateIsolatedShell(host, runtime, output, "boundary");
         using var workspace = new ConverterWorkspaceModule(runtime.ConverterClient, action => source.Dispatcher.BeginInvoke(action));
         using var tools = new PlatformToolsModule();
-        await using var controller = new GraphiteDesktopController(host, runtime, shell, tools.ViewModel, workspace.ViewModel);
+        // The job journal of the smoke lives in its own output folder, never in the user's profile.
+        await using var controller = new GraphiteDesktopController(host, runtime, shell, tools.ViewModel, workspace.ViewModel,
+            journalPath: Path.Combine(output, "boundary-journal", "jobs.json"));
         await using var view = new GraphiteWebView { Width = 1280, Height = 840 };
         var loaded = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         view.Loaded += (_, _) => loaded.TrySetResult();
@@ -469,6 +471,8 @@ internal static class GraphiteWebSmoke
         public void OnTeklaStatusChanged(string overallText, System.Windows.Media.Brush overallBrush, string actionButtonContent, bool actionIsSyncStyle, bool inProgress) { }
         public void ShowTrayBalloon(int durationMs, string title, string message, bool isWarning) { }
         public void ResetTeklaPendingBalloon() { }
+        public ILocalJobProgress BeginOperation(string kind, string title, string? subject, string firstStep) =>
+            new ConnectorJobJournal(null).BeginLocal(kind, title, subject, firstStep);
     }
 
     private sealed class RecordingAutoStartService : IAutoStartService

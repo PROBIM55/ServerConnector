@@ -7,7 +7,9 @@ const app = state => PC.shell.app(state);
 
 test('signed-out computer sees only the sign-in screen with one way in', () => {
   const html = app(stateFrom(PC, F.signedOut()));
-  assert.match(html, /<button type="button" class="si-btn" data-cmd="connect">Войти через Structura<\/button>/);
+  assert.match(html, /<button type="button" class="si-btn" data-cmd="connect">Войти через Платформу<\/button>/);
+  assert.match(html, /страницей входа Платформы \(bimplatforma\.ru\)/);
+  assert.doesNotMatch(html, /Учётная запись Structura|Войти через Structura/);
   assert.doesNotMatch(html, /class="side"|data-cmd="signout"|data-cmd="reconnect"|data-ui="palette"/);
   assert.match(html, /Войдите, чтобы подключить компьютер/);
 });
@@ -78,7 +80,7 @@ test('sign-in screen keeps the journal, diagnostics and the return to the previo
 test('revoked access is reported and asks for a new sign-in', () => {
   const html = app(stateFrom(PC, { ...F.signedOut(), status: 'Доступ отозван', hasSavedCredential: true, commonAccessNeedsSignIn: true }));
   assert.match(html, /role="alert">Доступ отозван\.<\/div>/);
-  assert.match(html, /data-cmd="connect">Войти через Structura<\/button>/);
+  assert.match(html, /data-cmd="connect">Войти через Платформу<\/button>/);
 });
 
 test('signed in without granted sections waits for the administrator', () => {
@@ -113,3 +115,4 @@ test('window buttons are native commands and the close button keeps the tray beh
 
 // CI runs only this file; the main-window cases are registered from here.
 require('./shell-ui.cases.cjs');
+require('./real-data.cases.cjs');
