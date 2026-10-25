@@ -748,7 +748,7 @@ public partial class StandardView : System.Windows.Controls.UserControl
         {
             Key = "firm",
             DisplayName = "Папка фирмы Tekla",
-            ManifestUrl = _host.Settings.TeklaStandardManifestUrl,
+            ManifestUrl = TeklaStandardService.FirmManifestUrl,
             LocalPath = _host.Settings.TeklaStandardLocalPath,
             InstalledVersion = _host.Settings.TeklaStandardInstalledVersion,
             TargetVersion = _host.Settings.TeklaStandardTargetVersion,
@@ -792,7 +792,7 @@ public partial class StandardView : System.Windows.Controls.UserControl
         {
             Key = "extensions",
             DisplayName = "Extensions Tekla",
-            ManifestUrl = _host.Settings.TeklaExtensionsManifestUrl,
+            ManifestUrl = TeklaStandardService.ExtensionsManifestUrl,
             LocalPath = _host.Settings.TeklaExtensionsLocalPath,
             InstalledVersion = _host.Settings.TeklaExtensionsInstalledVersion,
             TargetVersion = _host.Settings.TeklaExtensionsTargetVersion,
@@ -836,7 +836,7 @@ public partial class StandardView : System.Windows.Controls.UserControl
         {
             Key = "libraries",
             DisplayName = "Grasshopper Libraries",
-            ManifestUrl = _host.Settings.TeklaLibrariesManifestUrl,
+            ManifestUrl = TeklaStandardService.LibrariesManifestUrl,
             LocalPath = _host.Settings.TeklaLibrariesLocalPath,
             InstalledVersion = _host.Settings.TeklaLibrariesInstalledVersion,
             TargetVersion = _host.Settings.TeklaLibrariesTargetVersion,

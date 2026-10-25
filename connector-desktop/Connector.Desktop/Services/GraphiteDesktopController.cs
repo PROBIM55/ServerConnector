@@ -280,7 +280,8 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
             if (IsLegacyProtectedCommand(request.Command))
                 return Availability(false, "Этот раздел ожидает настройки доступа администратором.");
             var module = CommandModule(request.Command);
-            var permission = request.Command is "models-mount" or "models-unmount" or "models-open" or "vpn-check"
+            var permission = request.Command is "models-mount" or "models-unmount" or "models-open" or "vpn-check" or
+                "firm-sync-all" or "xs-sync" or "ext-sync" or "lib-sync"
                 ? ConnectorPermission.Read : ConnectorPermission.Execute;
             if (module is not null && !_commonAccess.HasPermission(_mode, module, permission))
                 return Availability(false, "Для этого действия нет доступа. Обратитесь к администратору.");
@@ -753,8 +754,9 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
 
     // New enrollment cannot reuse legacy web passwords, SMB credentials or
     // direct HTTP transports. Those adapters require typed resource grants.
+    // Tekla firm/extensions/libraries sync is not listed: it reads public HTTPS
+    // manifests and an anonymous git repository, so tekla Read is enough.
     private static bool IsLegacyProtectedCommand(string command) => command is
-        "firm-sync-all" or "xs-sync" or "ext-sync" or "lib-sync" or
         "speckle-open" or "speckle-access" or "cloud-open" or "cloud-access" or
         "vpn-enable" or "vpn-disable" or "publish-start" or "publish-validate";
 
@@ -764,6 +766,7 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
         "ifc-detect" or "ifc-apply" or "ifc-rollback" or "sharing-config" => "tekla",
         "agr-probe" or "agr-install" => "agr",
         "bridge-check" or "bridge-start" or "bridge-restart" => "tekla",
+        "firm-sync-all" or "xs-sync" or "ext-sync" or "lib-sync" => "tekla",
         "cad-refresh" or "cad-ping" => "autocad",
         "models-mount" or "models-unmount" or "models-open" or "vpn-check" => "folders",
         _ => null
