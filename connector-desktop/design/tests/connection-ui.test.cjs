@@ -74,3 +74,23 @@ test('BIM folder served by the previous connector is shown but cannot be opened 
   assert.match(company,/<button data-act="models-open">Открыть папку<\/button>/);
   assert.match(company,/<button data-act="models-mount">Подключить диск<\/button>/);
 });
+
+const renderSettings=legacyTransfer=>{
+  const state={mode:'structura',fields:{},commonAccessSelected:true,legacyTransfer};
+  return context.window.CONNECTOR_REVIEW_PAGES({state,
+    button:(text,style,attributes='')=>`<button ${attributes}>${text}</button>`,
+    escape:value=>String(value),notice:id=>id==='legacy'?'<div class="notice">legacy</div>':'',
+    row:(title,detail,actions='')=>`${title}: ${detail}${actions}`,
+    fieldKey:id=>id,appVersion:()=>'1.1.0',runtime:true}).settings();
+};
+
+test('settings offer the transfer only before it and the rollback only after it',()=>{
+  const before=renderSettings({status:'Папку BIM_Models на этом компьютере обслуживает прежний Structura Connector.',canTransfer:true,canRestore:false});
+  assert.match(before,/Состояние: Папку BIM_Models на этом компьютере обслуживает прежний Structura Connector\./);
+  assert.match(before,/<button data-act="legacy-transfer">Перевести компьютер на Платформа Коннектор<\/button>/);
+  assert.match(before,/<button data-act="legacy-restore" disabled>Вернуть прежний коннектор<\/button>/);
+  assert.match(before,/<div class="notice">legacy<\/div>/);
+  const after=renderSettings({status:'Компьютер переведён на Платформа Коннектор.',canTransfer:false,canRestore:true});
+  assert.match(after,/<button data-act="legacy-transfer" disabled>Перевести компьютер на Платформа Коннектор<\/button>/);
+  assert.match(after,/<button data-act="legacy-restore">Вернуть прежний коннектор<\/button>/);
+});

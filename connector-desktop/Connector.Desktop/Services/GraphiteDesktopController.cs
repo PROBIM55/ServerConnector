@@ -38,6 +38,11 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
         "autocad", "jobs", "settings", "admin"
     };
 
+    private static readonly TimeSpan LegacyWatchInterval = TimeSpan.FromSeconds(30);
+    private const string LegacyStartedMessage = "Запущен прежний Structura Connector. Компьютер переведён на " +
+        "Платформа Коннектор, и прежний коннектор может отключить папку BIM_Models. Закройте его через значок " +
+        "в области уведомлений («Закрыть») или верните его кнопкой «Вернуть прежний коннектор» в настройках.";
+
     private readonly object _gate = new();
     private readonly IConnectorHost _connectorHost;
     private readonly ConnectorRuntimeServices _runtimeServices;
@@ -46,6 +51,10 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
     private readonly ConnectorBrowserSignIn _browserSignIn = new();
     private readonly CommonAccessRuntime _commonAccess;
     private readonly Func<string, Task<bool>>? _confirmFolderDisconnect;
+    private readonly Func<string, Task<bool>>? _confirmLegacyAction;
+    private readonly Action<string>? _legacyStartedNotice;
+    private volatile LegacyTransferStatus _legacyStatus = new(false, false, null);
+    private int _legacyBusy;
     private readonly ConverterWorkspaceViewModel _converterWorkspace;
     private readonly Func<string, string?>? _pickPath;
     private readonly Func<string, string[]?>? _pickFiles;
@@ -80,7 +89,9 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
         Func<string, string?>? pickPath = null,
         Func<string, string[]?>? pickFiles = null,
         IPlatformConnectionApi? platformConnection = null,
-        Func<string, Task<bool>>? confirmFolderDisconnect = null)
+        Func<string, Task<bool>>? confirmFolderDisconnect = null,
+        Func<string, Task<bool>>? confirmLegacyAction = null,
+        Action<string>? legacyStartedNotice = null)
     {
         _connectorHost = connectorHost ?? throw new ArgumentNullException(nameof(connectorHost));
         _runtimeServices = runtimeServices ?? throw new ArgumentNullException(nameof(runtimeServices));
@@ -91,6 +102,9 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
         _runtimeServices.CommonOperations.Changed += OnCommonOperationChanged;
         _runtimeServices.CommonRecoveryChanged += OnCommonRecoveryChanged;
         _confirmFolderDisconnect = confirmFolderDisconnect;
+        // Native confirmation only: the web document can request a transfer but never confirm it.
+        _confirmLegacyAction = confirmLegacyAction;
+        _legacyStartedNotice = legacyStartedNotice;
         _runtimeServices.Platform.SnapshotChanged += OnPlatformSnapshotChanged;
         _converterWorkspace = converterWorkspace ?? throw new ArgumentNullException(nameof(converterWorkspace));
         if (Path.IsPathFullyQualified(_connectorHost.Settings.ConverterOutputDirectory))
@@ -114,6 +128,8 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
         Subscribe(_structura);
         _converterWorkspace.Jobs.CollectionChanged += OnJobsChanged;
         foreach (ConverterWorkspaceJob job in _converterWorkspace.Jobs) Subscribe(job);
+        _legacyStatus = ReadLegacyStatus();
+        TrackOperation(WatchLegacyConnectorAsync(_lifetime.Token));
     }
 
     public event Action<object>? SnapshotChanged;
@@ -239,6 +255,7 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
             ["assignedFolders"] = _commonAccess.IsSelected && _commonAccess.HasPermission(mode, "folders", ConnectorPermission.Read)
                 ? _runtimeServices.CommonFolders.Folders : Array.Empty<CommonSmbFolder>(),
             ["folderStatus"] = _runtimeServices.CommonFolderStatus,
+            ["legacyTransfer"] = LegacyTransferSnapshot(),
             ["jobs"] = history,
             ["history"] = history,
             ["availability"] = new
@@ -281,7 +298,7 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
                 return Availability(false, "Этот раздел ожидает настройки доступа администратором.");
             var module = CommandModule(request.Command);
             var permission = request.Command is "models-mount" or "models-unmount" or "models-open" or "vpn-check" or
-                "firm-sync-all" or "xs-sync" or "ext-sync" or "lib-sync"
+                "firm-sync-all" or "xs-sync" or "ext-sync" or "lib-sync" or "legacy-transfer"
                 ? ConnectorPermission.Read : ConnectorPermission.Execute;
             if (module is not null && !_commonAccess.HasPermission(_mode, module, permission))
                 return Availability(false, "Для этого действия нет доступа. Обратитесь к администратору.");
@@ -466,6 +483,12 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
                     }, request.Command, cancellationToken);
                 }
                 else Execute(Require(_vpn, "VPN").OpenFolderCommand);
+                break;
+            case "legacy-transfer":
+            case "legacy-restore":
+                if (!StartLegacyAction(request.Command, request.Command == "legacy-transfer"
+                        ? TransferLegacyConnectorAsync : RestoreLegacyConnectorAsync, cancellationToken))
+                    return Availability(false, "Действие с прежним коннектором уже выполняется.");
                 break;
             case "speckle-open":
                 Execute(Require(_structura, "Structura").OpenSpeckleCommand);
@@ -769,6 +792,10 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
         "firm-sync-all" or "xs-sync" or "ext-sync" or "lib-sync" => "tekla",
         "cad-refresh" or "cad-ping" => "autocad",
         "models-mount" or "models-unmount" or "models-open" or "vpn-check" => "folders",
+        // The transfer hands BIM_Models to this connector: the same Read right as opening a folder.
+        // «legacy-restore» is deliberately ungated: it only returns this PC to the previous client
+        // and must stay possible when the new connection or its grants are gone.
+        "legacy-transfer" => "folders",
         _ => null
     };
 
@@ -784,6 +811,173 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
     private static void RequireAccepted(PlatformOperationResult result)
     {
         if (!result.Accepted) throw new InvalidOperationException(result.Code);
+    }
+
+    private bool StartLegacyAction(string name, Func<CancellationToken, Task<string>> action,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (_lifetime.IsCancellationRequested) throw new OperationCanceledException(_lifetime.Token);
+        if (Interlocked.CompareExchange(ref _legacyBusy, 1, 0) != 0) return false;
+        lock (_gate) _notice = new SafeNotice(name, "Действие запущено.");
+        // Native steps (window messages, registry, WNet) never run on the UI thread.
+        TrackOperation(Task.Run(() => ObserveLegacyActionAsync(name, action, cancellationToken)));
+        return true;
+    }
+
+    private async Task ObserveLegacyActionAsync(string name, Func<CancellationToken, Task<string>> action,
+        CancellationToken cancellationToken)
+    {
+        string message;
+        try { message = await action(cancellationToken); }
+        catch (OperationCanceledException) { message = "Действие отменено."; }
+        catch (Exception ex)
+        {
+            message = "Действие не выполнено. Подробности доступны в журнале.";
+            _connectorHost.Log($"Legacy connector {name} failed ({ex.GetType().Name}).");
+        }
+        finally
+        {
+            _legacyStatus = ReadLegacyStatus();
+            Volatile.Write(ref _legacyBusy, 0);
+        }
+        lock (_gate) _notice = new SafeNotice(name, message);
+        PublishSnapshot();
+    }
+
+    private async Task<string> TransferLegacyConnectorAsync(CancellationToken cancellationToken)
+    {
+        var service = _runtimeServices.LegacyTransfer;
+        var (readiness, grantKnown) = ReadLegacyReadiness();
+        if (readiness.ConnectionReady && !grantKnown)
+            return "Список общих папок ещё не получен, поэтому доступ к папке BIM_Models не проверен. Откройте " +
+                "раздел «Общие папки», дождитесь списка папок и повторите перевод.";
+        var preflight = service.Preflight(readiness);
+        if (preflight.Transferred) return "Компьютер уже переведён на Платформа Коннектор.";
+        if (preflight.Blockers.Count > 0)
+        {
+            _connectorHost.Log($"Legacy connector transfer refused (ready={readiness.ConnectionReady}, " +
+                $"granted={readiness.LegacyShareGranted}, incomplete={preflight.Incomplete}).");
+            return "Перевод недоступен. " + string.Join(" ", preflight.Blockers);
+        }
+        var warning = preflight.Warnings.Count == 0 ? string.Empty : "\n\nВнимание: " + string.Join(" ", preflight.Warnings);
+        if (!await ConfirmLegacyAsync("Перевести компьютер на Платформа Коннектор?\n\n" +
+                "Прежний Structura Connector будет закрыт, а его автозапуск отключён. Будут сняты все подключения " +
+                "Windows к серверу папки BIM_Models без буквы диска, в том числе созданные Tekla, AutoCAD или " +
+                "проводником: они работают под учётной записью прежнего коннектора и не дают подключить папку здесь. " +
+                "Его токен, настройки и защищённый туннель для Tekla не изменяются. " +
+                "Вернуть прежний коннектор можно кнопкой «Вернуть прежний коннектор» в настройках." + warning))
+            return "Перевод отменён.";
+
+        var result = await service.TransferAsync(new LegacyTransferRequest(true, readiness, () => ConfirmLegacyAsync(
+            "Прежний Structura Connector не закрылся сам. Завершить его принудительно?\n\n" +
+            "Незавершённые действия прежнего коннектора будут прерваны.")), cancellationToken);
+        _connectorHost.Log($"Legacy connector transfer {result.Outcome} ({result.Code}).");
+        if (result.Outcome == LegacyTransferOutcome.Completed) await RefreshLegacyFolderFlagsAsync();
+        return result.Message;
+    }
+
+    private async Task<string> RestoreLegacyConnectorAsync(CancellationToken cancellationToken)
+    {
+        var service = _runtimeServices.LegacyTransfer;
+        if (!service.ReadStatus().CanRestore) return "Компьютер не переведён: прежний коннектор работает как раньше.";
+        if (!await ConfirmLegacyAsync("Вернуть прежний Structura Connector?\n\n" +
+                "Диск Платформа Коннектор с папкой BIM_Models будет отключён, автозапуск прежнего коннектора " +
+                "восстановлен, а сам он запущен. Папку BIM_Models снова будет обслуживать прежний коннектор."))
+            return "Возврат отменён.";
+
+        var result = await service.RestoreAsync(
+            ct => _runtimeServices.CommonFolders.ReleaseOwnedLegacyShareAsync(ct), cancellationToken);
+        _connectorHost.Log($"Legacy connector restore {result.Outcome} ({result.Code}).");
+        if (result.Outcome == LegacyTransferOutcome.Completed) await RefreshLegacyFolderFlagsAsync();
+        return result.Message;
+    }
+
+    /// <summary>
+    /// Decides the grant from the folder list published by the latest server grant. No refresh here:
+    /// a failed refresh clears the list (fail-closed) and must not be reported as a missing grant.
+    /// </summary>
+    private (LegacyTransferReadiness Readiness, bool GrantKnown) ReadLegacyReadiness()
+    {
+        var ready = _commonAccess.IsSelected && _commonAccess.IsReady;
+        var folders = _runtimeServices.CommonFolders.Folders;
+        var tekla = _commonAccess.HasPermission("structura", "tekla", ConnectorPermission.Read) ||
+            _commonAccess.HasPermission("platform", "tekla", ConnectorPermission.Read);
+        return (new LegacyTransferReadiness(ready, folders.Any(folder => folder.LegacyShare), tekla), folders.Count > 0);
+    }
+
+    /// <summary>Best effort: the folder list carries the neighbour-mode flag of its last evaluation.</summary>
+    private async Task RefreshLegacyFolderFlagsAsync()
+    {
+        if (!_commonAccess.IsReady || !_runtimeServices.CommonFolders.IsAuthorizationAdmissionOpen) return;
+        try { await _runtimeServices.CommonFolders.RefreshAvailableAsync(_lifetime.Token); }
+        catch (Exception ex)
+        {
+            // The transfer or rollback itself is complete; the list refreshes on the next folder action.
+            _connectorHost.Log($"Legacy connector folder refresh failed ({ex.GetType().Name}).");
+        }
+    }
+
+    private async Task<bool> ConfirmLegacyAsync(string message) =>
+        _confirmLegacyAction is not null && await _confirmLegacyAction(message);
+
+    private LegacyTransferStatus ReadLegacyStatus()
+    {
+        try { return _runtimeServices.LegacyTransfer.ReadStatus(); }
+        catch (Exception) { return _legacyStatus; }
+    }
+
+    private object LegacyTransferSnapshot()
+    {
+        var status = _legacyStatus;
+        var busy = Volatile.Read(ref _legacyBusy) != 0;
+        var text = busy ? "Выполняется действие с прежним коннектором…" :
+            status.Transferred ? "Компьютер переведён на Платформа Коннектор" +
+                (status.TransferredAtUtc is { } at ? $" {at.ToLocalTime():dd.MM.yyyy HH:mm}." : ".") :
+            status.Incomplete ? "Перевод не завершён. Нажмите «Вернуть прежний коннектор»." :
+            _runtimeServices.CommonFolders.LegacyConnectorSnapshot is { } legacy
+                ? legacy.NeighbourModeActive
+                    ? "Папку BIM_Models на этом компьютере обслуживает прежний Structura Connector."
+                    : "Прежний Structura Connector на этом компьютере не обнаружен."
+                : "Компьютер не переведён на Платформа Коннектор.";
+        return new
+        {
+            status = text,
+            transferred = status.Transferred,
+            canTransfer = !busy && !status.Transferred && !status.Incomplete,
+            canRestore = !busy && status.CanRestore
+        };
+    }
+
+    /// <summary>
+    /// While transferred, an old client started by hand gets one notice per process (no automatic
+    /// close): its 1219 handling removes every connection to the server, including this connector's drive.
+    /// </summary>
+    private async Task WatchLegacyConnectorAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var timer = new PeriodicTimer(LegacyWatchInterval);
+            while (await timer.WaitForNextTickAsync(cancellationToken).ConfigureAwait(false))
+            {
+                IReadOnlyList<int> started;
+                try { started = _runtimeServices.LegacyTransfer.TakeNewlyStartedLegacyProcesses(); }
+                catch (Exception) { continue; }
+                var previous = _legacyStatus;
+                _legacyStatus = ReadLegacyStatus();
+                if (started.Count == 0)
+                {
+                    if (previous != _legacyStatus) PublishSnapshot();
+                    continue;
+                }
+                lock (_gate) _notice = new SafeNotice("legacy-started", LegacyStartedMessage);
+                _connectorHost.Log("Legacy connector process started after the transfer; notice shown.");
+                try { _legacyStartedNotice?.Invoke(LegacyStartedMessage); }
+                catch (Exception) { /* The in-app notice remains. */ }
+                PublishSnapshot();
+            }
+        }
+        catch (OperationCanceledException) { }
     }
 
     private void StartConverter(string command, CancellationToken cancellationToken)
@@ -999,8 +1193,8 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
             // The foreign Windows connection is left untouched; its account is never logged.
             lock (_gate) _notice = new SafeNotice(name, "Этот сервер уже подключён в Windows под другой учётной записью " +
                 "(например, прежним Structura Connector). Откройте папку через прежний коннектор. " +
-                "Чтобы работать через Платформа Коннектор, закройте прежний коннектор, отключите его автозапуск " +
-                "и войдите в Windows заново.");
+                "Чтобы работать через Платформа Коннектор, выполните в настройках «Перевести компьютер на " +
+                "Платформа Коннектор».");
             _connectorHost.Log($"Graphite native {name} failed ({ex.GetType().Name}, {ex.Code}, " +
                 $"win32 {(ex.InnerException as Win32Exception)?.NativeErrorCode}).");
         }
@@ -1008,7 +1202,8 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
         {
             // Neighbour mode: no native mount was attempted and the previous connector is untouched.
             lock (_gate) _notice = new SafeNotice(name, "Папка BIM_Models на этом компьютере открывается через " +
-                "прежний Structura Connector. Перевод компьютера на Платформа Коннектор выполняет администратор.");
+                "прежний Structura Connector. Чтобы открывать её здесь, выполните в настройках «Перевести компьютер " +
+                "на Платформа Коннектор».");
             _connectorHost.Log($"Graphite native {name} skipped ({ex.Code}; " +
                 $"{_runtimeServices.CommonFolders.LegacyConnectorSnapshot?.ToSafeDiagnostic()}).");
         }

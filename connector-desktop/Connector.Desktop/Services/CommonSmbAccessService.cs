@@ -12,7 +12,9 @@ using Platform.Connector.Core;
 namespace Connector.SmbAccess;
 
 /// <param name="ViaLegacyConnector">The legacy share is opened by the previous Structura Connector on this PC.</param>
-public sealed record CommonSmbFolder(string ResourceId, string DisplayName, string? Drive, bool ViaLegacyConnector = false);
+/// <param name="LegacyShare">This grant is the exact legacy share (BIM_Models), the subject of the K5 transfer.</param>
+public sealed record CommonSmbFolder(string ResourceId, string DisplayName, string? Drive, bool ViaLegacyConnector = false,
+    bool LegacyShare = false);
 public sealed record CommonSmbRouteInvalidation(long RouteEpoch);
 
 public sealed class CommonSmbAccessException : Exception
@@ -399,6 +401,52 @@ public sealed class CommonSmbAccessService : IDisposable
             ReleaseSerial();
         }
     }
+
+    /// <summary>
+    /// K5 rollback: removes only this process's exact drive mappings of the legacy share (WNet
+    /// force=false), so the previous connector can connect again under its own account. Overlay
+    /// shares, earlier-process and foreign mappings are never touched. Open files keep the mapping
+    /// owned and are reported as <c>smb_mapping_busy</c>. Needs no authorization.
+    /// </summary>
+    public async Task<int> ReleaseOwnedLegacyShareAsync(CancellationToken cancellationToken = default)
+    {
+        await _serial.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var released = 0;
+            var mappings = _ownedMappings.Concat(_pendingMappings)
+                .Where(item => IsLegacyShare(item.Value.ShareUnc))
+                .GroupBy(item => item.Key, StringComparer.OrdinalIgnoreCase)
+                .Select(group => group.First())
+                .ToArray();
+            foreach (var (drive, mapping) in mappings)
+            {
+                SmbExactMappingRemoval removal;
+                try
+                {
+                    removal = await _port.TryUnmountExactAsync(drive, mapping.ShareUnc, CancellationToken.None)
+                        .ConfigureAwait(false);
+                }
+                catch (System.ComponentModel.Win32Exception exception) when (exception.NativeErrorCode is 2401 or 2404)
+                {
+                    throw Error("smb_mapping_busy", "Files are open on the mapped legacy share.", exception);
+                }
+                // Missing or re-targeted letters are no longer this connector's mapping either.
+                ForgetMapping(drive);
+                if (removal == SmbExactMappingRemoval.Removed) released++;
+            }
+            if (released > 0 && _authorization is { } access && TryGetAuthorizationAdmission(out var admission))
+                await PublishFoldersAsync(access, admission, CancellationToken.None).ConfigureAwait(false);
+            return released;
+        }
+        finally
+        {
+            ReleaseSerial();
+        }
+    }
+
+    private static bool IsLegacyShare(string shareUnc) =>
+        string.Equals(shareUnc.TrimEnd('\\'), LegacyEncryptedSmbPolicy.ShareUnc, StringComparison.OrdinalIgnoreCase);
 
     private async Task<ValidatedAccess> RefreshAuthorizationCoreAsync(long admission, CancellationToken cancellationToken)
     {
@@ -788,7 +836,7 @@ public sealed class CommonSmbAccessService : IDisposable
                 !SameTarget(await _port.GetTargetAsync(drive, cancellationToken).ConfigureAwait(false), resource.ShareUnc))
                 drive = null;
             folders.Add(new CommonSmbFolder(resource.ResourceId, resource.ShareName, drive,
-                drive is null && IsLegacyNeighbourActive(resource)));
+                drive is null && IsLegacyNeighbourActive(resource), IsLegacyShare(resource.ShareUnc)));
         }
         if (IsAuthorizationAdmissionCurrent(admission))
             Volatile.Write(ref _folders, Array.AsReadOnly(folders.ToArray()));

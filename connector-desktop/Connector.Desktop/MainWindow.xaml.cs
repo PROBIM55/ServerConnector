@@ -316,7 +316,12 @@ public partial class MainWindow : Window, IShellHost, IConnectorHost
             _platformTools.ViewModel, _converterWorkspace.ViewModel,
             confirmFolderDisconnect: drive => Dispatcher.InvokeAsync(() =>
                 ThemedDialogs.Show(this, $"Отключить общую папку от диска {drive}?",
-                    "Общая папка", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes).Task);
+                    "Общая папка", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes).Task,
+            confirmLegacyAction: message => Dispatcher.InvokeAsync(() =>
+                ThemedDialogs.Show(this, message, "Прежний коннектор",
+                    MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.Yes).Task,
+            legacyStartedNotice: message => _ = Dispatcher.InvokeAsync(() =>
+                _trayIcon.ShowBalloonTip(8000, "Платформа Коннектор", message, Forms.ToolTipIcon.Warning)));
         _graphite.SnapshotChanged += OnGraphiteSnapshot;
         GraphiteWebHost.Configure(_graphite.HandleAsync, AppendLog, _graphite.CreateDocumentSnapshot);
     }

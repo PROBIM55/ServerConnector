@@ -77,9 +77,14 @@ public static class LegacyConnectorTransferMarker
     // Same root as UnifiedUserStatePaths.Root of the unified desktop application.
     public const string DirectoryName = "Platform Connector";
     public const string FileName = "legacy-connector-transferred.marker";
+    /// <summary>Transfer journal and saved autostart value of K5; the marker is written only on success.</summary>
+    public const string StateFileName = "legacy-connector-transfer.json";
 
     public static string DefaultPath => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), DirectoryName, FileName);
+
+    public static string DefaultStatePath => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), DirectoryName, StateFileName);
 
     public static bool IsTransferred(string? path = null) => File.Exists(path ?? DefaultPath);
 }
@@ -151,15 +156,29 @@ public sealed class WindowsLegacyConnectorDetector : ILegacyConnectorDetector
 
     private LegacySignal DetectProcess(string? ownPath, string? autoStartExecutable)
     {
-        var legacyExecutables = new[] { _probes.LegacyDefaultExecutable, autoStartExecutable }
+        var (matches, unreadable) = FindLegacyProcesses(_probes, ownPath, autoStartExecutable);
+        if (matches.Count > 0) return LegacySignal.Present;
+        return unreadable ? LegacySignal.Unknown : LegacySignal.Absent;
+    }
+
+    /// <summary>
+    /// The one identification of the previous client's processes, shared by neighbour mode (K4)
+    /// and the transfer (K5): same image name, this Windows session, the default perUser install
+    /// or the executable of its autostart value, and never this process or its executable.
+    /// </summary>
+    internal static (IReadOnlyList<LegacyProcessImage> Matches, bool Unreadable) FindLegacyProcesses(
+        ILegacyConnectorProbes probes, string? ownPath, string? autoStartExecutable)
+    {
+        var legacyExecutables = new[] { probes.LegacyDefaultExecutable, autoStartExecutable }
             .Where(path => !string.IsNullOrWhiteSpace(path))
             .ToArray();
+        var matches = new List<LegacyProcessImage>();
         var unreadable = false;
-        foreach (var image in _probes.ReadProcessImages(LegacyProcessName))
+        foreach (var image in probes.ReadProcessImages(LegacyProcessName))
         {
-            if (image.ProcessId == _probes.OwnProcessId) continue;
+            if (image.ProcessId == probes.OwnProcessId) continue;
             // Another Windows session (RDS, fast user switching) belongs to another logon.
-            if (image.SessionId is { } session && session != _probes.OwnSessionId) continue;
+            if (image.SessionId is { } session && session != probes.OwnSessionId) continue;
             if (string.IsNullOrWhiteSpace(image.ImagePath))
             {
                 unreadable = true;
@@ -167,10 +186,14 @@ public sealed class WindowsLegacyConnectorDetector : ILegacyConnectorDetector
             }
             // Never flag this connector, whichever directory it was started from.
             if (ownPath is not null && SamePath(image.ImagePath, ownPath)) continue;
-            if (legacyExecutables.Any(path => SamePath(image.ImagePath, path!))) return LegacySignal.Present;
+            if (legacyExecutables.Any(path => SamePath(image.ImagePath, path!))) matches.Add(image);
         }
-        return unreadable ? LegacySignal.Unknown : LegacySignal.Absent;
+        return (matches.AsReadOnly(), unreadable);
     }
+
+    /// <summary>v1.0.31 deviceless use of the legacy host (see <see cref="DetectDevicelessConnection"/>).</summary>
+    internal static bool IsLegacyDevicelessConnection(SmbConnectionEntry connection) =>
+        string.IsNullOrEmpty(connection.LocalName) && IsLegacyHost(connection.RemoteName);
 
     /// <summary>
     /// v1.0.31 connects with a deviceless <c>net use \\host\share /persistent:no</c>
@@ -180,8 +203,7 @@ public sealed class WindowsLegacyConnectorDetector : ILegacyConnectorDetector
     /// opens of other programs (e.g. Tekla, AutoCAD) are indistinguishable and also count.
     /// </summary>
     private LegacySignal DetectDevicelessConnection() =>
-        _probes.EnumerateSmbConnections().Any(connection =>
-            string.IsNullOrEmpty(connection.LocalName) && IsLegacyHost(connection.RemoteName))
+        _probes.EnumerateSmbConnections().Any(IsLegacyDevicelessConnection)
             ? LegacySignal.Present
             : LegacySignal.Absent;
 
@@ -225,7 +247,7 @@ public sealed class WindowsLegacyConnectorDetector : ILegacyConnectorDetector
         return string.IsNullOrWhiteSpace(value) || !Path.IsPathFullyQualified(value) ? null : value;
     }
 
-    private static bool SamePath(string left, string right)
+    internal static bool SamePath(string left, string right)
     {
         try
         {

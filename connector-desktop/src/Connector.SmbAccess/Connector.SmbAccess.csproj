@@ -11,6 +11,7 @@
     <Compile Include="..\..\Connector.Desktop\Services\WindowsSmbMappingPort.cs"
              Link="WindowsSmbMappingPort.cs" />
     <Compile Include="LegacyConnectorDetector.cs" />
+    <Compile Include="LegacyConnectorTransfer.cs" />
     <Compile Include="AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>

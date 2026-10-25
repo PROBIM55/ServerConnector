@@ -71,6 +71,8 @@ public sealed class ConnectorRuntimeServices : IAsyncDisposable
     public IAgrPartConverter LegacyPartConverter { get; }
     public CommonAccessRuntime CommonAccess { get; }
     public CommonSmbAccessService CommonFolders { get; }
+    /// <summary>K5 «перевод ПК» to this connector and its rollback; per-user, without elevation.</summary>
+    public LegacyConnectorTransferService LegacyTransfer { get; } = new();
     public CommonConnectionOperations CommonOperations { get; } = new();
     public string CommonRecoveryProgress => _commonRecovery.Progress;
     public event Action? CommonRecoveryChanged { add => _commonRecovery.Changed += value; remove => _commonRecovery.Changed -= value; }

@@ -405,6 +405,43 @@ public sealed class CommonSmbAccessServiceTests
         Assert.DoesNotContain("boom", fixture.Service.LegacyConnectorSnapshot.ToSafeDiagnostic(), StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task Legacy_rollback_releases_only_this_process_mapping_of_the_legacy_share()
+    {
+        using var fixture = LegacyFixture(new FakeLegacyConnector { Transferred = true });
+        Assert.Equal("Z:\\", await fixture.Service.GetFolderToOpenAsync("docs"));
+        Assert.Equal("Y:\\", await fixture.Service.GetFolderToOpenAsync("bim"));
+        fixture.Port.Targets["Q:"] = LegacyEncryptedSmbPolicy.ShareUnc; // earlier-process or foreign mapping
+        Assert.True(fixture.Service.Folders.Single(folder => folder.ResourceId == "bim").LegacyShare);
+        Assert.False(fixture.Service.Folders.Single(folder => folder.ResourceId == "docs").LegacyShare);
+
+        Assert.Equal(1, await fixture.Service.ReleaseOwnedLegacyShareAsync());
+
+        Assert.Equal("Y:", Assert.Single(fixture.Port.Unmounts));
+        Assert.Equal(@"\\100.64.1.20\Projects", fixture.Port.Targets["Z:"]);
+        Assert.Equal(LegacyEncryptedSmbPolicy.ShareUnc, fixture.Port.Targets["Q:"]);
+        Assert.Null(fixture.Service.Folders.Single(folder => folder.ResourceId == "bim").Drive);
+        Assert.Equal(0, await fixture.Service.ReleaseOwnedLegacyShareAsync());
+        Assert.Single(fixture.Port.Unmounts);
+    }
+
+    [Fact]
+    public async Task Legacy_rollback_keeps_a_busy_legacy_mapping_owned_for_a_retry()
+    {
+        using var fixture = LegacyFixture(new FakeLegacyConnector { Transferred = true });
+        Assert.Equal("Z:\\", await fixture.Service.GetFolderToOpenAsync("bim"));
+        fixture.Port.ExactUnmountFailure = new Win32Exception(2401); // ERROR_OPEN_FILES with force=false
+
+        var busy = await Assert.ThrowsAsync<CommonSmbAccessException>(
+            () => fixture.Service.ReleaseOwnedLegacyShareAsync());
+
+        Assert.Equal("smb_mapping_busy", busy.Code);
+        Assert.Equal(LegacyEncryptedSmbPolicy.ShareUnc, fixture.Port.Targets["Z:"]);
+        fixture.Port.ExactUnmountFailure = null;
+        Assert.Equal(1, await fixture.Service.ReleaseOwnedLegacyShareAsync());
+        Assert.Equal("Z:", Assert.Single(fixture.Port.Unmounts));
+    }
+
     private static Fixture LegacyFixture(FakeLegacyConnector detector)
     {
         var fixture = new Fixture(
