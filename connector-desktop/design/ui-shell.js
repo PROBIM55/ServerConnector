@@ -77,11 +77,22 @@ ${popover}
     return `<div class="page-note" role="status" style="background: var(--${bg}); color: var(--${ink})"><span>${esc(note.message)}</span><button type="button" data-ui="note-close" data-id="${esc(note.seq)}" aria-label="Скрыть сообщение">×</button></div>`;
   };
 
+  /** Server phases of a connect that waits: done, current and next, with the elapsed time. */
+  const waitSteps = wait => !wait ? '' : `<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; margin-top: 8px; font-size: 12.5px">${M.WAIT_PHASES.map(([id, label], i) => {
+    const done = i + 1 < wait.step, active = i + 1 === wait.step;
+    return `<span data-wait-phase="${id}"${active ? ' aria-current="step"' : ''} style="color: var(--${done ? 'okInk' : active ? 'accentInk' : 'dim'}); font-weight: ${active ? 700 : 500}">${done ? '✓' : i + 1 + '.'} ${esc(label)}</span>`;
+  }).join('')}${wait.elapsed ? `<span class="lbl">прошло ${esc(wait.elapsed)}</span>` : ''}</div>`;
+  PC.waitSteps = waitSteps;
+
   /** Recovery or a failed connection keeps the main window; this banner says so and offers the retry. */
   const connectionBanner = state => {
     const conn = M.connection(state);
     if (!conn.offline) return '';
-    if (conn.busy) return `<section class="banner" role="status" style="background: var(--accentSoft); border: 1px solid var(--accent)"><div style="flex: 1; min-width: 260px"><div style="font-weight: 750; color: var(--accentInk)">${conn.signingOut ? 'Выходим из учётной записи' : 'Подключаемся к Платформе'}</div><div style="color: var(--text2)">${esc(state.progress || (conn.signingOut ? 'Выполняем выход…' : 'Восстанавливаем вход и защищённое соединение…'))}</div></div></section>`;
+    if (conn.busy) {
+      const title = conn.signingOut ? 'Выходим из учётной записи' : conn.background ? 'Подключение продолжается в фоне' : 'Подключаемся к Платформе';
+      const note = conn.background ? '<div style="color: var(--text2); margin-top: 6px">Сервер ещё настраивает доступ этого компьютера. Коннектор подключится сам, как только сервер подтвердит соединение; разделы, которым нужен сервер, откроются автоматически.</div>' : '';
+      return `<section class="banner" role="status" style="background: var(--accentSoft); border: 1px solid var(--accent)"><div style="flex: 1; min-width: 260px"><div style="font-weight: 750; color: var(--accentInk)">${title}</div><div style="color: var(--text2)">${esc(state.progress || (conn.signingOut ? 'Выполняем выход…' : 'Восстанавливаем вход и защищённое соединение…'))}</div>${waitSteps(conn.wait)}${note}</div>${conn.canCancel ? button('Отменить', 'b b-sec', { cmd: 'connect-cancel' }) : ''}</section>`;
+    }
     return `<section class="banner banner-warn" role="status"><div style="flex: 1; min-width: 260px"><div style="font-weight: 750; color: var(--warnInk)">Нет связи с Платформой</div><div style="color: var(--text2)">${esc(conn.errorText || (state.status || 'Не подключено') + '.')} Разделы, которым нужен сервер, вернутся после подключения; задания на этом компьютере, журнал и настройки доступны.</div></div>${button('Повторить подключение', 'b b-pri', { cmd: 'reconnect', data: { section: 'settings' } })}</section>`;
   };
 

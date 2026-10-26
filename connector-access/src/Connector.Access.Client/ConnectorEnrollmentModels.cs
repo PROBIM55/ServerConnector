@@ -170,15 +170,19 @@ public sealed class ConnectorEnrollmentStateException : ConnectorEnrollmentExcep
 
 public sealed class ConnectorEnrollmentProtocolException : ConnectorEnrollmentException
 {
-    public ConnectorEnrollmentProtocolException(string message, int? statusCode = null, string? errorCode = null)
+    public ConnectorEnrollmentProtocolException(string message, int? statusCode = null, string? errorCode = null,
+        TimeSpan? retryAfter = null)
         : base(message)
     {
         StatusCode = statusCode;
         ErrorCode = errorCode;
+        RetryAfter = retryAfter;
     }
 
     public int? StatusCode { get; }
     public string? ErrorCode { get; }
+    /// <summary>The server's Retry-After hint (busy/unavailable responses); never a server message.</summary>
+    public TimeSpan? RetryAfter { get; }
 }
 
 internal sealed record ValidatedClientOptions(

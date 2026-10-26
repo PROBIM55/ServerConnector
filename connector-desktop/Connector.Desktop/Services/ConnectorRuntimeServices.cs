@@ -77,6 +77,13 @@ public sealed class ConnectorRuntimeServices : IAsyncDisposable
     public string CommonRecoveryProgress => _commonRecovery.Progress;
     public event Action? CommonRecoveryChanged { add => _commonRecovery.Changed += value; remove => _commonRecovery.Changed -= value; }
     public void CancelCommonConnectionIntent() => _commonRecovery.Stop();
+
+    /// <summary>The user's cancel of a restore/sign-in still waiting for the server (foreground or background).</summary>
+    public void CancelCommonConnect()
+    {
+        CancelCommonConnectionIntent();
+        CommonOperations.CancelConnect();
+    }
     public string CommonFolderStatus => Volatile.Read(ref _commonFolderStatus);
     public bool CommonFolderCleanupPending => Volatile.Read(ref _commonFolderCleanupPending) != 0;
 
@@ -124,7 +131,10 @@ public sealed class ConnectorRuntimeServices : IAsyncDisposable
                 await CommonFolders.CleanupOwnedMappingsAfterDrainAsync(cancellationToken);
                 Volatile.Write(ref _commonFolderCleanupPending, 0);
                 SetCommonFolderStatus("Папки не подключены");
-                await CommonAccess.ConnectAsync(token, reconnect, cancellationToken, progress);
+                // The wait confirms the protected route before Ready: right after the server
+                // reports the peer, routes may still propagate; that keeps the wait pending.
+                await CommonAccess.ConnectAsync(token, reconnect, cancellationToken, progress,
+                    async ct => { await ProbeCommonOverlayAsync(ct); });
                 if (!CommonAccess.IsReady) return;
                 var identityProfile = CommonAccess.Current!.AccessProfile!;
                 CommonConnectionRecovery.RequireIdentity(recovery, new(
@@ -210,7 +220,8 @@ public sealed class ConnectorRuntimeServices : IAsyncDisposable
 
     public async Task DisconnectCommonAsync(CancellationToken cancellationToken)
     {
-        CancelCommonConnectionIntent();
+        // A connect waiting for the server holds the lifecycle; disconnect ends it first.
+        CancelCommonConnect();
         await _commonLifecycle.WaitAsync(cancellationToken);
         try
         {

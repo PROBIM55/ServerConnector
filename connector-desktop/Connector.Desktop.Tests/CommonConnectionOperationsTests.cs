@@ -30,6 +30,27 @@ public sealed class CommonConnectionOperationsTests
         Assert.Null(operations.Progress.Operation);
     }
 
+    [Theory]
+    [InlineData(CommonConnectionOperation.Restore)]
+    [InlineData(CommonConnectionOperation.SignIn)]
+    public async Task CancelConnect_EndsAWaitingConnectButNeverASignOut(CommonConnectionOperation operation)
+    {
+        await using var operations = new CommonConnectionOperations();
+        var connect = operations.Start(operation, (_, ct) => Task.Delay(Timeout.Infinite, ct), default);
+
+        operations.CancelConnect();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => connect.Completion.WaitAsync(Deadline));
+        Assert.Null(operations.Progress.Operation);
+
+        var release = Signal();
+        var signout = operations.Start(CommonConnectionOperation.SignOut, (_, ct) => release.Task.WaitAsync(ct), default);
+        operations.CancelConnect();
+        Assert.False(signout.Token.IsCancellationRequested);
+        release.SetResult();
+        await signout.Completion.WaitAsync(Deadline);
+    }
+
     [Fact]
     public async Task SignOutCancelsStartupWait_AndWaitsForItsCleanupBeforeRevocation()
     {

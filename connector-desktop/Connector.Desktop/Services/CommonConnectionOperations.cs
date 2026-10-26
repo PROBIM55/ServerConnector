@@ -53,6 +53,14 @@ public sealed class CommonConnectionOperations : IAsyncDisposable
         return attempt;
     }
 
+    /// <summary>Cancels a running restore or sign-in; a sign-out is never interrupted.</summary>
+    public void CancelConnect()
+    {
+        CommonConnectionAttempt? active;
+        lock (_sync) active = _active is { Operation: not CommonConnectionOperation.SignOut } attempt ? attempt : null;
+        active?.Cancel();
+    }
+
     internal void Report(CommonConnectionAttempt attempt, string message)
     {
         lock (_sync)

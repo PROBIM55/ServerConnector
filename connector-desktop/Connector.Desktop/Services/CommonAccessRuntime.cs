@@ -26,8 +26,9 @@ public sealed class CommonAccessRuntime : ICommonConnectorRequestTransport, IOve
     private int _selected;
     private int _readyObserved;
     private int _vpnSetupRequired;
-    private int _provisioningTimedOut;
     private int _clockSkewMinutes;
+    private CommonConnectorProvisioningProgress? _wait;
+    private string? _waitOutcome;
     // The runtime assigns this only after it owns the connection lifecycle
     // mutex.  A request that was in flight for the preceding session must not
     // be able to invalidate the replacement session.
@@ -66,8 +67,8 @@ public sealed class CommonAccessRuntime : ICommonConnectorRequestTransport, IOve
     public Uri? GatewayUri => _controlPlaneBaseUri;
     public string DisplayStatus => !IsConfigured ? "Подключение не настроено" :
         Volatile.Read(ref _vpnSetupRequired) != 0 ? "Требуется установка защищённого подключения" :
-        Volatile.Read(ref _provisioningTimedOut) != 0 && Current?.Status == CommonConnectorConnectionStatus.Disconnected
-            ? "Сервер ещё не подтвердил защищённое соединение" :
+        Wait is not null ? "Подключение…" :
+        ProblemText is { } problem ? problem :
         Volatile.Read(ref _clockSkewMinutes) is > 0 and var skewMinutes && Current?.DiagnosticCode == "clock_skew"
             ? ClockSkewText(skewMinutes) : Current?.Status switch
     {
@@ -80,6 +81,68 @@ public sealed class CommonAccessRuntime : ICommonConnectorRequestTransport, IOve
         CommonConnectorConnectionStatus.Failed => "Не удалось подключиться",
         _ => "Не подключено"
     };
+
+    /// <summary>
+    /// The server-side provisioning wait of the running connect: phase, elapsed time and whether it
+    /// already continues in the background. Null when no connect waits for the server.
+    /// </summary>
+    public CommonConnectorProvisioningProgress? Wait => Volatile.Read(ref _wait);
+
+    /// <summary>Raised on every wait report and when the wait ends.</summary>
+    public event Action? WaitChanged;
+
+    /// <summary>
+    /// The user-facing text of a definitive outcome no retry resolves (denial, a disabled device,
+    /// server configuration, NetBird failing locally); null otherwise.
+    /// </summary>
+    public string? ProblemText => Wait is null
+        ? ProblemTextFor(Volatile.Read(ref _waitOutcome) ??
+            (Current is { Status: not CommonConnectorConnectionStatus.Ready } current ? current.DiagnosticCode : null))
+        : null;
+
+    public static string? ProblemTextFor(string? code) => code switch
+    {
+        "access_denied" or "access_not_granted" => "Доступ не выдан. Обратитесь к администратору компании.",
+        "device_not_active" => "Этот компьютер отключён администратором. Обратитесь к администратору компании.",
+        "provider_configuration" or "vpn_not_configured" =>
+            "Защищённое подключение не настроено на сервере. Обратитесь к администратору компании.",
+        "netbird_up_failed_repeatedly" =>
+            "Не удалось запустить NetBird на этом компьютере. Перезагрузите компьютер и повторите подключение; если не поможет — сохраните диагностику и обратитесь к администратору.",
+        _ => null,
+    };
+
+    /// <summary>
+    /// Completes when the connect finished (true) or its server wait went to the background
+    /// (false), so startup work does not wait for the server behind a background connect.
+    /// </summary>
+    public async Task<bool> SettleOrBackgroundAsync(Task completion)
+    {
+        ArgumentNullException.ThrowIfNull(completion);
+        var backgrounded = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        void OnWait()
+        {
+            if (Wait?.Background == true) backgrounded.TrySetResult();
+        }
+        WaitChanged += OnWait;
+        try
+        {
+            OnWait();
+            return await Task.WhenAny(completion, backgrounded.Task).ConfigureAwait(false) == completion;
+        }
+        finally { WaitChanged -= OnWait; }
+    }
+
+    internal void PublishWait(CommonConnectorProvisioningProgress? wait)
+    {
+        if (ReferenceEquals(Interlocked.Exchange(ref _wait, wait), wait)) return;
+        RaiseWaitChanged();
+    }
+
+    /// <summary>
+    /// Local diagnostic journal for pilots: phases and transient failure descriptors
+    /// (type, status, local code) only, never messages, bodies or credentials.
+    /// </summary>
+    public Action<string>? DiagnosticLog { get; set; }
 
     /// <summary>
     /// Raised once when a previously observed Ready connection becomes invalid.
@@ -147,12 +210,12 @@ public sealed class CommonAccessRuntime : ICommonConnectorRequestTransport, IOve
     }
 
     public async Task ConnectAsync(string? token, bool reconnect, CancellationToken cancellationToken,
-        Action<string>? progress = null)
+        Action<string>? progress = null, Func<CancellationToken, ValueTask>? confirmReady = null)
     {
         Select();
         var coordinator = RequireCoordinator();
-        Volatile.Write(ref _provisioningTimedOut, 0);
         Volatile.Write(ref _clockSkewMinutes, 0);
+        Volatile.Write(ref _waitOutcome, null);
         try
         {
             try
@@ -172,40 +235,84 @@ public sealed class CommonAccessRuntime : ICommonConnectorRequestTransport, IOve
             }
             progress?.Invoke(reconnect ? "Восстанавливаем вход и защищённое соединение…" :
                 "Вход подтверждён. Настраиваем защищённое соединение…");
-            if (reconnect)
-                await coordinator.ResumeAndConnectAsync(cancellationToken);
-            else
+            if (!reconnect && (string.IsNullOrWhiteSpace(token) || token.Length > 4096))
+                throw new InvalidOperationException("Нужен токен подключения.");
+            // First sign-in schedules provider work asynchronously. The wait keeps the
+            // same durable device (the browser token is used once), retries transient
+            // server/network failures and continues in the background past its
+            // foreground budget; Ready still needs all providers and a reachable route.
+            string? reportedPhase = null;
+            string? reportedDiagnostic = null;
+            string? reportedFailure = null;
+            var wasBackground = false;
+            void Report(CommonConnectorProvisioningProgress wait)
             {
-                if (string.IsNullOrWhiteSpace(token) || token.Length > 4096)
-                    throw new InvalidOperationException("Нужен токен подключения.");
-                await coordinator.EnrollAndConnectAsync(token, Environment.MachineName, cancellationToken);
+                var phase = PhaseText(wait.Phase);
+                if (phase != reportedPhase) progress?.Invoke(phase);
+                if (phase != reportedPhase || wait.DiagnosticCode != reportedDiagnostic)
+                    Log($"Common connection wait phase {PhaseName(wait.Phase)} ({wait.DiagnosticCode}) at {wait.Elapsed.TotalSeconds:F1}s.");
+                // One line per distinct failure: a server busy for minutes is not a journal flood.
+                if (wait.TransientFailure is { } failure && failure != reportedFailure)
+                {
+                    Log($"Common connection wait transient {failure} in phase {PhaseName(wait.Phase)} at {wait.Elapsed.TotalSeconds:F1}s.");
+                    reportedFailure = failure;
+                }
+                if (wait.Background && !wasBackground)
+                    Log($"Common connection wait continues in background after {wait.Elapsed.TotalSeconds:F1}s.");
+                (reportedPhase, reportedDiagnostic, wasBackground) = (phase, wait.DiagnosticCode, wait.Background);
+                PublishWait(wait);
             }
-            // First sign-in schedules provider work asynchronously. Continue with
-            // the same durable device; never consume the browser token a second
-            // time or claim Ready before all providers have confirmed its grants.
-            if (coordinator.Current.Status is CommonConnectorConnectionStatus.AccessPending or
-                CommonConnectorConnectionStatus.AwaitingVpnAuthorization)
-                progress?.Invoke("Ожидаем подтверждения доступа от сервера…");
-            var completed = await CommonConnectorProvisioningWaiter.WaitAsync(coordinator.Current,
+            await CommonConnectorProvisioningWaiter.WaitAsync(
+                reconnect
+                    ? ct => coordinator.ResumeAndConnectAsync(ct)
+                    : ct => coordinator.EnrollAndConnectAsync(token!, Environment.MachineName, ct),
                 ct => coordinator.ResumeAndConnectAsync(ct),
-                async ct => { await coordinator.DisconnectAsync(ct); }, cancellationToken);
-            if (completed.Status is CommonConnectorConnectionStatus.AccessPending or
-                CommonConnectorConnectionStatus.AwaitingVpnAuthorization)
-            {
-                // The waiter's budget ran out while the server still waits for this
-                // computer's NetBird peer (or for its providers). Admission is closed;
-                // the durable device is kept and a later attempt resumes it.
-                Volatile.Write(ref _provisioningTimedOut, 1);
-                throw new CommonConnectionPendingException(
-                    "Сервер ещё не подтвердил защищённое соединение этого компьютера. Повторите подключение через минуту.");
-            }
+                async ct => { await coordinator.DisconnectAsync(ct); }, cancellationToken,
+                confirmReady: confirmReady, progress: Report);
         }
         catch (ConnectorClockSkewException exception)
         {
             Volatile.Write(ref _clockSkewMinutes, ClockSkewMinutes(exception.Skew));
             throw;
         }
-        finally { ObserveConnectionState(Volatile.Read(ref _accessSessionGeneration)); }
+        catch (CommonConnectorWaitEndedException exception)
+        {
+            Volatile.Write(ref _waitOutcome, exception.Code);
+            Log($"Common connection wait ended ({exception.Code}).");
+            throw;
+        }
+        finally
+        {
+            PublishWait(null);
+            ObserveConnectionState(Volatile.Read(ref _accessSessionGeneration));
+        }
+    }
+
+    /// <summary>The server phase as the window shows it.</summary>
+    public static string PhaseText(CommonConnectorConnectionPhase phase) => phase switch
+    {
+        CommonConnectorConnectionPhase.Access => "Выдаём доступ…",
+        CommonConnectorConnectionPhase.Network => "Подключаем защищённую сеть (NetBird)…",
+        _ => "Проверяем соединение…",
+    };
+
+    public static string PhaseName(CommonConnectorConnectionPhase phase) => phase switch
+    {
+        CommonConnectorConnectionPhase.Access => "access",
+        CommonConnectorConnectionPhase.Network => "network",
+        _ => "verify",
+    };
+
+    private void Log(string line)
+    {
+        try { DiagnosticLog?.Invoke(line); } catch { /* The journal cannot break a connection. */ }
+    }
+
+    private void RaiseWaitChanged()
+    {
+        if (WaitChanged is not { } handlers) return;
+        foreach (Action handler in handlers.GetInvocationList())
+            try { handler(); } catch { /* Observers cannot strand the wait. */ }
     }
 
     public async Task DisconnectAsync(CancellationToken cancellationToken)
@@ -219,8 +326,8 @@ public sealed class CommonAccessRuntime : ICommonConnectorRequestTransport, IOve
 
     public async Task SignOutAsync(CancellationToken cancellationToken)
     {
-        Volatile.Write(ref _provisioningTimedOut, 0);
         Volatile.Write(ref _clockSkewMinutes, 0);
+        Volatile.Write(ref _waitOutcome, null);
         try
         {
             await RequireCoordinator().SignOutAsync(cancellationToken);
@@ -323,12 +430,6 @@ internal sealed record CommonAccessUpgradePortsResult(
     internal static CommonAccessUpgradePortsResult Available(CommonAccessUpgradeRuntimePorts ports) => new(ports, null);
     internal static CommonAccessUpgradePortsResult Unavailable(CommonAccessUpgradePortsBlocker blocker) => new(null, blocker);
 }
-
-/// <summary>
-/// The bounded wait for server-side provisioning (NetBird peer, providers) ended
-/// before the server confirmed this computer. Nothing is revoked or deleted.
-/// </summary>
-public sealed class CommonConnectionPendingException(string message) : InvalidOperationException(message);
 
 /// <summary>
 /// A Ready-to-invalid transition is permanently associated with the session

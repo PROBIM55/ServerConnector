@@ -945,47 +945,41 @@ public partial class MainWindow : Window, IShellHost, IConnectorHost
             "Доступна новая версия " + shown + ". Откройте коннектор, чтобы установить её.", Forms.ToolTipIcon.Info);
     }
 
+    private async Task ReportCommonRestoreAsync(CommonConnectionAttempt attempt)
+    {
+        try
+        {
+            await attempt.Completion;
+            if (_runtimeServices.CommonAccess.Current?.DiagnosticCode == "device_revoked")
+                AppendLog("Доступ этого компьютера отозван на сервере. Сохранённый вход удалён — войдите через Платформу заново.");
+        }
+        catch (OperationCanceledException) { } // Explicit cancel, sign-in or sign-out took ownership.
+        catch (Exception ex)
+        {
+            if (_runtimeServices.CommonOperations.IsLatest(attempt.Generation))
+                AppendLog(ex is Connector.Access.Client.ConnectorClockSkewException skew
+                    ? "Не удалось восстановить подключение: " + CommonAccessRuntime.ClockSkewText(skew.Skew)
+                    : $"Не удалось восстановить подключение ({Connector.Network.CommonConnectorProvisioningWaiter.Describe(ex)}).");
+        }
+    }
+
     private async Task TryAutoConnectAsync()
     {
         try
         {
             if (_runtimeServices.CommonAccess.IsSelected)
             {
-                // Right after Windows starts the server may still wait for this
-                // computer's NetBird peer longer than one bounded wait. One more
-                // automatic attempt resumes the same device; it never re-enrolls.
-                for (var restore = 1; restore <= 2; restore++)
-                {
-                    if (!_runtimeServices.CommonAccess.HasStoredCredential) return;
-                    var attempt = _runtimeServices.CommonOperations.Start(CommonConnectionOperation.Restore,
-                        (owner, ct) => _runtimeServices.ConnectCommonAsync(null, true, ct, owner.Report),
-                        CancellationToken.None);
-                    try
-                    {
-                        await attempt.Completion;
-                        if (_runtimeServices.CommonAccess.Current?.DiagnosticCode == "device_revoked")
-                            AppendLog("Доступ этого компьютера отозван на сервере. Сохранённый вход удалён — войдите через Платформу заново.");
-                        return;
-                    }
-                    catch (OperationCanceledException) { return; } // Explicit sign-in/sign-out took ownership.
-                    catch (CommonConnectionPendingException) when (restore == 1 &&
-                        _runtimeServices.CommonOperations.IsLatest(attempt.Generation))
-                    {
-                        AppendLog("Сервер ещё не подтвердил защищённое соединение. Повторяем восстановление подключения.");
-                    }
-                    catch (Exception ex)
-                    {
-                        if (_runtimeServices.CommonOperations.IsLatest(attempt.Generation))
-                            AppendLog(ex switch
-                            {
-                                CommonConnectionPendingException => "Не удалось восстановить подключение: " + ex.Message,
-                                Connector.Access.Client.ConnectorClockSkewException skew =>
-                                    "Не удалось восстановить подключение: " + CommonAccessRuntime.ClockSkewText(skew.Skew),
-                                _ => $"Не удалось восстановить подключение ({ex.GetType().Name})."
-                            });
-                        return;
-                    }
-                }
+                if (!_runtimeServices.CommonAccess.HasStoredCredential) return;
+                // The same wait as an explicit sign-in: transient server/network failures
+                // keep it going and past its foreground budget it continues in the
+                // background, switching to «Подключено» by itself. Startup (updates,
+                // background agent) continues once it finished or went to the background.
+                var attempt = _runtimeServices.CommonOperations.Start(CommonConnectionOperation.Restore,
+                    (owner, ct) => _runtimeServices.ConnectCommonAsync(null, true, ct, owner.Report),
+                    CancellationToken.None);
+                if (!await _runtimeServices.CommonAccess.SettleOrBackgroundAsync(attempt.Completion))
+                    AppendLog("Сервер ещё настраивает доступ этого компьютера. Подключение продолжается в фоне.");
+                _ = ReportCommonRestoreAsync(attempt);
                 return;
             }
             var token = SettingsService.DecryptToken(_settings.TokenCipherBase64).Trim();

@@ -30,8 +30,78 @@ test('connection phases advance the steps from the native progress text', () => 
   const html = app(state);
   assert.match(html, /Настраиваем подключение…/);
   assert.equal((html.match(/si-step done/g) || []).length, 2);
-  for (const [text, phase] of [['Проверяем сетевые компоненты…', 2], ['Подключаем общие папки…', 4], ['Вход подтверждён. Настраиваем защищённое соединение…', 2]])
+  for (const [text, phase] of [['Проверяем сетевые компоненты…', 2], ['Подключаем общие папки…', 4], ['Вход подтверждён. Настраиваем защищённое соединение…', 2],
+    ['Подключаем защищённую сеть (NetBird)…', 3], ['Проверяем соединение…', 3]])
     assert.equal(PC.pages.signinModel(stateFrom(PC, { ...F.connecting(), connectionProgress: text })).phase, phase, text);
+});
+
+test('the sign-in screen shows the server phase of the wait and its elapsed time', () => {
+  const html = app(stateFrom(PC, F.connecting()));
+  assert.match(html, /role="status"[^>]*>Выдаём доступ…/);
+  assert.match(html, /data-wait-phase="access" aria-current="step"[^>]*>1\. Выдаём доступ</);
+  assert.match(html, /прошло 12 с/);
+});
+
+test('a restore waiting for the server shows the phases, the elapsed time and a cancel', () => {
+  const state = stateFrom(PC, F.waitingNetwork());
+  const conn = PC.model.connection(state);
+  assert.equal(conn.background, false);
+  assert.deepEqual({ ...conn.wait }, { phase: 'network', step: 2, label: 'Подключаем защищённую сеть (NetBird)', elapsed: '1 мин 05 с', background: false });
+  const html = app(state);
+  assert.match(html, /Подключаемся к Платформе<\/div><div style="color: var\(--text2\)">Подключаем защищённую сеть \(NetBird\)…/);
+  assert.match(html, /data-wait-phase="access"[^>]*>✓ Выдаём доступ/);
+  assert.match(html, /data-wait-phase="network" aria-current="step"/);
+  assert.match(html, /data-wait-phase="verify"[^>]*>3\. Проверяем соединение/);
+  assert.match(html, /прошло 1 мин 05 с/);
+  assert.match(html, /data-cmd="connect-cancel">Отменить<\/button>/);
+  assert.match(html, /class="chip t-run"[^>]*>.*Подключение…<\/span>/);
+});
+
+test('past the foreground budget the connection continues in the background with server sections gated', () => {
+  const state = stateFrom(PC, F.backgroundWait());
+  const conn = PC.model.connection(state);
+  assert.equal(conn.background, true);
+  assert.equal(conn.showSignIn, false, 'the window is not blocked');
+  const html = app(state);
+  assert.match(html, /Подключение продолжается в фоне/);
+  assert.match(html, /Коннектор подключится сам/);
+  assert.match(html, /прошло 4 мин 45 с/);
+  assert.match(html, /data-cmd="connect-cancel">Отменить/);
+  assert.match(html, /class="chip t-run"[^>]*>.*Подключение…<\/span>/);
+  assert.deepEqual([...html.matchAll(/data-ui="go" data-page="([a-z]+)" class="nav/g)].map(m => m[1]), ['home', 'jobs', 'settings']);
+  assert.match(PC.shell.app(stateFrom(PC, F.backgroundWait(), { page: 'jobs' })), /Оптимизация IFC/);
+});
+
+test('the background wait turns «Подключено» by itself once the server is ready', () => {
+  const state = stateFrom(PC, F.backgroundWait());
+  PC.model.apply(state, { ...F.signedIn(), reset: false, connectionPhase: '', connectionElapsedSeconds: null, connectionBackground: false });
+  const conn = PC.model.connection(state);
+  assert.equal(conn.ready, true);
+  assert.equal(conn.wait, null);
+  const html = app(state);
+  assert.match(html, /<span class="chip t-ok" style="align-self: center">.*Подключено<\/span>/);
+  assert.doesNotMatch(html, /Подключение продолжается в фоне|data-cmd="connect-cancel"/);
+  assert.ok([...html.matchAll(/data-ui="go" data-page="([a-z]+)" class="nav/g)].map(m => m[1]).includes('folders'));
+});
+
+test('sign-out and a failed connection offer no connection cancel', () => {
+  const signingOut = app(stateFrom(PC, { ...F.backgroundWait(), signOutPending: true, connectionProgress: 'Отзываем доступ на сервере…' }));
+  assert.doesNotMatch(signingOut, /data-cmd="connect-cancel"|data-wait-phase/);
+  assert.doesNotMatch(app(stateFrom(PC, F.offline())), /data-cmd="connect-cancel"/);
+});
+
+test('a definitive outcome (denial, disabled device, NetBird) is shown once as a problem with a retry', () => {
+  for (const status of ['Доступ не выдан. Обратитесь к администратору компании.',
+    'Не удалось запустить NetBird на этом компьютере. Перезагрузите компьютер и повторите подключение; если не поможет — сохраните диагностику и обратитесь к администратору.']) {
+    const state = stateFrom(PC, { ...F.offline(), status, notice: null });
+    const conn = PC.model.connection(state);
+    assert.equal(conn.errorText, status, 'no second full stop');
+    const html = app(state);
+    assert.match(html, /class="chip t-bad"[^>]*>.*Нет связи<\/span>/);
+    assert.match(html, /Нет связи с Платформой/);
+    assert.doesNotMatch(html, /\.\./);
+    assert.match(html, /data-cmd="reconnect"[^>]*>Повторить подключение/);
+  }
 });
 
 test('a failed first sign-in keeps its own message on the sign-in screen', () => {

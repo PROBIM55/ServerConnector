@@ -118,6 +118,8 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
         _commonAccess = runtimeServices.CommonAccess;
         _runtimeServices.CommonOperations.Changed += OnCommonOperationChanged;
         _runtimeServices.CommonRecoveryChanged += OnCommonRecoveryChanged;
+        _commonAccess.WaitChanged += OnCommonOperationChanged;
+        _commonAccess.DiagnosticLog = _connectorHost.Log;
         _legacyStartedNotice = legacyStartedNotice;
         Journal = new ConnectorJobJournal(journalPath ?? ConnectorJobJournal.DefaultPath, log: _connectorHost.Log);
         Journal.Changed += PublishSnapshot;
@@ -287,6 +289,11 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
             ["connectPending"] = commonBusy,
             ["signOutPending"] = connectionProgress.Operation == CommonConnectionOperation.SignOut,
             ["connectionProgress"] = progressMessage,
+            // The server-side wait of the running connect: phase, elapsed time and the
+            // background continuation that turns «Подключено» by itself.
+            ["connectionPhase"] = commonBusy && _commonAccess.Wait is { } wait ? CommonAccessRuntime.PhaseName(wait.Phase) : "",
+            ["connectionElapsedSeconds"] = commonBusy && _commonAccess.Wait is { } waited ? (int)waited.Elapsed.TotalSeconds : null,
+            ["connectionBackground"] = commonBusy && _commonAccess.Wait?.Background == true,
             // One interface for both products: the folder list follows the grant of either product,
             // not the product of the last command.
             ["assignedFolders"] = _commonAccess.IsSelected &&
@@ -369,6 +376,11 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
         {
             case "signout":
                 StartCommonSignOut(cancellationToken);
+                break;
+            case "connect-cancel":
+                // Ends a restore/sign-in still waiting for the server; the device and its
+                // credential stay, a later «Повторить подключение» resumes them.
+                _runtimeServices.CancelCommonConnect();
                 break;
             case "connect":
                 if (_commonAccess.ShouldUse()) StartCommonConnect(null, false, cancellationToken);
@@ -724,7 +736,6 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
                     "Проверяем сетевые компоненты…" => "network-components",
                     "Восстанавливаем вход и защищённое соединение…" => "restore",
                     "Вход подтверждён. Настраиваем защищённое соединение…" => "enroll",
-                    "Ожидаем подтверждения доступа от сервера…" => "providers",
                     "Проверяем защищённое соединение…" => "final-route",
                     "Запускаем фоновую работу…" => "start-worker",
                     "Подключаем общие папки…" => "folders",
@@ -795,12 +806,6 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
             message = CommonAccessRuntime.ClockSkewText(ex.Skew);
             _connectorHost.Log($"Common connection {attempt.Operation} failed ({ex.GetType().Name}, clock_skew).");
         }
-        catch (CommonConnectionPendingException ex)
-        {
-            message = ex.Message;
-            kind = "warn";
-            _connectorHost.Log($"Common connection {attempt.Operation} failed ({ex.GetType().Name}, provisioning_pending).");
-        }
         catch (Exception ex)
         {
             var revocationUnconfirmed = ex is Connector.Access.Client.ConnectorEnrollmentProtocolException
@@ -812,7 +817,7 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
                     ? "Сервер не успел подтвердить отзыв доступа. Повторите выход через минуту."
                     : "Выход не завершён. Проверьте соединение и повторите попытку." :
                 _commonAccess.DisplayStatus == "Требуется вход" ? "Войдите через Платформу повторно." :
-                "Не удалось завершить подключение. Повторите попытку.";
+                _commonAccess.ProblemText ?? "Не удалось завершить подключение. Повторите попытку.";
             // Codes are defined locally; never log an exception message/body,
             // which can carry server credentials or transport identifiers.
             var code = ex switch
@@ -823,7 +828,7 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
                 Connector.Access.Client.ConnectorEnrollmentProtocolException protocol when revocationUnconfirmed => protocol.ErrorCode!,
                 _ => "unspecified"
             };
-            _connectorHost.Log($"Common connection {attempt.Operation} failed ({ex.GetType().Name}, {code}).");
+            _connectorHost.Log($"Common connection {attempt.Operation} failed ({Connector.Network.CommonConnectorProvisioningWaiter.Describe(ex)}, {code}).");
         }
         finally { lifetime.Dispose(); }
         if (_runtimeServices.CommonOperations.IsLatest(attempt.Generation))
@@ -1734,6 +1739,7 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
         _runtimeServices.Platform.SnapshotChanged -= OnPlatformSnapshotChanged;
         _runtimeServices.CommonOperations.Changed -= OnCommonOperationChanged;
         _runtimeServices.CommonRecoveryChanged -= OnCommonRecoveryChanged;
+        _commonAccess.WaitChanged -= OnCommonOperationChanged;
         _connectorHost.OwnerWindow.StateChanged -= OnOwnerWindowStateChanged;
         foreach (ConverterWorkspaceJob job in _converterWorkspace.Jobs) Unsubscribe(job);
 

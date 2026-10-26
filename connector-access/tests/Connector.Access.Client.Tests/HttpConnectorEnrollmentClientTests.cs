@@ -588,6 +588,38 @@ public sealed class HttpConnectorEnrollmentClientTests
     }
 
     [Theory]
+    [InlineData(12, 12)]
+    [InlineData(3600, 300)]
+    [InlineData(null, null)]
+    public async Task BusyIssuedRequestCarriesStatusCodeAndBoundedRetryAfter(int? retryAfterSeconds, int? expectedSeconds)
+    {
+        using var directory = new TemporaryDirectory();
+        using var authority = new TestCertificateAuthority();
+        var store = new FileConnectorEnrollmentStateStore(directory.Path);
+        var transport = new DelegateHttpInvokerFactory(async (certificate, request, cancellationToken) =>
+        {
+            if (request.Method == HttpMethod.Post)
+                return TestCertificateAuthority.JsonResponse(authority.Issue(
+                    (await request.Content!.ReadFromJsonAsync<DeviceEnrollmentRequest>(cancellationToken: cancellationToken))!));
+            var busy = new HttpResponseMessage(HttpStatusCode.ServiceUnavailable)
+            {
+                Content = JsonContent.Create(new { code = "netbird_provider_busy", message = "reconciling" }),
+            };
+            if (retryAfterSeconds is { } seconds)
+                busy.Headers.RetryAfter = new System.Net.Http.Headers.RetryConditionHeaderValue(TimeSpan.FromSeconds(seconds));
+            return busy;
+        });
+        var client = CreateClient(store, authority.Pin, transport);
+        await client.EnrollAsync("enrollment-fixture", "Test device");
+
+        var error = await Assert.ThrowsAsync<ConnectorEnrollmentProtocolException>(() => client.GetVpnStateAsync().AsTask());
+
+        Assert.Equal(503, error.StatusCode);
+        Assert.Equal("netbird_provider_busy", error.ErrorCode);
+        Assert.Equal(expectedSeconds is { } expected ? TimeSpan.FromSeconds(expected) : null, error.RetryAfter);
+    }
+
+    [Theory]
     [InlineData("foreign")]
     [InlineData("unapplied")]
     [InlineData("expired")]
@@ -655,6 +687,13 @@ public sealed class HttpConnectorEnrollmentClientTests
         });
         var client = CreateClient(store, authority.Pin, transport);
         await client.EnrollAsync("enrollment-fixture", "Test device");
+        if (invalid == "stale")
+        {
+            // A stale observation is reported as clock disagreement, never as a retryable state.
+            var skew = await Assert.ThrowsAsync<ConnectorClockSkewException>(() => client.GetVpnStateAsync().AsTask());
+            Assert.InRange(skew.Skew, TimeSpan.FromMinutes(9), TimeSpan.FromMinutes(11));
+            return;
+        }
         await Assert.ThrowsAsync<ConnectorEnrollmentProtocolException>(() => client.GetVpnStateAsync().AsTask());
     }
 

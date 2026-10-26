@@ -98,7 +98,8 @@ const variants = {
     allowedPages: { structura: [], platform: [] }, assignedFolders: [], jobs: [], updateAvailable: false, account: null
   }),
   waitingBrowser: () => Object.assign(variants.signedOut(), { signInPending: true, connectPending: true, connectionProgress: '' }),
-  connecting: () => Object.assign(variants.signedOut(), { connectPending: true, connectionProgress: 'Ожидаем подтверждения доступа от сервера…' }),
+  connecting: () => Object.assign(variants.signedOut(), { connectPending: true, connectionProgress: 'Выдаём доступ…',
+    connectionPhase: 'access', connectionElapsedSeconds: 12, connectionBackground: false }),
   // First sign-in that failed before a device credential was stored: the sign-in screen shows the error.
   connectError: () => Object.assign(variants.signedOut(), {
     commonAccessNeedsSignIn: false, hasSavedCredential: false, status: 'Не удалось подключиться',
@@ -108,6 +109,13 @@ const variants = {
   recovering: () => Object.assign(signedIn(), {
     commonAccessReady: false, connectPending: true, connectionProgress: 'Восстанавливаем вход и защищённое соединение…',
     status: 'Подключение…', allowedPages: { structura: [], platform: [] }
+  }),
+  // Restore waiting for the server: the NetBird phase in the foreground, then past the budget in the background.
+  waitingNetwork: () => Object.assign(variants.recovering(), {
+    connectionProgress: 'Подключаем защищённую сеть (NetBird)…', connectionPhase: 'network', connectionElapsedSeconds: 65, connectionBackground: false
+  }),
+  backgroundWait: () => Object.assign(variants.recovering(), {
+    connectionProgress: 'Проверяем соединение…', connectionPhase: 'verify', connectionElapsedSeconds: 285, connectionBackground: true
   }),
   offline: () => Object.assign(signedIn(), {
     commonAccessReady: false, status: 'Не удалось подключиться', allowedPages: { structura: [], platform: [] },

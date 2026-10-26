@@ -346,8 +346,6 @@ public sealed partial class HttpConnectorEnrollmentClient : IConnectorEnrollment
             var now = _options.TimeProvider.GetUtcNow();
             if (state.DeviceId != receipt.DeviceId || state.Revision < receipt.AccessRevision ||
                 state.Status is not ("ready" or "connecting" or "degraded" or "unknown" or "revoked" or "denied") ||
-                state.ObservedAtUtc < now - TimeSpan.FromMinutes(2) - _options.ClockSkew ||
-                state.ObservedAtUtc > now + _options.ClockSkew ||
                 !Uri.TryCreate(state.ManagementUri, UriKind.Absolute, out var management) || management.Scheme != Uri.UriSchemeHttps ||
                 !string.IsNullOrEmpty(management.UserInfo) || !string.IsNullOrEmpty(management.Query) || !string.IsNullOrEmpty(management.Fragment) ||
                 state.ExpectedAssignedAddresses is null || state.ExpectedAssignedAddresses.Count > 16 ||
@@ -355,6 +353,11 @@ public sealed partial class HttpConnectorEnrollmentClient : IConnectorEnrollment
                     System.Net.IPAddress.IsLoopback(ip) || ip.Equals(System.Net.IPAddress.Any) || ip.Equals(System.Net.IPAddress.IPv6Any)) ||
                 (state.Status == "ready" && (string.IsNullOrWhiteSpace(state.PeerId) || state.ExpectedAssignedAddresses.Count == 0)))
                 throw new ConnectorEnrollmentProtocolException("The VPN state is not current transport for this device.");
+            // An otherwise valid observation outside the local clock's window is reported
+            // as clock disagreement: the user can fix it, a retry cannot.
+            if (state.ObservedAtUtc < now - TimeSpan.FromMinutes(2) - _options.ClockSkew ||
+                state.ObservedAtUtc > now + _options.ClockSkew)
+                throw new ConnectorClockSkewException(now - state.ObservedAtUtc);
         }, cancellationToken).ConfigureAwait(false);
     }
 
@@ -752,13 +755,15 @@ public sealed partial class HttpConnectorEnrollmentClient : IConnectorEnrollment
         var payload = await ReadBoundedPayloadAsync(response.Content, cancellationToken).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
         {
-            throw ToFailure(response.StatusCode, payload, "Connector enrollment HTTP request failed");
+            throw ToFailure(response.StatusCode, payload, "Connector enrollment HTTP request failed",
+                RetryAfter(response.Headers.RetryAfter));
         }
 
         return ParseJson<T>(payload);
     }
 
-    private static ConnectorEnrollmentProtocolException ToFailure(HttpStatusCode statusCode, byte[] payload, string context)
+    private static ConnectorEnrollmentProtocolException ToFailure(HttpStatusCode statusCode, byte[] payload, string context,
+        TimeSpan? retryAfter = null)
     {
         DeviceAccessFailure? failure = null;
         try { failure = JsonSerializer.Deserialize<DeviceAccessFailure>(payload, JsonOptions); }
@@ -766,8 +771,20 @@ public sealed partial class HttpConnectorEnrollmentClient : IConnectorEnrollment
         return new ConnectorEnrollmentProtocolException(
             failure?.Message ?? $"{context} with status {(int)statusCode}.",
             (int)statusCode,
-            failure?.Code);
+            failure?.Code,
+            retryAfter);
     }
+
+    /// <summary>A bounded Retry-After hint; an absent, past or malformed value gives none.</summary>
+    internal static TimeSpan? RetryAfter(RetryConditionHeaderValue? header)
+    {
+        var delay = header?.Delta ?? (header?.Date is { } date ? date - DateTimeOffset.UtcNow : null);
+        return delay is { } value && value > TimeSpan.Zero
+            ? value > MaximumRetryAfter ? MaximumRetryAfter : value
+            : null;
+    }
+
+    private static readonly TimeSpan MaximumRetryAfter = TimeSpan.FromMinutes(5);
 
     private static T ParseJson<T>(byte[] payload)
     {

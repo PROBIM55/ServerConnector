@@ -109,6 +109,7 @@ ${conn.variant === 'pending' ? `<div style="padding: 12px 14px; border-radius: 1
 ${primary.waiting ? `<button type="button" class="si-btn waiting" disabled aria-busy="true">${esc(primary.label)}</button>` : button(primary.label, 'si-btn', { cmd: primary.cmd })}
 ${secondary ? button(secondary.label, 'si-sec', { cmd: secondary.cmd }) : ''}
 </div>
+${conn.wait ? `<div role="status" style="color: var(--siSub)">${esc(state.progress)}${PC.waitSteps(conn.wait)}</div>` : ''}
 <span style="color: var(--siDim); font-size: 12px">Прежний Structura Connector можно не удалять: он продолжит работать рядом.</span>
 <div class="si-links">${button('Журнал', 'linklike', { cmd: 'settings-log', data: { section: 'settings' } })}${button('Сохранить диагностику', 'linklike', { cmd: 'diagnostics', data: { section: 'settings' } })}${state.legacy?.canRestore ? button('Вернуть прежний Structura Connector', 'linklike', { cmd: 'legacy-restore', data: { section: 'settings' } }) : ''}</div>
 </section>

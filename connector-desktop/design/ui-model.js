@@ -12,6 +12,7 @@
     snapshotSeen: false,
     status: 'Не подключено', ready: false, busy: false, selected: true,
     signInPending: false, signOutPending: false, needsSignIn: false, hasCredential: false, progress: '',
+    waitPhase: '', waitElapsed: null, waitBackground: false,
     allowed: { structura: [], platform: [] },
     module: {}, fields: {}, files: [], ifcFiles: [], jobs: [],
     folders: [], folderStatus: '', legacy: null, cadSessions: [],
@@ -26,7 +27,9 @@
     }
   });
 
-  const CONNECTION_COMMANDS = ['connect-common', 'connect', 'reconnect', 'signout', 'disconnect', 'connect-platform'];
+  const CONNECTION_COMMANDS = ['connect-common', 'connect', 'reconnect', 'signout', 'disconnect', 'connect-platform', 'connect-cancel'];
+  /** Server phases of the connection wait, in order (CommonConnectorConnectionPhase). */
+  const WAIT_PHASES = [['access', 'Выдаём доступ'], ['network', 'Подключаем защищённую сеть (NetBird)'], ['verify', 'Проверяем соединение']];
   const inferKind = message => /^Действие запущено/.test(message) ? 'progress'
     : /^(Готово|Подключено|Состояние обновлено|Вы вышли)/.test(message) ? 'ok'
     : /отменено|отменён/i.test(message) ? 'info'
@@ -71,6 +74,10 @@
       ['updateAvailable', 'updateAvailable'], ['agrInstalling', 'agrInstalling'], ['windowMaximized', 'maximized'],
       ['commonAccessSelected', 'selected']]) if (typeof snap[key] === 'boolean') state[name] = snap[key];
     if (typeof snap.connectionProgress === 'string') state.progress = snap.connectionProgress;
+    // The server-side wait of a running connect (CommonAccessRuntime.Wait); empty when nothing waits.
+    if (typeof snap.connectionPhase === 'string') state.waitPhase = WAIT_PHASES.some(([id]) => id === snap.connectionPhase) ? snap.connectionPhase : '';
+    if ('connectionElapsedSeconds' in snap) state.waitElapsed = num(snap.connectionElapsedSeconds);
+    if (typeof snap.connectionBackground === 'boolean') state.waitBackground = snap.connectionBackground;
     if (snap.uiTheme === 'dark' || snap.uiTheme === 'light') state.theme = snap.uiTheme;
     if (typeof snap.nativeCaption === 'boolean') state.nativeCaption = snap.nativeCaption;
     if (snap.agrRuntime && typeof snap.agrRuntime === 'object') state.agrRuntime = {
@@ -176,6 +183,11 @@
     return Math.floor(m / 60) + ' ч ' + (m % 60) + ' мин';
   };
   const isToday = (iso, now = new Date()) => { const d = dateOf(iso); return !!d && sameDay(d, now); };
+  /** Elapsed wait to the second: «45 с», «3 мин 05 с». */
+  const elapsed = seconds => {
+    const s = Math.max(0, Math.floor(seconds));
+    return s < 60 ? s + ' с' : Math.floor(s / 60) + ' мин ' + pad(s % 60) + ' с';
+  };
 
   /* ---- derived facts ------------------------------------------------------------------------------ */
   const has = (state, product, module) => {
@@ -189,8 +201,9 @@
     return has(state, prefer, module) ? prefer : has(state, other, module) ? other : prefer;
   };
 
+  const PROBLEM_TEXT = /Обратитесь к администратору|NetBird на этом компьютере|Время на компьютере/;
   const PROBLEM_STATUSES = ['Доступ отозван', 'Нет доступа', 'Не удалось подключиться', 'Требуется установка защищённого подключения', 'Подключение не настроено'];
-  const phaseOf = text => /Ожидаем подтверждения доступа|Проверяем защищённое соединение/.test(text) ? 3
+  const phaseOf = text => /Выдаём доступ|Подключаем защищённую сеть|Проверяем (защищённое )?соединение/.test(text) ? 3
     : /Запускаем фоновую работу|Подключаем общие папки/.test(text) ? 4 : 2;
   const connection = state => {
     const signingOut = state.signOutPending === true;
@@ -198,8 +211,9 @@
     const busy = state.busy === true;
     const ready = state.ready === true && !busy;
     const pending = !busy && !ready && state.status === 'Ожидает выдачи доступа';
-    const problem = !busy && !ready && PROBLEM_STATUSES.includes(state.status);
-    const errorText = !busy && !ready ? state.connectError || (problem ? state.status + '.' : null) : null;
+    // Definitive outcomes arrive as full sentences (CommonAccessRuntime.ProblemText).
+    const problem = !busy && !ready && (PROBLEM_STATUSES.includes(state.status) || PROBLEM_TEXT.test(state.status));
+    const errorText = !busy && !ready ? state.connectError || (problem ? state.status + (/[.!?]$/.test(state.status) ? '' : '.') : null) : null;
     const phase = waiting ? 1 : busy ? phaseOf(state.progress) : pending ? 4 : 0;
     const variant = pending ? 'pending' : errorText ? 'error' : 'normal';
     const hasCredential = state.hasCredential === true, needsSignIn = state.needsSignIn === true;
@@ -211,7 +225,16 @@
       : pending ? ['Ожидает доступа', 't-warn', 'warn']
       : showSignIn ? [state.status || 'Не подключено', problem ? 't-bad' : 't-warn', problem ? 'bad' : 'warn']
       : ['Нет связи', problem ? 't-bad' : 't-warn', problem ? 'bad' : 'warn'];
-    return { ready, busy, waiting, signingOut, pending, phase, variant, errorText, chip, hasCredential, needsSignIn, showSignIn, offline: !ready && !showSignIn };
+    // A connect still waiting for the server: its phase, elapsed time and the background continuation
+    // (past the foreground budget the window is not blocked; the connector turns «Подключено» by itself).
+    const connecting = busy && !signingOut && !waiting;
+    const waitAt = connecting ? WAIT_PHASES.findIndex(([id]) => id === state.waitPhase) : -1;
+    const wait = waitAt < 0 ? null : {
+      phase: state.waitPhase, step: waitAt + 1, label: WAIT_PHASES[waitAt][1],
+      elapsed: state.waitElapsed === null ? '' : elapsed(state.waitElapsed), background: state.waitBackground === true
+    };
+    return { ready, busy, waiting, signingOut, pending, phase, variant, errorText, chip, hasCredential, needsSignIn, showSignIn, offline: !ready && !showSignIn,
+      wait, background: wait?.background === true, canCancel: connecting };
   };
 
   /** «NetBird напрямую · шлюз 100.108.74.8» from the account facts; empty when nothing is known. */
@@ -297,5 +320,5 @@
     return true;
   };
 
-  Object.assign(PC, { model: { create, apply, pushNotice, localNotice, inferKind, has, hasAny, productFor, connection, network, jobs, bridge, agr, cad, folders, standard, fieldName, runningJob, openJob, CONNECTION_COMMANDS, time: { shortTime, fullTime, checkedText, span, isToday } } });
+  Object.assign(PC, { model: { create, apply, pushNotice, localNotice, inferKind, has, hasAny, productFor, connection, network, jobs, bridge, agr, cad, folders, standard, fieldName, runningJob, openJob, CONNECTION_COMMANDS, WAIT_PHASES, time: { shortTime, fullTime, checkedText, span, isToday, elapsed } } });
 })();
