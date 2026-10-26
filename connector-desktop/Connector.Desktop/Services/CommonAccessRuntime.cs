@@ -26,6 +26,8 @@ public sealed class CommonAccessRuntime : ICommonConnectorRequestTransport, IOve
     private int _selected;
     private int _readyObserved;
     private int _vpnSetupRequired;
+    private int _provisioningTimedOut;
+    private int _clockSkewMinutes;
     // The runtime assigns this only after it owns the connection lifecycle
     // mutex.  A request that was in flight for the preceding session must not
     // be able to invalidate the replacement session.
@@ -63,7 +65,11 @@ public sealed class CommonAccessRuntime : ICommonConnectorRequestTransport, IOve
     /// <summary>Overlay address of the protected control plane: the gateway this computer reaches the server through.</summary>
     public Uri? GatewayUri => _controlPlaneBaseUri;
     public string DisplayStatus => !IsConfigured ? "Подключение не настроено" :
-        Volatile.Read(ref _vpnSetupRequired) != 0 ? "Требуется установка защищённого подключения" : Current?.Status switch
+        Volatile.Read(ref _vpnSetupRequired) != 0 ? "Требуется установка защищённого подключения" :
+        Volatile.Read(ref _provisioningTimedOut) != 0 && Current?.Status == CommonConnectorConnectionStatus.Disconnected
+            ? "Сервер ещё не подтвердил защищённое соединение" :
+        Volatile.Read(ref _clockSkewMinutes) is > 0 and var skewMinutes && Current?.DiagnosticCode == "clock_skew"
+            ? ClockSkewText(skewMinutes) : Current?.Status switch
     {
         CommonConnectorConnectionStatus.Ready => "Подключено",
         CommonConnectorConnectionStatus.EnrollmentRequired => "Требуется вход",
@@ -145,6 +151,8 @@ public sealed class CommonAccessRuntime : ICommonConnectorRequestTransport, IOve
     {
         Select();
         var coordinator = RequireCoordinator();
+        Volatile.Write(ref _provisioningTimedOut, 0);
+        Volatile.Write(ref _clockSkewMinutes, 0);
         try
         {
             try
@@ -184,8 +192,18 @@ public sealed class CommonAccessRuntime : ICommonConnectorRequestTransport, IOve
             if (completed.Status is CommonConnectorConnectionStatus.AccessPending or
                 CommonConnectorConnectionStatus.AwaitingVpnAuthorization)
             {
-                throw new InvalidOperationException("Подключение пока не готово. Повторите проверку.");
+                // The waiter's budget ran out while the server still waits for this
+                // computer's NetBird peer (or for its providers). Admission is closed;
+                // the durable device is kept and a later attempt resumes it.
+                Volatile.Write(ref _provisioningTimedOut, 1);
+                throw new CommonConnectionPendingException(
+                    "Сервер ещё не подтвердил защищённое соединение этого компьютера. Повторите подключение через минуту.");
             }
+        }
+        catch (ConnectorClockSkewException exception)
+        {
+            Volatile.Write(ref _clockSkewMinutes, ClockSkewMinutes(exception.Skew));
+            throw;
         }
         finally { ObserveConnectionState(Volatile.Read(ref _accessSessionGeneration)); }
     }
@@ -201,9 +219,16 @@ public sealed class CommonAccessRuntime : ICommonConnectorRequestTransport, IOve
 
     public async Task SignOutAsync(CancellationToken cancellationToken)
     {
+        Volatile.Write(ref _provisioningTimedOut, 0);
+        Volatile.Write(ref _clockSkewMinutes, 0);
         try
         {
             await RequireCoordinator().SignOutAsync(cancellationToken);
+        }
+        catch (ConnectorClockSkewException exception)
+        {
+            Volatile.Write(ref _clockSkewMinutes, ClockSkewMinutes(exception.Skew));
+            throw;
         }
         finally { ObserveConnectionState(Volatile.Read(ref _accessSessionGeneration)); }
     }
@@ -264,6 +289,15 @@ public sealed class CommonAccessRuntime : ICommonConnectorRequestTransport, IOve
         }
     }
 
+    /// <summary>A server rejection is not trusted while the clocks disagree; the user fixes the clock.</summary>
+    public static string ClockSkewText(TimeSpan skew) => ClockSkewText(ClockSkewMinutes(skew));
+
+    private static string ClockSkewText(int minutes) =>
+        $"Время на компьютере расходится с сервером на {minutes} мин. Исправьте время Windows и повторите.";
+
+    private static int ClockSkewMinutes(TimeSpan skew) =>
+        (int)Math.Clamp(Math.Ceiling(skew.Duration().TotalMinutes), 1, int.MaxValue);
+
     private static bool IsCurrentSnapshotReady(CommonConnectorConnectionSnapshot? snapshot) =>
         snapshot is { Status: CommonConnectorConnectionStatus.Ready, AccessProfile: { } profile } &&
         profile.ExpiresAtUtc > DateTimeOffset.UtcNow;
@@ -289,6 +323,12 @@ internal sealed record CommonAccessUpgradePortsResult(
     internal static CommonAccessUpgradePortsResult Available(CommonAccessUpgradeRuntimePorts ports) => new(ports, null);
     internal static CommonAccessUpgradePortsResult Unavailable(CommonAccessUpgradePortsBlocker blocker) => new(null, blocker);
 }
+
+/// <summary>
+/// The bounded wait for server-side provisioning (NetBird peer, providers) ended
+/// before the server confirmed this computer. Nothing is revoked or deleted.
+/// </summary>
+public sealed class CommonConnectionPendingException(string message) : InvalidOperationException(message);
 
 /// <summary>
 /// A Ready-to-invalid transition is permanently associated with the session

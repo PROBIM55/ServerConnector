@@ -119,8 +119,36 @@ public sealed class CommonConnectorConnectionCoordinator
         RunSerializedAsync(async ct =>
         {
             Set(CommonConnectorConnectionStatus.Enrolling, null, null, "resuming_enrollment");
-            var receipt = await _enrollment.ResumeAsync(ct).ConfigureAwait(false);
-            return await EstablishAsync(receipt, ct).ConfigureAwait(false);
+            for (var attempt = 1; ; attempt++)
+            {
+                try
+                {
+                    var receipt = await _enrollment.ResumeAsync(ct).ConfigureAwait(false);
+                    return await EstablishAsync(receipt, ct).ConfigureAwait(false);
+                }
+                catch (ConnectorEnrollmentProtocolException exception) when (
+                    attempt == 1 && IsIssuedCredentialRejected(exception) &&
+                    _enrollment is IConnectorAccountSessionClient accounts)
+                {
+                    // A device revoked on the server (signed out elsewhere, by the
+                    // administrator, or a sign-out whose confirmation was lost) can
+                    // never be restored. It is set aside only after the server rejects
+                    // its key-bound proof twice with agreeing clocks. A clock mismatch
+                    // is reported as such; any other failure keeps the credential and
+                    // reports the original rejection.
+                    CloseAuthorizationForNewAdmissions();
+                    bool? forgotten;
+                    try { forgotten = await accounts.ForgetRejectedEnrollmentAsync(ct).ConfigureAwait(false); }
+                    catch (Exception other) when (other is not ConnectorClockSkewException && !ct.IsCancellationRequested)
+                    {
+                        forgotten = null;
+                    }
+                    if (forgotten is null) throw;
+                    if (forgotten.Value)
+                        return Set(CommonConnectorConnectionStatus.EnrollmentRequired, null, null, "device_revoked");
+                    // The server accepted the key and refreshed the receipt: retry once.
+                }
+            }
         }, cancellationToken);
 
     public ValueTask<CommonConnectorConnectionSnapshot> ReconnectAsync(
@@ -435,10 +463,13 @@ public sealed class CommonConnectorConnectionCoordinator
     }
 
     private static bool RequiresBrowserSignIn(ConnectorEnrollmentProtocolException exception) =>
-        (exception.StatusCode == (int)HttpStatusCode.Unauthorized &&
-         string.Equals(exception.ErrorCode, "device_unauthorized", StringComparison.Ordinal)) ||
+        IsIssuedCredentialRejected(exception) ||
         (exception.StatusCode == (int)HttpStatusCode.NotFound &&
          string.Equals(exception.ErrorCode, "pending_enrollment_absent", StringComparison.Ordinal));
+
+    private static bool IsIssuedCredentialRejected(ConnectorEnrollmentProtocolException exception) =>
+        exception.StatusCode == (int)HttpStatusCode.Unauthorized &&
+        string.Equals(exception.ErrorCode, "device_unauthorized", StringComparison.Ordinal);
 
     private CommonConnectorConnectionSnapshot Set(
         CommonConnectorConnectionStatus status,
@@ -490,6 +521,7 @@ public sealed class CommonConnectorConnectionCoordinator
 
     private static string DiagnosticFor(Exception exception) => exception switch
     {
+        ConnectorClockSkewException => "clock_skew",
         ConnectorEnrollmentProtocolException { StatusCode: 502 or 503 or 504 } => "service_temporarily_unavailable",
         HttpRequestException { StatusCode: HttpStatusCode.BadGateway or HttpStatusCode.ServiceUnavailable or HttpStatusCode.GatewayTimeout } => "service_temporarily_unavailable",
         ConnectorEnrollmentProtocolException protocol when !string.IsNullOrWhiteSpace(protocol.ErrorCode) => protocol.ErrorCode,

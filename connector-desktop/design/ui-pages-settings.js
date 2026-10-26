@@ -43,7 +43,7 @@ ${state.updateAvailable ? '<span style="color: var(--text2)">Обновлени�
 <section class="card" style="padding: 20px; display: flex; flex-direction: column; gap: 12px">
 <h2 class="h2">Учётная запись и устройство</h2>
 <div style="display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 7px 12px">${accountRows(state)}</div>
-<div style="display: flex; gap: 8px">${button('Переподключить', 'b b-sec b-sm', { cmd: 'reconnect' })}${button('Выйти', 'b b-danger b-sm', { cmd: 'signout' })}</div>
+<div style="display: flex; gap: 8px">${M.connection(state).signingOut ? '<span class="lbl">Выходим из учётной записи…</span>' : button('Переподключить', 'b b-sec b-sm', { cmd: 'reconnect' }) + button('Выйти', 'b b-danger b-sm', { cmd: 'signout' })}</div>
 </section>
 <section class="card" style="padding: 20px; display: flex; flex-direction: column; gap: 12px">
 <h2 class="h2">Прежний Structura Connector</h2>

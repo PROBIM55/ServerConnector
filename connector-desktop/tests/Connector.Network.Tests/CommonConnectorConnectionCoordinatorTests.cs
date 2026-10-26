@@ -544,6 +544,219 @@ public sealed class CommonConnectorConnectionCoordinatorTests
         Assert.Equal(CommonConnectorConnectionStatus.Ready, (await active).Status);
     }
 
+    [Fact]
+    public async Task Restore_DeviceRevokedOnServer_ForgetsCredentialAndRequiresSignIn()
+    {
+        var events = new List<string>();
+        var access = new AccountAccess { ResumeFailure = DeviceUnauthorized(), ForgetResult = true };
+        var coordinator = new CommonConnectorConnectionCoordinator(
+            access, new FakeOverlay(events, ReadyOverlay()), new FakeGate(events));
+
+        var snapshot = await coordinator.ResumeAndConnectAsync();
+
+        Assert.Equal(CommonConnectorConnectionStatus.EnrollmentRequired, snapshot.Status);
+        Assert.Equal("device_revoked", snapshot.DiagnosticCode);
+        Assert.Null(snapshot.DeviceId);
+        Assert.Equal(1, access.ForgetCalls);
+        Assert.False(access.HasCredential);
+        Assert.Empty(events);
+    }
+
+    [Fact]
+    public async Task Restore_RejectedCertificateWhileServerKeepsEnrollment_KeepsCredential()
+    {
+        var events = new List<string>();
+        var access = new AccountAccess { ResumeFailure = DeviceUnauthorized(), ForgetResult = false };
+        var coordinator = new CommonConnectorConnectionCoordinator(
+            access, new FakeOverlay(events, ReadyOverlay()), new FakeGate(events));
+
+        var error = await Assert.ThrowsAsync<ConnectorEnrollmentProtocolException>(() =>
+            coordinator.ResumeAndConnectAsync().AsTask());
+
+        Assert.Equal("device_unauthorized", error.ErrorCode);
+        Assert.Equal(CommonConnectorConnectionStatus.EnrollmentRequired, coordinator.Current.Status);
+        Assert.Equal("issued_credential_rejected", coordinator.Current.DiagnosticCode);
+        Assert.True(access.HasCredential);
+        Assert.Equal(1, access.ForgetCalls);
+        Assert.Equal(2, access.ResumeCalls); // retried once with the refreshed receipt
+    }
+
+    [Fact]
+    public async Task Restore_KeyAcceptedAfterRejection_RetriesWithRefreshedReceipt()
+    {
+        var events = new List<string>();
+        var access = new AccountAccess
+        {
+            ResumeFailure = DeviceUnauthorized(), ResumeFailsOnlyOnce = true,
+            StateFailure = new HttpRequestException("reached the retried connection"),
+        };
+        var coordinator = new CommonConnectorConnectionCoordinator(
+            access, new FakeOverlay(events, ReadyOverlay()), new FakeGate(events));
+
+        await Assert.ThrowsAsync<HttpRequestException>(() => coordinator.ResumeAndConnectAsync().AsTask());
+
+        Assert.Equal(2, access.ResumeCalls);
+        Assert.Equal(1, access.ForgetCalls);
+        Assert.True(access.HasCredential);
+    }
+
+    [Fact]
+    public async Task Restore_RejectionWithClockSkew_ReportsClockAndKeepsCredential()
+    {
+        var events = new List<string>();
+        var access = new AccountAccess
+        {
+            ResumeFailure = DeviceUnauthorized(),
+            ForgetFailure = new ConnectorClockSkewException(TimeSpan.FromMinutes(4)),
+        };
+        var coordinator = new CommonConnectorConnectionCoordinator(
+            access, new FakeOverlay(events, ReadyOverlay()), new FakeGate(events));
+
+        var error = await Assert.ThrowsAsync<ConnectorClockSkewException>(() => coordinator.ResumeAndConnectAsync().AsTask());
+
+        Assert.Equal(TimeSpan.FromMinutes(4), error.Skew);
+        Assert.Equal(CommonConnectorConnectionStatus.Failed, coordinator.Current.Status);
+        Assert.Equal("clock_skew", coordinator.Current.DiagnosticCode);
+        Assert.True(access.HasCredential);
+    }
+
+    [Fact]
+    public async Task Restore_KeyProofUnreachable_KeepsCredentialAndOriginalRejection()
+    {
+        var events = new List<string>();
+        var access = new AccountAccess
+        {
+            ResumeFailure = DeviceUnauthorized(),
+            ForgetFailure = new HttpRequestException("network unreachable"),
+        };
+        var coordinator = new CommonConnectorConnectionCoordinator(
+            access, new FakeOverlay(events, ReadyOverlay()), new FakeGate(events));
+
+        var error = await Assert.ThrowsAsync<ConnectorEnrollmentProtocolException>(() =>
+            coordinator.ResumeAndConnectAsync().AsTask());
+
+        Assert.Equal("device_unauthorized", error.ErrorCode);
+        Assert.Equal(1, access.ForgetCalls);
+        Assert.True(access.HasCredential);
+        Assert.Equal("issued_credential_rejected", coordinator.Current.DiagnosticCode);
+    }
+
+    [Theory]
+    [InlineData(503, "service_unavailable")]
+    [InlineData(408, "timeout")]
+    [InlineData(0, null)]
+    public async Task Restore_TransientFailure_NeverForgetsCredential(int status, string? code)
+    {
+        var events = new List<string>();
+        var access = new AccountAccess
+        {
+            ResumeFailure = status == 0
+                ? new HttpRequestException("connection reset")
+                : new ConnectorEnrollmentProtocolException("transient", status, code),
+            ForgetResult = true,
+        };
+        var coordinator = new CommonConnectorConnectionCoordinator(
+            access, new FakeOverlay(events, ReadyOverlay()), new FakeGate(events));
+
+        await Assert.ThrowsAnyAsync<Exception>(() => coordinator.ResumeAndConnectAsync().AsTask());
+
+        Assert.Equal(0, access.ForgetCalls);
+        Assert.True(access.HasCredential);
+        Assert.Equal(CommonConnectorConnectionStatus.Failed, coordinator.Current.Status);
+    }
+
+    [Fact]
+    public async Task SignOut_RevocationNotConfirmedInWindow_KeepsCredential()
+    {
+        var events = new List<string>();
+        var access = new AccountAccess
+        {
+            RevokeFailure = new ConnectorEnrollmentProtocolException("pending", 408, "self_revoke_timeout"),
+        };
+        var coordinator = new CommonConnectorConnectionCoordinator(
+            access, new FakeOverlay(events, ReadyOverlay()), new FakeGate(events));
+
+        var error = await Assert.ThrowsAsync<ConnectorEnrollmentProtocolException>(() => coordinator.SignOutAsync().AsTask());
+
+        Assert.Equal("self_revoke_timeout", error.ErrorCode);
+        Assert.Equal(0, access.ClearCalls);
+        Assert.True(access.HasCredential);
+        Assert.Equal(CommonConnectorConnectionStatus.Failed, coordinator.Current.Status);
+
+        access.RevokeFailure = null;
+        var signedOut = await coordinator.SignOutAsync();
+        Assert.Equal(CommonConnectorConnectionStatus.EnrollmentRequired, signedOut.Status);
+        Assert.Equal("signed_out", signedOut.DiagnosticCode);
+        Assert.False(access.HasCredential);
+    }
+
+    private static ConnectorEnrollmentProtocolException DeviceUnauthorized() =>
+        new("issued device credential rejected", (int)HttpStatusCode.Unauthorized, "device_unauthorized");
+
+    private sealed class AccountAccess : IConnectorEnrollmentClient, IConnectorDeviceAccessClient,
+        IConnectorAccountSessionClient, IConnectorExactDeviceRevocationClient
+    {
+        public Exception? ResumeFailure { get; init; }
+        public bool ResumeFailsOnlyOnce { get; init; }
+        public Exception? StateFailure { get; init; }
+        public int ResumeCalls { get; private set; }
+        public bool ForgetResult { get; init; }
+        public Exception? ForgetFailure { get; init; }
+        public Exception? RevokeFailure { get; set; }
+        public int ForgetCalls { get; private set; }
+        public int ClearCalls { get; private set; }
+        public bool HasCredential { get; private set; } = true;
+
+        public ValueTask<DeviceEnrollmentResponse> EnrollAsync(string enrollmentToken, string deviceDisplayName,
+            CancellationToken cancellationToken = default) => throw new InvalidOperationException("Enrollment is not expected.");
+
+        public ValueTask<DeviceEnrollmentResponse> ResumeAsync(CancellationToken cancellationToken = default)
+        {
+            ResumeCalls++;
+            if (ResumeFailsOnlyOnce && ResumeCalls > 1)
+                return ValueTask.FromResult(new DeviceEnrollmentResponse(
+                    DeviceAccessProtocol.Version, Guid.NewGuid(), "device-1", "certificate", "issuer",
+                    DateTimeOffset.UtcNow.AddHours(1), 1));
+            return ValueTask.FromException<DeviceEnrollmentResponse>(ResumeFailure ?? new InvalidOperationException("Resume must fail."));
+        }
+
+        public ValueTask<DeviceEnrollmentResponse?> GetReceiptAsync(CancellationToken cancellationToken = default) =>
+            throw new InvalidOperationException("Receipt is not expected.");
+
+        public ValueTask<DeviceAccessProfile> GetAccessProfileAsync(CancellationToken cancellationToken = default) =>
+            throw new InvalidOperationException("Profile is not expected.");
+
+        public ValueTask<ConnectorVpnBootstrap> GetVpnBootstrapAsync(CancellationToken cancellationToken = default) =>
+            throw new InvalidOperationException("Bootstrap is not expected.");
+
+        public ValueTask<ConnectorVpnTransportState> GetVpnStateAsync(CancellationToken cancellationToken = default) =>
+            ValueTask.FromException<ConnectorVpnTransportState>(StateFailure ?? new InvalidOperationException("VPN state is not expected."));
+
+        public ValueTask<ConnectorSignOutIdentity?> GetSignOutIdentityAsync(CancellationToken cancellationToken = default) =>
+            ValueTask.FromResult<ConnectorSignOutIdentity?>(HasCredential ? new(Guid.Parse("11111111-1111-1111-1111-111111111111"), "device-1") : null);
+
+        public ValueTask ClearRevokedSessionAsync(ConnectorSignOutIdentity identity, CancellationToken cancellationToken = default)
+        {
+            ClearCalls++;
+            HasCredential = false;
+            return ValueTask.CompletedTask;
+        }
+
+        public ValueTask<bool> ForgetRejectedEnrollmentAsync(CancellationToken cancellationToken = default)
+        {
+            ForgetCalls++;
+            if (ForgetFailure is not null) return ValueTask.FromException<bool>(ForgetFailure);
+            if (ForgetResult) HasCredential = false;
+            return ValueTask.FromResult(ForgetResult);
+        }
+
+        public ValueTask<bool> InspectExactDeviceRevocationAsync(CancellationToken cancellationToken = default) =>
+            ValueTask.FromResult(true);
+
+        public ValueTask RevokeAndConfirmExactAsync(string deviceId, CancellationToken cancellationToken = default) =>
+            RevokeFailure is null ? ValueTask.CompletedTask : ValueTask.FromException(RevokeFailure);
+    }
+
     private static ConnectorVpnTransportState State(string status) => new(
         "device-1",
         1,

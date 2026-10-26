@@ -44,7 +44,7 @@
       + (runningCount ? (runningCount === 1 ? 'одно задание выполняется' : runningCount + ' ' + PC.plural(runningCount, 'задание', 'задания', 'заданий') + ' выполняются') : 'активных заданий нет')
       + '. ' + (items.length ? 'Требуют решения: ' + items.length + '.' : 'Решений не требуется.');
     const head = conn.ready ? { title: 'Компьютер на связи с Платформой', bg: 'okSoft', ink: 'ok', path: 'm5 12 4.5 4.5L19 7' }
-      : conn.busy ? { title: 'Подключаемся к Платформе', bg: 'accentSoft', ink: 'accentInk', path: 'M12 6v6l4 2' }
+      : conn.busy ? { title: conn.signingOut ? 'Выходим из учётной записи' : 'Подключаемся к Платформе', bg: 'accentSoft', ink: 'accentInk', path: 'M12 6v6l4 2' }
       : { title: 'Нет связи с Платформой', bg: 'warnSoft', ink: 'warnInk', path: 'M12 7v6M12 17h.01' };
     const runningCard = running ? `<button type="button" data-ui="job" data-id="${esc(running.id)}" class="row" style="flex: 0 1 360px; display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-radius: 10px; border: 1px solid var(--line); background: var(--raised); color: inherit; text-align: left; cursor: pointer; font: inherit">
 <span style="display: flex; justify-content: space-between; gap: 10px"><span style="font-weight: 650">${esc(running.title)}</span><span style="color: var(--accentInk); font-weight: 700">${running.progress} %</span></span>

@@ -34,6 +34,24 @@ public sealed class FileConnectorEnrollmentStateStore
         finally { _gate.Release(); }
     }
 
+    /// <summary>
+    /// Moves the state aside as <c>connector-enrollment-v1.json.rejected-&lt;UTC&gt;</c>.
+    /// The store then reads as empty; the file can be renamed back by hand.
+    /// </summary>
+    internal async ValueTask<string?> ArchiveRejectedAsync(DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!File.Exists(StateFilePath)) return null;
+            var archive = $"{StateFilePath}.rejected-{now.UtcDateTime:yyyyMMdd'T'HHmmssfff'Z'}";
+            File.Move(StateFilePath, archive);
+            return archive;
+        }
+        finally { _gate.Release(); }
+    }
+
     internal async ValueTask<StoredEnrollmentState?> LoadAsync(CancellationToken cancellationToken)
     {
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);

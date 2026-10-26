@@ -951,16 +951,40 @@ public partial class MainWindow : Window, IShellHost, IConnectorHost
         {
             if (_runtimeServices.CommonAccess.IsSelected)
             {
-                if (!_runtimeServices.CommonAccess.HasStoredCredential) return;
-                var attempt = _runtimeServices.CommonOperations.Start(CommonConnectionOperation.Restore,
-                    (owner, ct) => _runtimeServices.ConnectCommonAsync(null, true, ct, owner.Report),
-                    CancellationToken.None);
-                try { await attempt.Completion; }
-                catch (OperationCanceledException) { /* Explicit sign-in/sign-out took ownership. */ }
-                catch (Exception ex)
+                // Right after Windows starts the server may still wait for this
+                // computer's NetBird peer longer than one bounded wait. One more
+                // automatic attempt resumes the same device; it never re-enrolls.
+                for (var restore = 1; restore <= 2; restore++)
                 {
-                    if (_runtimeServices.CommonOperations.IsLatest(attempt.Generation))
-                        AppendLog($"Не удалось восстановить подключение ({ex.GetType().Name}).");
+                    if (!_runtimeServices.CommonAccess.HasStoredCredential) return;
+                    var attempt = _runtimeServices.CommonOperations.Start(CommonConnectionOperation.Restore,
+                        (owner, ct) => _runtimeServices.ConnectCommonAsync(null, true, ct, owner.Report),
+                        CancellationToken.None);
+                    try
+                    {
+                        await attempt.Completion;
+                        if (_runtimeServices.CommonAccess.Current?.DiagnosticCode == "device_revoked")
+                            AppendLog("Доступ этого компьютера отозван на сервере. Сохранённый вход удалён — войдите через Платформу заново.");
+                        return;
+                    }
+                    catch (OperationCanceledException) { return; } // Explicit sign-in/sign-out took ownership.
+                    catch (CommonConnectionPendingException) when (restore == 1 &&
+                        _runtimeServices.CommonOperations.IsLatest(attempt.Generation))
+                    {
+                        AppendLog("Сервер ещё не подтвердил защищённое соединение. Повторяем восстановление подключения.");
+                    }
+                    catch (Exception ex)
+                    {
+                        if (_runtimeServices.CommonOperations.IsLatest(attempt.Generation))
+                            AppendLog(ex switch
+                            {
+                                CommonConnectionPendingException => "Не удалось восстановить подключение: " + ex.Message,
+                                Connector.Access.Client.ConnectorClockSkewException skew =>
+                                    "Не удалось восстановить подключение: " + CommonAccessRuntime.ClockSkewText(skew.Skew),
+                                _ => $"Не удалось восстановить подключение ({ex.GetType().Name})."
+                            });
+                        return;
+                    }
                 }
                 return;
             }

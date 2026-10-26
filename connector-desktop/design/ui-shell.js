@@ -50,7 +50,7 @@ ${windowButtons}</header>`;
     const popover = state.ui.accountOpen ? `<div class="card popover" data-ui="popover">
 <div style="display: flex; align-items: center; gap: 8px"><span style="width: 8px; height: 8px; border-radius: 50%; background: ${conn.ready ? 'var(--ok)' : 'var(--warn)'}"></span><strong>${esc(conn.chip[0])}</strong></div>
 <div style="display: grid; grid-template-columns: 86px minmax(0, 1fr); gap: 6px 10px; font-size: 12.5px">${fact('Устройство', account?.device)}${fact('Сеть', net.route ? 'NetBird · ' + net.route : account?.address ? 'NetBird' : '')}${fact('Адрес', account?.address)}<span class="lbl">Доступ</span><span>${esc(accessText(state))}</span></div>
-<div style="display: flex; gap: 8px">${button('Переподключить', 'b b-sec b-sm', { cmd: 'reconnect', style: 'flex: 1', data: { section: 'settings' } })}${button('Выйти', 'b b-danger b-sm', { cmd: 'signout', style: 'flex: 1', data: { section: 'settings' } })}</div>
+<div style="display: flex; gap: 8px">${conn.signingOut ? '' : button('Переподключить', 'b b-sec b-sm', { cmd: 'reconnect', style: 'flex: 1', data: { section: 'settings' } }) + button('Выйти', 'b b-danger b-sm', { cmd: 'signout', style: 'flex: 1', data: { section: 'settings' } })}</div>
 </div>` : '';
     return `<aside class="side" aria-label="Разделы">
 ${group('main')}
@@ -81,7 +81,7 @@ ${popover}
   const connectionBanner = state => {
     const conn = M.connection(state);
     if (!conn.offline) return '';
-    if (conn.busy) return `<section class="banner" role="status" style="background: var(--accentSoft); border: 1px solid var(--accent)"><div style="flex: 1; min-width: 260px"><div style="font-weight: 750; color: var(--accentInk)">Подключаемся к Платформе</div><div style="color: var(--text2)">${esc(state.progress || 'Восстанавливаем вход и защищённое соединение…')}</div></div></section>`;
+    if (conn.busy) return `<section class="banner" role="status" style="background: var(--accentSoft); border: 1px solid var(--accent)"><div style="flex: 1; min-width: 260px"><div style="font-weight: 750; color: var(--accentInk)">${conn.signingOut ? 'Выходим из учётной записи' : 'Подключаемся к Платформе'}</div><div style="color: var(--text2)">${esc(state.progress || (conn.signingOut ? 'Выполняем выход…' : 'Восстанавливаем вход и защищённое соединение…'))}</div></div></section>`;
     return `<section class="banner banner-warn" role="status"><div style="flex: 1; min-width: 260px"><div style="font-weight: 750; color: var(--warnInk)">Нет связи с Платформой</div><div style="color: var(--text2)">${esc(conn.errorText || (state.status || 'Не подключено') + '.')} Разделы, которым нужен сервер, вернутся после подключения; задания на этом компьютере, журнал и настройки доступны.</div></div>${button('Повторить подключение', 'b b-pri', { cmd: 'reconnect', data: { section: 'settings' } })}</section>`;
   };
 

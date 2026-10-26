@@ -229,12 +229,13 @@ public sealed class ConnectorRuntimeServices : IAsyncDisposable
         finally { _commonLifecycle.Release(); }
     }
 
-    public async Task SignOutCommonAsync(CancellationToken cancellationToken)
+    public async Task SignOutCommonAsync(CancellationToken cancellationToken, Action<string>? progress = null)
     {
         CancelCommonConnectionIntent();
         await _commonLifecycle.WaitAsync(cancellationToken);
         try
         {
+            progress?.Invoke("Завершаем текущую работу…");
             await StopForConnectionChangeAsync(cancellationToken);
             BeginCommonSession();
             await CommonFolders.ClearAuthorizationAsync(cancellationToken);
@@ -242,6 +243,9 @@ public sealed class ConnectorRuntimeServices : IAsyncDisposable
             // Keep its mapping pending, report it, and block later reuse until
             // the next drained exact cleanup can finish without force.
             await CleanupCommonFoldersAfterDrainAsync();
+            // The server confirms only after every access provider (NetBird
+            // included) has applied the revocation; this can take a minute.
+            progress?.Invoke("Отзываем доступ на сервере…");
             await CommonAccess.SignOutAsync(cancellationToken);
         }
         finally { Host.Resume(); _commonLifecycle.Release(); }

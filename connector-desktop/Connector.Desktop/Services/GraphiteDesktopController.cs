@@ -88,6 +88,7 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
     private bool _firstSnapshot = true;
     private bool _disposed;
     private int _browserSignInPending;
+    private long _observedCommonGeneration;
     private string? _converterSubmissionMode;
     private IReadOnlyList<PlatformAutoCadSession> _cadSessions = Array.Empty<PlatformAutoCadSession>();
     private long _noticeSeq;
@@ -743,7 +744,7 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
         StartCommonOperation(CommonConnectionOperation.SignOut, async (attempt, ct) =>
         {
             if (_commonAccess.HasStoredCredential)
-                await _runtimeServices.SignOutCommonAsync(ct);
+                await _runtimeServices.SignOutCommonAsync(ct, attempt.Report);
             // Cancelling a browser request before enrollment has no device to revoke.
         }, "signout", cancellationToken);
     }
@@ -755,6 +756,14 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
         CommonConnectionAttempt attempt;
         try { attempt = _runtimeServices.CommonOperations.Start(operation, execute, linked.Token); }
         catch { linked.Dispose(); throw; }
+        if (Interlocked.Exchange(ref _observedCommonGeneration, attempt.Generation) == attempt.Generation)
+        {
+            // A repeated click joined the running attempt; it is already observed,
+            // so it must not add a second notice and journal line for one outcome.
+            linked.Dispose();
+            PublishSnapshot();
+            return;
+        }
         lock (_gate) _notice = null;
         PublishSnapshot();
         var task = ObserveCommonOperationAsync(attempt, name, linked);
@@ -774,14 +783,34 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
                 _runtimeServices.CommonFolderCleanupPending
                     ? "Вы вышли из учётной записи. Некоторые сетевые папки заняты — закройте открытые файлы."
                     : "Вы вышли из учётной записи." :
-                _commonAccess.IsReady ? "Подключено." : _commonAccess.DisplayStatus;
+                _commonAccess.IsReady ? "Подключено." :
+                _commonAccess.Current?.DiagnosticCode == "device_revoked"
+                    ? "Доступ этого компьютера отозван на сервере. Войдите через Платформу заново."
+                    : _commonAccess.DisplayStatus;
         }
         catch (OperationCanceledException) when (attempt.Token.IsCancellationRequested) { message = "Действие отменено."; kind = "info"; }
         catch (ConnectorSignInException ex) { message = ex.Message; }
+        catch (Connector.Access.Client.ConnectorClockSkewException ex)
+        {
+            message = CommonAccessRuntime.ClockSkewText(ex.Skew);
+            _connectorHost.Log($"Common connection {attempt.Operation} failed ({ex.GetType().Name}, clock_skew).");
+        }
+        catch (CommonConnectionPendingException ex)
+        {
+            message = ex.Message;
+            kind = "warn";
+            _connectorHost.Log($"Common connection {attempt.Operation} failed ({ex.GetType().Name}, provisioning_pending).");
+        }
         catch (Exception ex)
         {
+            var revocationUnconfirmed = ex is Connector.Access.Client.ConnectorEnrollmentProtocolException
+            {
+                ErrorCode: "self_revoke_timeout" or "self_revoke_pending"
+            };
             message = attempt.Operation == CommonConnectionOperation.SignOut ?
-                "Выход не завершён. Проверьте соединение и повторите попытку." :
+                revocationUnconfirmed
+                    ? "Сервер не успел подтвердить отзыв доступа. Повторите выход через минуту."
+                    : "Выход не завершён. Проверьте соединение и повторите попытку." :
                 _commonAccess.DisplayStatus == "Требуется вход" ? "Войдите через Платформу повторно." :
                 "Не удалось завершить подключение. Повторите попытку.";
             // Codes are defined locally; never log an exception message/body,
@@ -791,6 +820,7 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
                 CommonSmbAccessException smb when smb.Code is "smb_route_changed" or
                     "smb_route_cleanup_incomplete" or "smb_cleanup_pending" => smb.Code,
                 Connector.Network.NetworkGateException => "network_gate",
+                Connector.Access.Client.ConnectorEnrollmentProtocolException protocol when revocationUnconfirmed => protocol.ErrorCode!,
                 _ => "unspecified"
             };
             _connectorHost.Log($"Common connection {attempt.Operation} failed ({ex.GetType().Name}, {code}).");

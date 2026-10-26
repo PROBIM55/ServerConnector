@@ -14,15 +14,24 @@ public sealed partial class HttpConnectorEnrollmentClient : IConnectorEnrollment
 {
     private static readonly TimeSpan CertificateRenewalLead = TimeSpan.FromHours(1);
     private const int MaximumResponseBytes = 128 * 1024;
-    private const int MaximumRevocationStatusPolls = 20;
-    private static readonly TimeSpan RevocationPollInterval = TimeSpan.FromMilliseconds(250);
-    private static readonly TimeSpan RevocationOperationTimeout = TimeSpan.FromSeconds(15);
+    // The server confirms a self-revocation only after every access provider
+    // has applied it; NetBird alone took ~37 s on a pilot PC. The window must
+    // cover that, or a successful server revocation is reported as a failure.
+    private const int MaximumRevocationStatusPolls = 120;
+    internal static readonly TimeSpan DefaultRevocationPollInterval = TimeSpan.FromSeconds(1);
+    internal static readonly TimeSpan DefaultRevocationOperationTimeout = TimeSpan.FromSeconds(120);
+    private static readonly TimeSpan RevocationProbeTimeout = TimeSpan.FromSeconds(15);
+    internal static readonly TimeSpan DefaultRejectionConfirmationDelay = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan MaximumRejectionClockSkew = TimeSpan.FromSeconds(60);
     private const string RevocationProbeDeviceId = "dev_00000000000000000000000000000000";
     private static readonly Guid RevocationProbeRequestId = new("00000000-0000-0000-0000-000000000001");
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private readonly ValidatedClientOptions _options;
     private readonly FileConnectorEnrollmentStateStore _store;
     private readonly IEnrollmentHttpInvokerFactory _httpFactory;
+    private readonly TimeSpan _revocationPollInterval;
+    private readonly TimeSpan _revocationOperationTimeout;
+    private readonly TimeSpan _rejectionConfirmationDelay;
     private readonly SemaphoreSlim _operationGate = new(1, 1);
 
     public HttpConnectorEnrollmentClient(
@@ -35,12 +44,18 @@ public sealed partial class HttpConnectorEnrollmentClient : IConnectorEnrollment
     internal HttpConnectorEnrollmentClient(
         ConnectorAccessClientOptions options,
         FileConnectorEnrollmentStateStore store,
-        IEnrollmentHttpInvokerFactory httpFactory)
+        IEnrollmentHttpInvokerFactory httpFactory,
+        TimeSpan? revocationPollInterval = null,
+        TimeSpan? revocationOperationTimeout = null,
+        TimeSpan? rejectionConfirmationDelay = null)
     {
         ArgumentNullException.ThrowIfNull(options);
         _options = options.Validate();
         _store = store ?? throw new ArgumentNullException(nameof(store));
         _httpFactory = httpFactory ?? throw new ArgumentNullException(nameof(httpFactory));
+        _revocationPollInterval = revocationPollInterval ?? DefaultRevocationPollInterval;
+        _revocationOperationTimeout = revocationOperationTimeout ?? DefaultRevocationOperationTimeout;
+        _rejectionConfirmationDelay = rejectionConfirmationDelay ?? DefaultRejectionConfirmationDelay;
     }
 
     public async ValueTask<DeviceEnrollmentResponse> EnrollAsync(
@@ -380,7 +395,7 @@ public sealed partial class HttpConnectorEnrollmentClient : IConnectorEnrollment
         await _operationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            using var timeout = CreateRevocationTimeout(cancellationToken);
+            using var timeout = CreateBoundedTimeout(RevocationProbeTimeout, cancellationToken);
             try
             {
                 using var request = CreateRequest(
@@ -448,36 +463,81 @@ public sealed partial class HttpConnectorEnrollmentClient : IConnectorEnrollment
                     "The requested revocation does not match the durable enrollment receipt.");
             }
 
-            using var key = EnrollmentCryptography.LoadAndValidateKey(state);
-            using var certificate = EnrollmentCryptography.CreateIssuedTlsCertificate(state, key, _options);
-            using var invoker = _httpFactory.Create(certificate);
-            using var timeout = CreateRevocationTimeout(cancellationToken);
-            var endpoint = ExactRevocationEndpoint(receipt.DeviceId, receipt.RequestId);
-            var minimumRevision = receipt.AccessRevision;
-
+            using var timeout = CreateBoundedTimeout(_revocationOperationTimeout, cancellationToken);
             try
             {
-                var postStatus = await SendSelfRevocationAsync(
-                    invoker, HttpMethod.Post, endpoint, timeout.Token).ConfigureAwait(false);
-                if (postStatus is null)
+                if (receipt.CertificateExpiresAtUtc <= _options.TimeProvider.GetUtcNow())
                 {
-                    _confirmedRevokedRequestId = receipt.RequestId;
-                    return;
-                }
-
-                minimumRevision = ValidatePendingSelfRevocation(postStatus, receipt, minimumRevision);
-                for (var attempt = 0; attempt < MaximumRevocationStatusPolls; attempt++)
-                {
-                    await Task.Delay(RevocationPollInterval, timeout.Token).ConfigureAwait(false);
-                    var status = await SendSelfRevocationAsync(
-                        invoker, HttpMethod.Get, endpoint, timeout.Token).ConfigureAwait(false);
-                    if (status is null)
+                    // An expired issued certificate cannot pass TLS. The key-bound proof
+                    // either renews it (the enrollment is active) or shows that the
+                    // server holds no enrollment for this key any more: with the issued
+                    // certificate already expired, nothing else can revoke this device.
+                    KeyProof expiredProof;
+                    using (var expiredKey = EnrollmentCryptography.LoadAndValidateKey(state))
+                        expiredProof = await ProveEnrollmentKeyAsync(state, expiredKey, timeout.Token).ConfigureAwait(false);
+                    if (expiredProof == KeyProof.Rejected)
                     {
                         _confirmedRevokedRequestId = receipt.RequestId;
                         return;
                     }
 
-                    minimumRevision = ValidatePendingSelfRevocation(status, receipt, minimumRevision);
+                    state = await ReloadSameEnrollmentAsync(state, timeout.Token).ConfigureAwait(false);
+                    receipt = state.Response!;
+                }
+
+                for (var send = 1; ; send++)
+                {
+                    using var key = EnrollmentCryptography.LoadAndValidateKey(state);
+                    using var certificate = EnrollmentCryptography.CreateIssuedTlsCertificate(state, key, _options);
+                    using var invoker = _httpFactory.Create(certificate);
+                    var endpoint = ExactRevocationEndpoint(receipt.DeviceId, receipt.RequestId);
+                    var minimumRevision = receipt.AccessRevision;
+
+                    DeviceSelfRevocationStatus? postStatus;
+                    try
+                    {
+                        postStatus = await SendSelfRevocationAsync(
+                            invoker, HttpMethod.Post, endpoint, timeout.Token).ConfigureAwait(false);
+                    }
+                    catch (ConnectorEnrollmentProtocolException exception) when (
+                        send == 1 && IssuedCredentialIsExplicitlyRejected(exception))
+                    {
+                        // A current certificate of an already revoked device still gets
+                        // 202/204, so this rejection never proves revocation and the
+                        // credential is kept. An accepted key proof refreshes the receipt:
+                        // retry once with it.
+                        if (await ProveEnrollmentKeyAsync(state, key, timeout.Token).ConfigureAwait(false) == KeyProof.Rejected)
+                            throw;
+                        state = await ReloadSameEnrollmentAsync(state, timeout.Token).ConfigureAwait(false);
+                        receipt = state.Response!;
+                        continue;
+                    }
+
+                    if (postStatus is null)
+                    {
+                        _confirmedRevokedRequestId = receipt.RequestId;
+                        return;
+                    }
+
+                    minimumRevision = ValidatePendingSelfRevocation(postStatus, receipt, minimumRevision);
+                    for (var attempt = 0; attempt < MaximumRevocationStatusPolls; attempt++)
+                    {
+                        await Task.Delay(_revocationPollInterval, _options.TimeProvider, timeout.Token).ConfigureAwait(false);
+                        var status = await SendSelfRevocationAsync(
+                            invoker, HttpMethod.Get, endpoint, timeout.Token).ConfigureAwait(false);
+                        if (status is null)
+                        {
+                            _confirmedRevokedRequestId = receipt.RequestId;
+                            return;
+                        }
+
+                        minimumRevision = ValidatePendingSelfRevocation(status, receipt, minimumRevision);
+                    }
+
+                    throw new ConnectorEnrollmentProtocolException(
+                        "Exact device revocation remained pending beyond the bounded confirmation window.",
+                        (int)HttpStatusCode.RequestTimeout,
+                        "self_revoke_pending");
                 }
             }
             catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
@@ -487,11 +547,6 @@ public sealed partial class HttpConnectorEnrollmentClient : IConnectorEnrollment
                     (int)HttpStatusCode.RequestTimeout,
                     "self_revoke_timeout");
             }
-
-            throw new ConnectorEnrollmentProtocolException(
-                "Exact device revocation remained pending beyond the bounded confirmation window.",
-                (int)HttpStatusCode.RequestTimeout,
-                "self_revoke_pending");
         }
         finally
         {
@@ -554,13 +609,7 @@ public sealed partial class HttpConnectorEnrollmentClient : IConnectorEnrollment
         var payload = await ReadBoundedPayloadAsync(response.Content, cancellationToken).ConfigureAwait(false);
         if (response.StatusCode != HttpStatusCode.Accepted)
         {
-            DeviceAccessFailure? failure = null;
-            try { failure = JsonSerializer.Deserialize<DeviceAccessFailure>(payload, JsonOptions); }
-            catch (JsonException) { }
-            throw new ConnectorEnrollmentProtocolException(
-                failure?.Message ?? $"Exact device revocation failed with status {(int)response.StatusCode}.",
-                (int)response.StatusCode,
-                failure?.Code);
+            throw ToFailure(response.StatusCode, payload, "Exact device revocation failed");
         }
 
         try
@@ -604,11 +653,81 @@ public sealed partial class HttpConnectorEnrollmentClient : IConnectorEnrollment
         return request;
     }
 
-    private static CancellationTokenSource CreateRevocationTimeout(CancellationToken cancellationToken)
+    private BoundedTimeout CreateBoundedTimeout(TimeSpan limit, CancellationToken cancellationToken) =>
+        new(limit, _options.TimeProvider, cancellationToken);
+
+    internal enum KeyProof { Accepted, Rejected }
+
+    /// <summary>
+    /// device_unauthorized for an issued certificate says only that this
+    /// certificate is not current. The key-bound recovery proof is the server's
+    /// statement about the enrollment itself. An accepted proof refreshes the
+    /// stored receipt. A rejection counts only while the local clock agrees
+    /// with the server: a fast clock makes the server reject a valid short-lived
+    /// proof. Any other answer or failure propagates and changes nothing.
+    /// </summary>
+    private async ValueTask<KeyProof> ProveEnrollmentKeyAsync(
+        StoredEnrollmentState state,
+        EnrollmentCryptography.KeyMaterial key,
+        CancellationToken cancellationToken)
     {
-        var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeout.CancelAfter(RevocationOperationTimeout);
-        return timeout;
+        if (state.Status != StoredEnrollmentStatus.Completed || state.Response is null)
+            throw new ConnectorEnrollmentStateException("Device enrollment has not completed.");
+        DeviceEnrollmentResponse current;
+        using (var proof = EnrollmentCryptography.CreateBootstrapCertificate(state, key, _options))
+        using (var request = CreateRequest(HttpMethod.Post, Endpoint($"enrollments/{state.RequestId:D}/resume")))
+        using (var invoker = _httpFactory.Create(proof))
+        using (var response = await invoker.SendAsync(request, cancellationToken).ConfigureAwait(false))
+        {
+            var payload = await ReadBoundedPayloadAsync(response.Content, cancellationToken).ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode)
+            {
+                var failure = ToFailure(response.StatusCode, payload, "Enrollment key proof failed");
+                if (!IssuedCredentialIsExplicitlyRejected(failure)) throw failure;
+                RequireServerClockAgreement(response.Headers.Date);
+                return KeyProof.Rejected;
+            }
+
+            current = ParseJson<DeviceEnrollmentResponse>(payload);
+        }
+
+        if (current.DeviceId != state.Response.DeviceId || current.AccessRevision < state.Response.AccessRevision)
+            throw new ConnectorEnrollmentProtocolException("Certificate renewal changed the durable device identity.");
+        await ValidateAndCompleteAsync(state, current, key, cancellationToken).ConfigureAwait(false);
+        return KeyProof.Accepted;
+    }
+
+    private void RequireServerClockAgreement(DateTimeOffset? serverDate)
+    {
+        if (serverDate is null)
+            throw new ConnectorEnrollmentProtocolException(
+                "The enrollment rejection carries no server time and cannot be trusted.",
+                (int)HttpStatusCode.Unauthorized,
+                "rejection_unverified");
+        var skew = _options.TimeProvider.GetUtcNow() - serverDate.Value;
+        if (skew.Duration() > MaximumRejectionClockSkew)
+            throw new ConnectorClockSkewException(skew);
+    }
+
+    /// <summary>Re-reads the receipt a key proof refreshed; it must stay the same device.</summary>
+    private async ValueTask<StoredEnrollmentState> ReloadSameEnrollmentAsync(
+        StoredEnrollmentState previous,
+        CancellationToken cancellationToken)
+    {
+        var expected = previous.Response!;
+        CryptographicOperations.ZeroMemory(previous.PrivateKeyPkcs8);
+        var state = await _store.LoadAsync(cancellationToken).ConfigureAwait(false)
+            ?? throw new ConnectorEnrollmentStateException("Renewed enrollment was not stored.");
+        ValidateBinding(state);
+        if (state.Status != StoredEnrollmentStatus.Completed || state.Response is null ||
+            state.Response.RequestId != expected.RequestId ||
+            !string.Equals(state.Response.DeviceId, expected.DeviceId, StringComparison.Ordinal))
+        {
+            CryptographicOperations.ZeroMemory(state.PrivateKeyPkcs8);
+            throw new ConnectorEnrollmentStateException("Renewed enrollment does not match the device.");
+        }
+
+        return state;
     }
 
     private ValueTask<DeviceEnrollmentResponse> SendForEnrollmentResponseAsync(
@@ -633,15 +752,25 @@ public sealed partial class HttpConnectorEnrollmentClient : IConnectorEnrollment
         var payload = await ReadBoundedPayloadAsync(response.Content, cancellationToken).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
         {
-            DeviceAccessFailure? failure = null;
-            try { failure = JsonSerializer.Deserialize<DeviceAccessFailure>(payload, JsonOptions); }
-            catch (JsonException) { }
-            throw new ConnectorEnrollmentProtocolException(
-                failure?.Message ?? $"Connector enrollment HTTP request failed with status {(int)response.StatusCode}.",
-                (int)response.StatusCode,
-                failure?.Code);
+            throw ToFailure(response.StatusCode, payload, "Connector enrollment HTTP request failed");
         }
 
+        return ParseJson<T>(payload);
+    }
+
+    private static ConnectorEnrollmentProtocolException ToFailure(HttpStatusCode statusCode, byte[] payload, string context)
+    {
+        DeviceAccessFailure? failure = null;
+        try { failure = JsonSerializer.Deserialize<DeviceAccessFailure>(payload, JsonOptions); }
+        catch (JsonException) { }
+        return new ConnectorEnrollmentProtocolException(
+            failure?.Message ?? $"{context} with status {(int)statusCode}.",
+            (int)statusCode,
+            failure?.Code);
+    }
+
+    private static T ParseJson<T>(byte[] payload)
+    {
         try
         {
             return JsonSerializer.Deserialize<T>(payload, JsonOptions)
@@ -725,6 +854,27 @@ public sealed partial class HttpConnectorEnrollmentClient : IConnectorEnrollment
 
     private Uri ExactRevocationEndpoint(string deviceId, Guid requestId) => Endpoint(
         $"devices/{Uri.EscapeDataString(deviceId)}/enrollments/{requestId:D}/self-revoke");
+
+    /// <summary>A caller-linked deadline on the client's clock.</summary>
+    private sealed class BoundedTimeout : IDisposable
+    {
+        private readonly CancellationTokenSource _deadline;
+        private readonly CancellationTokenSource _linked;
+
+        public BoundedTimeout(TimeSpan limit, TimeProvider clock, CancellationToken cancellationToken)
+        {
+            _deadline = new CancellationTokenSource(limit, clock);
+            _linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _deadline.Token);
+        }
+
+        public CancellationToken Token => _linked.Token;
+
+        public void Dispose()
+        {
+            _linked.Dispose();
+            _deadline.Dispose();
+        }
+    }
 
     private sealed record DeviceSelfRevocationStatus(
         int SchemaVersion,

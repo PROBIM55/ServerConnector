@@ -112,6 +112,16 @@ public interface IConnectorAccountSessionClient
 {
     ValueTask<ConnectorSignOutIdentity?> GetSignOutIdentityAsync(CancellationToken cancellationToken = default);
     ValueTask ClearRevokedSessionAsync(ConnectorSignOutIdentity identity, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Moves the durable completed enrollment aside (<c>*.rejected-&lt;UTC&gt;</c>) only
+    /// after the server rejects its key-bound recovery proof twice, a few seconds
+    /// apart, with the local clock agreeing with the server's. Returns false and
+    /// keeps (refreshes) the credential when the server accepts the proof;
+    /// <see cref="ConnectorClockSkewException"/>, network and protocol failures
+    /// propagate without touching local state.
+    /// </summary>
+    ValueTask<bool> ForgetRejectedEnrollmentAsync(CancellationToken cancellationToken = default);
 }
 
 public sealed class ConnectorIssuedCertificateLease : IDisposable
@@ -133,6 +143,23 @@ public class ConnectorEnrollmentException : Exception
 {
     public ConnectorEnrollmentException(string message) : base(message) { }
     public ConnectorEnrollmentException(string message, Exception innerException) : base(message, innerException) { }
+}
+
+/// <summary>
+/// The server rejected the device while the local clock disagrees with the
+/// server's: a fast clock makes a valid short-lived key proof look invalid, so
+/// the rejection is not trusted and local state is kept.
+/// </summary>
+public sealed class ConnectorClockSkewException : ConnectorEnrollmentException
+{
+    public ConnectorClockSkewException(TimeSpan skew)
+        : base("The local clock differs from the server clock; the server rejection is not trusted.")
+    {
+        Skew = skew;
+    }
+
+    /// <summary>Local time minus server time.</summary>
+    public TimeSpan Skew { get; }
 }
 
 public sealed class ConnectorEnrollmentStateException : ConnectorEnrollmentException

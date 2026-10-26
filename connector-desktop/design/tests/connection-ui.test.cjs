@@ -83,6 +83,53 @@ test('revoked access is reported and asks for a new sign-in', () => {
   assert.match(html, /data-cmd="connect">Войти через Платформу<\/button>/);
 });
 
+test('a device revoked on the server returns a signed-in window to the sign-in screen', () => {
+  // Restore found the device revoked: the native side cleared the stored credential («Требуется вход»).
+  const state = stateFrom(PC, F.signedIn());
+  PC.model.apply(state, { ...F.signedIn(), commonAccessReady: false, commonAccessNeedsSignIn: true, hasSavedCredential: false,
+    status: 'Требуется вход', allowedPages: { structura: [], platform: [] }, account: null,
+    notice: { command: 'reconnect', message: 'Доступ этого компьютера отозван на сервере. Войдите через Платформу заново.', kind: 'warn', seq: 21 } });
+  const conn = PC.model.connection(state);
+  assert.equal(conn.showSignIn, true);
+  assert.equal(conn.offline, false);
+  const view = PC.pages.signinModel(state);
+  assert.deepEqual({ ...view.primary }, { label: 'Войти через Платформу', cmd: 'connect' });
+  assert.equal(view.secondary, null, 'nothing is left to sign out of');
+  const html = app(state);
+  assert.match(html, /Войдите, чтобы подключить компьютер/);
+  assert.doesNotMatch(html, /<aside class="side"|data-cmd="reconnect"|data-cmd="signout"|Нет связи с Платформой/);
+});
+
+test('a revoked device whose credential is still stored also gets the sign-in screen', () => {
+  const state = stateFrom(PC, { ...F.signedIn(), commonAccessReady: false, commonAccessNeedsSignIn: true, hasSavedCredential: true,
+    status: 'Требуется вход', allowedPages: { structura: [], platform: [] } });
+  assert.equal(PC.model.connection(state).showSignIn, true);
+  const view = PC.pages.signinModel(state);
+  assert.deepEqual({ ...view.primary }, { label: 'Войти через Платформу', cmd: 'connect' });
+  assert.deepEqual({ ...view.secondary }, { label: 'Выйти', cmd: 'signout' });
+});
+
+test('sign-out in the main window says that access is being revoked on the server', () => {
+  const html = app(stateFrom(PC, { ...F.signedIn(), commonAccessReady: false, connectPending: true, signOutPending: true,
+    connectionProgress: 'Отзываем доступ на сервере…', status: 'Отзываем доступ на сервере…' }));
+  assert.match(html, /Выходим из учётной записи<\/div><div style="color: var\(--text2\)">Отзываем доступ на сервере…/);
+  assert.doesNotMatch(html, /Подключаемся к Платформе/);
+  assert.match(html, /class="chip t-run"[^>]*>.*Выход…<\/span>/);
+});
+
+test('while signing out there is no second «Выйти» in the account menu or in the settings', () => {
+  const signingOut = { ...F.signedIn(), commonAccessReady: false, connectPending: true, signOutPending: true,
+    connectionProgress: 'Отзываем доступ на сервере…', status: 'Отзываем доступ на сервере…' };
+  for (const page of ['home', 'settings']) {
+    const html = app(stateFrom(PC, signingOut, { page, accountOpen: true }));
+    assert.match(html, /data-ui="popover"/);
+    assert.doesNotMatch(html, /data-cmd="signout"/, page);
+  }
+  assert.match(app(stateFrom(PC, signingOut, { page: 'settings' })), /Выходим из учётной записи…/);
+  const idle = app(stateFrom(PC, F.signedIn(), { page: 'settings', accountOpen: true }));
+  assert.equal((idle.match(/data-cmd="signout"/g) || []).length, 2, 'both «Выйти» buttons return after sign-out');
+});
+
 test('signed in without granted sections waits for the administrator', () => {
   const view = PC.pages.signinModel(stateFrom(PC, F.accessPending()));
   assert.equal(view.phase, 4);
