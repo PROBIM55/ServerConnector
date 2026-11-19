@@ -164,10 +164,10 @@ jobs:
         run: |
           dotnet pack connector-access/src/Connector.Access/Connector.Access.csproj --configuration Release --output connector-access-core-package -p:UseSharedCompilation=false -p:BuildInParallel=false --verbosity minimal
           if ($LASTEXITCODE -ne 0) { throw 'Connector.Access package failed' }
-          $package = 'connector-access-core-package/Connector.Access.0.2.7.nupkg'
-          if (-not (Test-Path -LiteralPath $package -PathType Leaf)) { throw 'Expected Connector.Access 0.2.7 package is missing' }
+          $package = 'connector-access-core-package/Connector.Access.0.2.8.nupkg'
+          if (-not (Test-Path -LiteralPath $package -PathType Leaf)) { throw 'Expected Connector.Access 0.2.8 package is missing' }
           $hash = (Get-FileHash -LiteralPath $package -Algorithm SHA256).Hash.ToLowerInvariant()
-          [pscustomobject]@{ sourceSha = $env:GITHUB_SHA; file = 'Connector.Access.0.2.7.nupkg'; sha256 = $hash; size = (Get-Item -LiteralPath $package).Length } |
+          [pscustomobject]@{ sourceSha = $env:GITHUB_SHA; file = 'Connector.Access.0.2.8.nupkg'; sha256 = $hash; size = (Get-Item -LiteralPath $package).Length } |
             ConvertTo-Json -Compress | Set-Content -LiteralPath 'connector-access-core-package/manifest.json' -Encoding utf8
 
       - uses: actions/upload-artifact@v4
