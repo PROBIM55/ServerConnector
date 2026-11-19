@@ -357,20 +357,46 @@ public sealed class ReleaseCatalogClientTests : IDisposable
     [Fact]
     public void A_file_owned_by_an_ordinary_user_is_not_trusted()
     {
+        // Descriptors are built in memory: who owns a temp file and who may write it differs between an
+        // elevated build agent (owner Administrators, the agent's own account may write) and a developer PC.
+        var system = new System.Security.Principal.SecurityIdentifier("S-1-5-18");
+        var administrators = new System.Security.Principal.SecurityIdentifier("S-1-5-32-544");
+        var users = new System.Security.Principal.SecurityIdentifier("S-1-5-32-545");
+        var everyone = new System.Security.Principal.SecurityIdentifier("S-1-1-0");
+        var ordinaryUser = new System.Security.Principal.SecurityIdentifier("S-1-5-21-1111111111-2222222222-3333333333-1001");
+
+        System.Security.AccessControl.FileSecurity Descriptor(
+            System.Security.Principal.SecurityIdentifier owner,
+            params (System.Security.Principal.SecurityIdentifier Who, System.Security.AccessControl.FileSystemRights Rights)[] grants)
+        {
+            var security = new System.Security.AccessControl.FileSecurity();
+            security.SetOwner(owner);
+            foreach (var (who, rights) in grants)
+                security.AddAccessRule(new System.Security.AccessControl.FileSystemAccessRule(
+                    who, rights, System.Security.AccessControl.AccessControlType.Allow));
+            return security;
+        }
+
+        var full = System.Security.AccessControl.FileSystemRights.FullControl;
+        var read = System.Security.AccessControl.FileSystemRights.ReadAndExecute;
+
+        // The service's own layout: SYSTEM and Administrators write, users only read.
+        Assert.True(WindowsFileTrust.IsTrusted(Descriptor(administrators, (system, full), (administrators, full), (users, read))));
+        Assert.True(WindowsFileTrust.IsTrusted(Descriptor(system, (system, full), (administrators, full))));
+
+        // An ordinary user's file is never trusted, whatever its access list says.
+        Assert.False(WindowsFileTrust.IsTrusted(Descriptor(ordinaryUser, (system, full), (administrators, full))));
+        // A write grant for anyone but SYSTEM and Administrators makes even an administrators' file untrusted.
+        Assert.False(WindowsFileTrust.IsTrusted(Descriptor(administrators, (system, full), (everyone, System.Security.AccessControl.FileSystemRights.Write))));
+        Assert.False(WindowsFileTrust.IsTrusted(Descriptor(administrators, (system, full), (ordinaryUser, System.Security.AccessControl.FileSystemRights.Modify))));
+        Assert.False(WindowsFileTrust.IsTrusted(Descriptor(administrators, (users, System.Security.AccessControl.FileSystemRights.Delete))));
+
+        // A real file answers exactly what its own descriptor says.
         Directory.CreateDirectory(_root);
         var path = Path.Combine(_root, "mine.bin");
         File.WriteAllBytes(path, [1, 2, 3]);
         using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
-        var owner = stream.GetAccessControl().GetOwner(typeof(System.Security.Principal.SecurityIdentifier))!.Value;
-        var expected = owner is "S-1-5-18" or "S-1-5-32-544";
-        Assert.Equal(expected, new WindowsFileTrust().IsTrusted(stream));
-        // An explicit write grant for Everyone makes even an administrators' file untrusted.
-        var security = new System.Security.AccessControl.FileSecurity();
-        security.SetOwner(new System.Security.Principal.SecurityIdentifier("S-1-5-32-544"));
-        security.AddAccessRule(new System.Security.AccessControl.FileSystemAccessRule(
-            new System.Security.Principal.SecurityIdentifier("S-1-1-0"), System.Security.AccessControl.FileSystemRights.Write,
-            System.Security.AccessControl.AccessControlType.Allow));
-        Assert.False(WindowsFileTrust.IsTrusted(security));
+        Assert.Equal(WindowsFileTrust.IsTrusted(stream.GetAccessControl()), new WindowsFileTrust().IsTrusted(stream));
     }
 
     public void Dispose()
