@@ -254,7 +254,9 @@ public sealed class CommonConnectorConnectionCoordinator
         {
             state = await _access.GetVpnStateAsync(cancellationToken).ConfigureAwait(false);
         }
-        catch (ConnectorEnrollmentProtocolException exception) when (IsProvisioningFailure(exception, "vpn_state_unavailable"))
+        catch (ConnectorEnrollmentProtocolException exception) when (
+            IsProvisioningFailure(exception, "vpn_state_unavailable") ||
+            IsProvisioningFailure(exception, "vpn_state_not_supported"))
         {
             // A fresh device has no provider state until its authenticated profile
             // request durably schedules reconciliation. This request never admits
@@ -321,6 +323,14 @@ public sealed class CommonConnectorConnectionCoordinator
             {
                 return Set(CommonConnectorConnectionStatus.AwaitingVpnAuthorization, state.DeviceId,
                     state.Revision, "vpn_bootstrap_pending");
+            }
+            catch (ConnectorEnrollmentProtocolException exception) when (IsProvisioningFailure(exception, "vpn_bootstrap_consumed"))
+            {
+                // The peer is already registered for this revision (a restarted client, an
+                // earlier attempt) while the state still reads connecting: the setup key is
+                // not issued again, so wait for the peer and re-read the state next poll.
+                return Set(CommonConnectorConnectionStatus.AwaitingVpnAuthorization, state.DeviceId,
+                    state.Revision, "vpn_bootstrap_consumed");
             }
             // The server advanced the revision between the two reads: re-read both next poll.
             if (bootstrap.Revision != state.Revision)
@@ -536,6 +546,14 @@ public sealed class CommonConnectorConnectionCoordinator
             // must not erase it with a generic failure.
             throw;
         }
+        catch (ConnectorEnrollmentProtocolException exception) when (IsProviderBusy(exception))
+        {
+            // The provider is momentarily held by a reconciler: a wait, not a failure.
+            // The exception still carries Retry-After for the provisioning wait.
+            RevokeAuthorization();
+            Set(CommonConnectorConnectionStatus.AwaitingVpnAuthorization, Current.DeviceId, Current.Revision, "vpn_provider_busy");
+            throw;
+        }
         catch (Exception exception)
         {
             RevokeAuthorization();
@@ -547,6 +565,10 @@ public sealed class CommonConnectorConnectionCoordinator
             _operations.Release();
         }
     }
+
+    private static bool IsProviderBusy(ConnectorEnrollmentProtocolException exception) =>
+        exception.StatusCode == (int)HttpStatusCode.ServiceUnavailable &&
+        string.Equals(exception.ErrorCode, "vpn_provider_busy", StringComparison.Ordinal);
 
     private static bool RequiresBrowserSignIn(ConnectorEnrollmentProtocolException exception) =>
         IsIssuedCredentialRejected(exception) ||

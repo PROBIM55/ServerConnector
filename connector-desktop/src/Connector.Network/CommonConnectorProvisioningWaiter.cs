@@ -179,6 +179,7 @@ public static class CommonConnectorProvisioningWaiter
                 "overlay_address_mismatch" or "ready" =>
                 CommonConnectorConnectionPhase.Verify,
             "access_providers_initializing" or "access_providers_pending_or_denied" or "vpn_bootstrap_pending" or
+                "vpn_bootstrap_consumed" or "vpn_provider_busy" or
                 "enrolling" or "resuming_enrollment" =>
                 CommonConnectorConnectionPhase.Access,
             _ => snapshot.Status switch
@@ -204,6 +205,7 @@ public static class CommonConnectorProvisioningWaiter
         ConnectorEnrollmentProtocolException protocol when protocol.ErrorCode is { } code && DefinitiveServerCodes.Contains(code) => false,
         ConnectorEnrollmentProtocolException protocol =>
             protocol.StatusCode is 408 or 425 or 429 or (>= 500 and <= 599) ||
+            protocol.ErrorCode is "vpn_provider_busy" ||
             protocol.ErrorCode?.Contains("busy", StringComparison.OrdinalIgnoreCase) == true,
         HttpRequestException http => http.InnerException is not AuthenticationException &&
             (http.StatusCode is null || (int)http.StatusCode.Value is 408 or 425 or 429 or (>= 500 and <= 599)),

@@ -487,6 +487,124 @@ public sealed class CommonConnectorConnectionCoordinatorTests
     }
 
     [Fact]
+    public async Task BootstrapConsumedWhileConnecting_WaitsAndRereadsStateInsteadOfFailing()
+    {
+        var events = new List<string>();
+        var access = new FakeAccess(events, State("connecting"), State("ready"))
+        {
+            BootstrapFailure = new ConnectorEnrollmentProtocolException("consumed", 403, "vpn_bootstrap_consumed"),
+        };
+        var overlay = new FakeOverlay(events, ReadyOverlay());
+        var coordinator = new CommonConnectorConnectionCoordinator(access, overlay, new FakeGate(events));
+        var clock = new CommonConnectorProvisioningWaiterTests.ManualTimeProvider();
+        var pending = CommonConnectorProvisioningWaiter.WaitAsync(ct => coordinator.ReconnectAsync(ct),
+            ct => coordinator.ResumeAndConnectAsync(ct), async ct => { await coordinator.DisconnectAsync(ct); },
+            timeProvider: clock).AsTask();
+        await clock.AdvanceArmedAsync();
+
+        var result = await pending.WaitAsync(TimeSpan.FromSeconds(10));
+
+        Assert.Equal(CommonConnectorConnectionStatus.Ready, result.Status);
+        Assert.Equal(1, access.BootstrapCalls);
+        Assert.Equal(0, overlay.ConnectCalls);
+        Assert.Equal(new[] { "state", "bootstrap", "state", "profile" }, events);
+    }
+
+    [Fact]
+    public async Task BootstrapConsumedWhileConnecting_ReportsPendingNotAFailure()
+    {
+        var events = new List<string>();
+        var access = new FakeAccess(events, State("connecting"))
+        {
+            BootstrapFailure = new ConnectorEnrollmentProtocolException("consumed", 403, "vpn_bootstrap_consumed"),
+        };
+        var coordinator = new CommonConnectorConnectionCoordinator(access, new FakeOverlay(events, ReadyOverlay()), new FakeGate(events));
+
+        var result = await coordinator.ReconnectAsync();
+
+        Assert.Equal(CommonConnectorConnectionStatus.AwaitingVpnAuthorization, result.Status);
+        Assert.Equal("vpn_bootstrap_consumed", result.DiagnosticCode);
+    }
+
+    [Fact]
+    public async Task ProviderBusy_WaitsForRetryAfterThenContinues()
+    {
+        var events = new List<string>();
+        var access = new FakeAccess(events, State("ready"))
+        {
+            StateFailure = new ConnectorEnrollmentProtocolException("busy", 503, "vpn_provider_busy", TimeSpan.FromSeconds(7)),
+        };
+        var coordinator = new CommonConnectorConnectionCoordinator(access, new FakeOverlay(events, ReadyOverlay()), new FakeGate(events));
+        var clock = new CommonConnectorProvisioningWaiterTests.ManualTimeProvider();
+        var pending = CommonConnectorProvisioningWaiter.WaitAsync(ct => coordinator.ReconnectAsync(ct),
+            ct => coordinator.ResumeAndConnectAsync(ct), async ct => { await coordinator.DisconnectAsync(ct); },
+            timeProvider: clock,
+            progress: _ => access.StateFailure = null).AsTask();
+
+        var waited = await clock.AdvanceArmedAsync();
+        var result = await pending.WaitAsync(TimeSpan.FromSeconds(10));
+
+        Assert.Equal(TimeSpan.FromSeconds(7), waited);
+        Assert.Equal(CommonConnectorConnectionStatus.Ready, result.Status);
+    }
+
+    [Fact]
+    public async Task ProviderBusy_IsAWaitingStateNotAFailure()
+    {
+        var events = new List<string>();
+        var access = new FakeAccess(events)
+        {
+            StateFailure = new ConnectorEnrollmentProtocolException("busy", 503, "vpn_provider_busy", TimeSpan.FromSeconds(2)),
+        };
+        var coordinator = new CommonConnectorConnectionCoordinator(access, new FakeOverlay(events, ReadyOverlay()), new FakeGate(events));
+
+        await Assert.ThrowsAsync<ConnectorEnrollmentProtocolException>(() => coordinator.ReconnectAsync().AsTask());
+
+        Assert.Equal(CommonConnectorConnectionStatus.AwaitingVpnAuthorization, coordinator.Current.Status);
+        Assert.Equal("vpn_provider_busy", coordinator.Current.DiagnosticCode);
+    }
+
+    [Fact]
+    public async Task VpnStateNotSupported_IsTreatedLikeUninitializedProviderState()
+    {
+        var events = new List<string>();
+        var access = new FakeAccess(events)
+        {
+            StateFailure = new ConnectorEnrollmentProtocolException("no state", 403, "vpn_state_not_supported"),
+            ProfileFailure = new ConnectorEnrollmentProtocolException("pending", 403, "access_pending"),
+        };
+        var coordinator = new CommonConnectorConnectionCoordinator(access, new FakeOverlay(events, ReadyOverlay()), new FakeGate(events));
+
+        var result = await coordinator.ReconnectAsync();
+
+        Assert.Equal(CommonConnectorConnectionStatus.AccessPending, result.Status);
+        Assert.Equal("access_providers_initializing", result.DiagnosticCode);
+    }
+
+    [Theory]
+    [InlineData("vpn_future_code", CommonConnectorConnectionStatus.Failed)]
+    [InlineData("access_revision_regressed", CommonConnectorConnectionStatus.Failed)]
+    public async Task UnknownOrDefinitiveProfileCodes_AreNotRetriedAndKeepTheirCode(string code, CommonConnectorConnectionStatus expected)
+    {
+        var events = new List<string>();
+        var access = new FakeAccess(events, State("ready"))
+        {
+            ProfileFailure = new ConnectorEnrollmentProtocolException("no", 403, code),
+        };
+        var coordinator = new CommonConnectorConnectionCoordinator(access, new FakeOverlay(events, ReadyOverlay()), new FakeGate(events));
+        var clock = new CommonConnectorProvisioningWaiterTests.ManualTimeProvider();
+
+        var error = await Assert.ThrowsAsync<ConnectorEnrollmentProtocolException>(() =>
+            CommonConnectorProvisioningWaiter.WaitAsync(ct => coordinator.ReconnectAsync(ct),
+                ct => coordinator.ResumeAndConnectAsync(ct), async ct => { await coordinator.DisconnectAsync(ct); },
+                timeProvider: clock).AsTask());
+
+        Assert.Equal(code, error.ErrorCode);
+        Assert.Equal(expected, coordinator.Current.Status);
+        Assert.Equal(code, coordinator.Current.DiagnosticCode);
+    }
+
+    [Fact]
     public async Task NetBirdUp_RunsOncePerIssuedBootstrapWhileTheServerAwaitsThePeer()
     {
         var events = new List<string>();

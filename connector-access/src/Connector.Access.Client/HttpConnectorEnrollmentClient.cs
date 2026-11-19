@@ -653,8 +653,14 @@ public sealed partial class HttpConnectorEnrollmentClient : IConnectorEnrollment
             VersionPolicy = HttpVersionPolicy.RequestVersionOrLower,
         };
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+        // Opts into the distinct pending/denied/busy failure codes; servers answer
+        // older clients with the legacy codes they already understand.
+        request.Headers.Add(ProtocolHeader, ProtocolVersion);
         return request;
     }
+
+    internal const string ProtocolHeader = "X-Connector-Protocol";
+    internal const string ProtocolVersion = "2";
 
     private BoundedTimeout CreateBoundedTimeout(TimeSpan limit, CancellationToken cancellationToken) =>
         new(limit, _options.TimeProvider, cancellationToken);

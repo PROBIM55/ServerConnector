@@ -39,6 +39,27 @@ public sealed class HttpConnectorEnrollmentClientTests
     }
 
     [Fact]
+    public async Task RequestsDeclareTheDistinctFailureCodeProtocol()
+    {
+        using var directory = new TemporaryDirectory();
+        using var authority = new TestCertificateAuthority();
+        var store = new FileConnectorEnrollmentStateStore(directory.Path);
+        string? protocol = null;
+        var transport = new DelegateHttpInvokerFactory((certificate, request, cancellationToken) =>
+        {
+            protocol = request.Headers.TryGetValues("X-Connector-Protocol", out var values) ? string.Join(",", values) : null;
+            throw new HttpRequestException("simulated lost response");
+        });
+        var client = CreateClient(store, authority.Pin, transport);
+
+        await Assert.ThrowsAsync<HttpRequestException>(() => client.EnrollAsync("token", "Test workstation").AsTask());
+
+        Assert.Equal("2", protocol);
+        var pending = await store.LoadAsync(CancellationToken.None);
+        if (pending is not null) CryptographicOperations.ZeroMemory(pending.PrivateKeyPkcs8);
+    }
+
+    [Fact]
     public async Task RestartResumesSameRequestAndKeyWithoutToken()
     {
         using var directory = new TemporaryDirectory();
