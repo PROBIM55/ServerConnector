@@ -128,7 +128,11 @@
       }))
     };
     if (snap.update && typeof snap.update === 'object') state.update = {
-      version: str(snap.update.version), notes: strings(snap.update.notes), checkedAt: opt(snap.update.checkedAt), checkFailed: snap.update.checkFailed === true
+      version: str(snap.update.version), notes: strings(snap.update.notes), checkedAt: opt(snap.update.checkedAt), checkFailed: snap.update.checkFailed === true,
+      // State of the machine update service: current | available | downloading | installing | failed | unknown.
+      kind: str(snap.update.kind) || 'unknown', text: str(snap.update.text), percent: num(snap.update.percent), errorCode: opt(snap.update.errorCode),
+      updated: snap.update.updated && typeof snap.update.updated === 'object'
+        ? { version: str(snap.update.updated.version), notes: strings(snap.update.updated.notes) } : null
     };
     if (snap.about && typeof snap.about === 'object') state.about = {
       version: str(snap.about.version), build: str(snap.about.build), netbird: str(snap.about.netbird), webView2: str(snap.about.webView2), ifcEngine: str(snap.about.ifcEngine)

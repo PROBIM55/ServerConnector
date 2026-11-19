@@ -13,4 +13,6 @@ foreach($file in $manifest.files){
         (Get-FileHash -LiteralPath $path).Hash.ToLowerInvariant() -cne $file.sha256){throw ('Installed image differs: '+$file.path)}
 }
 if($expected.Count -lt 100){throw 'Incomplete expected image.'}
-foreach($file in Get-ChildItem -LiteralPath $root -Recurse -File -Force){if(!$expected.Contains($file.FullName)){throw 'Predecessor-only or unknown file remained in the installed image.'}}
+# Updater\state holds the update service's run-time state (created by the service, not part of the image).
+$serviceState=Join-Path $root 'Updater\state\'
+foreach($file in Get-ChildItem -LiteralPath $root -Recurse -File -Force){if(!$file.FullName.StartsWith($serviceState,[StringComparison]::OrdinalIgnoreCase) -and !$expected.Contains($file.FullName)){throw 'Predecessor-only or unknown file remained in the installed image.'}}

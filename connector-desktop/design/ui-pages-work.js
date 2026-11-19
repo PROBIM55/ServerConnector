@@ -28,7 +28,12 @@
       items.push({ icon: 'i', tone: 't-warn', title: names + ' — через прежний коннектор', text: 'Он работает на этом компьютере. Остальные папки доступны здесь.', btn: 'Подробнее', cls: 'b-sec', ui: 'go', data: { page: 'folders' } });
     }
     if (state.updateAvailable)
-      items.push({ icon: '↑', tone: 't-ok', title: state.update?.version ? 'Доступна версия ' + state.update.version : 'Доступна новая версия коннектора', text: 'Установится после текущего задания.', btn: 'Что нового', cls: 'b-sec', ui: 'go', data: { page: 'settings' } });
+      items.push({ icon: '↑', tone: state.update?.kind === 'failed' ? 't-warn' : 't-ok', title: state.update?.version ? 'Доступна версия ' + state.update.version : 'Доступна новая версия коннектора',
+        text: state.update?.text || 'Установится автоматически после текущего задания.', btn: 'Что нового', cls: 'b-sec', ui: 'go', data: { page: 'settings' } });
+    else if (state.update?.kind === 'unavailable')
+      items.push({ icon: '!', tone: 't-bad', title: 'Служба обновления не работает', text: 'Новые версии не устанавливаются. Скачайте установщик и установите коннектор заново.', btn: 'Подробнее', cls: 'b-sec', ui: 'go', data: { page: 'settings' } });
+    else if (state.update?.updated?.version)
+      items.push({ icon: '✓', tone: 't-ok', title: 'Коннектор обновлён до ' + state.update.updated.version, text: state.update.updated.notes[0] || 'Обновление установлено автоматически.', btn: 'Что нового', cls: 'b-sec', ui: 'go', data: { page: 'settings' } });
     return items;
   };
 

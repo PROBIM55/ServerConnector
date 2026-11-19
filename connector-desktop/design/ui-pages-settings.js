@@ -20,7 +20,8 @@
   PC.pages.settings = state => {
     const legacy = state.legacy || { status: '', transferred: false, canTransfer: false, canRestore: false };
     const autostart = state.fields.autostart !== false;
-    const update = state.update || { version: '', notes: [], checkedAt: null };
+    const update = state.update || { version: '', notes: [], checkedAt: null, kind: 'unknown', text: '', percent: null, updated: null };
+    const updateTone = { current: 'var(--text2)', available: 'var(--okInk)', downloading: 'var(--text2)', installing: 'var(--text2)', failed: 'var(--warnInk)', unavailable: 'var(--badInk, var(--warnInk))' }[update.kind] || 'var(--dim)';
     const about = state.about || {};
     const components = [about.netbird && 'NetBird ' + about.netbird, about.webView2 && 'WebView2 ' + about.webView2, about.ifcEngine && 'движок IFC ' + about.ifcEngine].filter(Boolean).join(' · ');
     const legacyButton = legacy.canRestore
@@ -30,9 +31,12 @@
 <section class="card" style="padding: 20px; display: flex; flex-direction: column; gap: 14px">
 <h2 class="h2">Обновление</h2>
 <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px"><span class="mono" style="padding: 3px 8px; border-radius: 6px; background: var(--hover)">${esc(version(state))}</span>${state.updateAvailable ? `<span style="color: var(--dim)">→</span><span class="mono" style="padding: 3px 8px; border-radius: 6px; background: var(--okSoft); color: var(--okInk)">${esc(update.version || 'новая версия')}</span>` : `<span class="lbl">установлена эта версия</span>`}${update.checkedAt ? `<span class="lbl">${esc(M.time.checkedText(update.checkedAt))}</span>` : ''}</div>
+${update.text ? `<span style="color: ${updateTone}">${esc(update.text)}</span>` : ''}
+${update.kind === 'downloading' && update.percent !== null ? `<div style="height: 6px; border-radius: 3px; background: var(--hover); overflow: hidden"><div style="height: 100%; width: ${Math.max(0, Math.min(100, update.percent))}%; background: var(--accent)"></div></div>` : ''}
 ${state.updateAvailable && update.notes.length ? `<ul class="bullets" style="gap: 4px">${update.notes.map(line => `<li>${esc(line)}</li>`).join('')}</ul>` : ''}
-${state.updateAvailable ? '<span style="color: var(--text2)">Обновление установится после текущего задания; коннектор перезапустится и подключится сам.</span>' : ''}
-<div class="acts">${state.updateAvailable ? button('Установить после текущего задания', 'b b-pri', { ui: 'dialog', data: { dialog: 'update' } }) : ''}${button('Проверить обновления', 'b b-sec', { cmd: 'update-check' })}</div>
+${state.updateAvailable ? '<span class="lbl">Обновление установится само после текущего задания; коннектор перезапустится и подключится сам.</span>' : ''}
+${update.updated ? `<span style="color: var(--okInk)">Коннектор обновлён до ${esc(update.updated.version)}.</span>${update.updated.notes.length ? `<ul class="bullets" style="gap: 4px">${update.updated.notes.map(line => `<li>${esc(line)}</li>`).join('')}</ul>` : ''}` : ''}
+<div class="acts">${update.kind === 'unavailable' ? button('Скачать установщик', 'b b-pri', { cmd: 'update-manual' }) : ''}${button('Проверить обновления', 'b b-sec', { cmd: 'update-check' })}</div>
 </section>
 <section class="card" style="padding: 20px; display: flex; flex-direction: column; gap: 14px">
 <h2 class="h2">Оформление и запуск</h2>

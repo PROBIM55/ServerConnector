@@ -33,6 +33,47 @@ function Run-Setup([string]$Mode,[string]$Executable=$setup,[string]$Label=$Mode
         return $process.ExitCode
     } finally { $process.Dispose() }
 }
+# K9: the machine update service and its folders, exactly as the MSI declares them.
+function Assert-UpdateService([string]$Stage) {
+    $service=Get-CimInstance -ClassName Win32_Service -Filter "Name='PlatformConnectorUpdater'"
+    if (!$service) { throw "Update service is not installed ($Stage)." }
+    # Quoted: an unquoted image path with spaces would be a classic privilege-escalation hole.
+    $expectedPath='"'+(Join-Path $env:ProgramFiles 'Platform Connector\Updater\PlatformConnectorUpdater.exe')+'"'
+    if ($service.PathName -ine $expectedPath) { throw "Update service image differs ($Stage): $($service.PathName)" }
+    if ($service.StartName -ine 'LocalSystem') { throw "Update service must run as LocalSystem ($Stage)." }
+    if ($service.StartMode -cne 'Auto') { throw "Update service must start automatically ($Stage)." }
+    $key=Get-ItemProperty -LiteralPath 'HKLM:\SYSTEM\CurrentControlSet\Services\PlatformConnectorUpdater'
+    if ($key.DelayedAutostart -ne 1) { throw "Update service must use delayed automatic start ($Stage)." }
+    if (!$key.FailureActions -or $key.FailureActions.Length -lt 20) { throw "Update service has no restart-on-failure actions ($Stage)." }
+    $until=[datetime]::UtcNow.AddSeconds(60)
+    while ((Get-Service PlatformConnectorUpdater).Status -ne 'Running' -and [datetime]::UtcNow -lt $until) { Start-Sleep -Milliseconds 500 }
+    if ((Get-Service PlatformConnectorUpdater).Status -ne 'Running') { throw "Update service is not running ($Stage)." }
+    $root=Join-Path $env:ProgramData 'Structura Connector'
+    $status=Join-Path $root 'Updates\update-status.json'
+    # The first status may precede the commit of the MSI registration; the service republishes within 15 s.
+    $until=[datetime]::UtcNow.AddSeconds(90); $parsed=$null
+    do {
+        if (Test-Path -LiteralPath $status) { try { $parsed=Get-Content -LiteralPath $status -Raw | ConvertFrom-Json } catch { $parsed=$null } }
+        if ($parsed -and $parsed.schemaVersion -eq 1 -and $parsed.installedVersion -ceq $env:RELEASE_VERSION) { break }
+        Start-Sleep -Milliseconds 500
+    } while ([datetime]::UtcNow -lt $until)
+    if (!$parsed -or $parsed.installedVersion -cne $env:RELEASE_VERSION) { throw "Update status does not report the installed version ($Stage)." }
+    $writeRights=[Security.AccessControl.FileSystemRights]'WriteData,AppendData,Delete,DeleteSubdirectoriesAndFiles,ChangePermissions,TakeOwnership'
+    $stateFolder=Join-Path $env:ProgramFiles 'Platform Connector\Updater\state'
+    foreach ($folder in @((Join-Path $root 'Updates'),$stateFolder)) {
+        $acl=Get-Acl -LiteralPath $folder
+        if ($acl.Owner -notmatch 'SYSTEM$') { throw "Update folder $folder is not owned by SYSTEM ($Stage)." }
+        $users=@($acl.Access | Where-Object { $_.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value -in @('S-1-5-32-545','S-1-5-11','S-1-1-0') })
+        if ($folder -ceq $stateFolder -and $users.Count) { throw "Users can access the update service state ($Stage)." }
+        if (!$acl.AreAccessRulesProtected) { throw "Update folder $folder inherits permissions ($Stage)." }
+        if (@($users | Where-Object { $_.FileSystemRights -band $writeRights }).Count) { throw "Users can write into $folder ($Stage)." }
+    }
+    # Only the status file lives in ProgramData\...\Updates; state, downloads and journal are under Program Files.
+    if (@(Get-ChildItem -LiteralPath (Join-Path $root 'Updates') -Force | Where-Object Name -cne 'update-status.json').Count) { throw "Unexpected files in the status folder ($Stage)." }
+    $channel=(Get-ItemProperty -LiteralPath 'HKLM:\SOFTWARE\Structura\PlatformConnector').UpdateChannel
+    if ($channel -cne 'stable') { throw "Update channel is not stable ($Stage)." }
+    return @{installed=$true;running=$true;localSystem=$true;delayedAutoStart=$true;statusVersion=$parsed.installedVersion;channel=$channel}
+}
 Add-Type -TypeDefinition @'
 using System;
 using System.Runtime.InteropServices;
@@ -74,6 +115,7 @@ try {
     & (Join-Path $PSScriptRoot 'assert_installed_desktop_image.ps1') -ImageManifest $ImageManifest -InstalledDirectory (Join-Path $env:ProgramFiles 'Platform Connector')
     if(@(Get-ChildItem -LiteralPath $EvidenceDirectory -File -Filter 'install*.log'|Select-String -Pattern 'Disallowing installation.*higher versioned keyfile').Count){throw 'MSI disallowed a higher-version predecessor key file.'}
     if (!(Get-Service NetBird -ErrorAction SilentlyContinue)) { throw 'The EXE did not install NetBird.' }
+    $updateService=Assert-UpdateService $(if ($PredecessorSetupExecutable) { 'after-upgrade-from-1.1.9' } else { 'after-install' })
     New-Item -ItemType Directory -Path $publicRoot | Out-Null
     $probeRoot=Join-Path $publicRoot 'probe'
     Copy-Item -LiteralPath (Split-Path $ProbeExecutable) -Destination $probeRoot -Recurse
@@ -112,6 +154,7 @@ try {
     # the ordinary-user managed application have passed normal installation.
     $repairExit=Run-Setup 'repair'
     & (Join-Path $PSScriptRoot 'assert_installed_desktop_image.ps1') -ImageManifest $ImageManifest -InstalledDirectory (Join-Path $env:ProgramFiles 'Platform Connector')
+    $null=Assert-UpdateService 'after-repair'
     $complete=$true
 } catch {
     $primaryFailure=$_
@@ -176,6 +219,10 @@ try {
 if ($complete) {
     $appRoot=Join-Path $env:ProgramFiles 'Platform Connector'
     if (@($msiInstaller.RelatedProducts($cleanUpgradeCode)).Count -ne 0) { throw 'Uninstall left the application MSI registered.' }
+    if (Get-Service PlatformConnectorUpdater -ErrorAction SilentlyContinue) { throw 'Uninstall left the update service.' }
+    foreach ($folder in @('Updates','UpdateSignals')) {
+        if (Test-Path -LiteralPath (Join-Path $env:ProgramData (Join-Path 'Structura Connector' $folder))) { throw "Uninstall left ProgramData\Structura Connector\$folder." }
+    }
     if ((Test-Path -LiteralPath $appRoot) -and @(Get-ChildItem -LiteralPath $appRoot -Recurse -File -Force).Count -ne 0) { throw 'Uninstall left installed application or configuration files.' }
     foreach ($folder in @([Environment]::GetFolderPath('CommonDesktopDirectory'),[Environment]::GetFolderPath('CommonPrograms'))) {
         if (Test-Path -LiteralPath (Join-Path $folder 'Платформа Коннектор.lnk')) { throw 'Uninstall left a machine application shortcut.' }
@@ -198,6 +245,6 @@ if ($complete) {
         if ((Get-FileHash -LiteralPath $hidden).Hash -cne $ownerHash -or (Test-Path -LiteralPath $owner)) { throw 'Fixture marker changed while held.' }
         Move-Item -LiteralPath $hidden -Destination $owner
     }
-    @{success=$true;installExit=$installExit;repairExit=$repairExit;uninstallExit=$uninstallExit;ordinaryUser=$true;profileRemoved=$true;fixtureRemoved=$true;foreignExactVersionRejected=$true;freshInstall=(!$PredecessorSetupExecutable);upgradeFrom119=[bool]$PredecessorSetupExecutable;exactImageBeforeRepair=$true;legacyImport=$false} |
+    @{success=$true;installExit=$installExit;repairExit=$repairExit;uninstallExit=$uninstallExit;ordinaryUser=$true;profileRemoved=$true;fixtureRemoved=$true;foreignExactVersionRejected=$true;updateService=$updateService;updateServiceRemoved=$true;freshInstall=(!$PredecessorSetupExecutable);upgradeFrom119=[bool]$PredecessorSetupExecutable;exactImageBeforeRepair=$true;legacyImport=$false} |
         ConvertTo-Json | Set-Content -LiteralPath (Join-Path $EvidenceDirectory 'installation.json') -Encoding utf8
 }

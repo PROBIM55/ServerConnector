@@ -6,11 +6,11 @@ on:
       ifc_worker_url: {description: "Pinned IFC worker HTTPS asset", required: true, type: string}
       netbird_msi_url: {description: "Pinned NetBird 0.79 MSI HTTPS asset", required: true, type: string}
       iteration_mode:
-        description: "Services loop, metadata correction, or final installer"
+        description: "Services loop, metadata correction, final installer, or the automatic update check N -> N+1"
         required: true
         default: installer
         type: choice
-        options: [installer, services, package-metadata]
+        options: [installer, services, package-metadata, update-e2e]
       ready_runtime_run_id: {description: "Successful service-loop runtime to replay without compilation; 0 creates it", required: false, default: '0', type: string}
 permissions:
   contents: read
@@ -44,7 +44,7 @@ jobs:
           $ErrorActionPreference='Stop'
           node --test connector-desktop/design/tests/connection-ui.test.cjs
           if ($LASTEXITCODE -ne 0) { throw 'Connection screen regression tests failed.' }
-          foreach ($project in @('connector-access/tests/Connector.Access.Client.Tests','connector-access/tests/Connector.Access.Smb.Tests','connector-desktop/tests/Connector.Network.Tests','connector-desktop/Connector.Desktop.Tests')) {
+          foreach ($project in @('connector-access/tests/Connector.Access.Client.Tests','connector-access/tests/Connector.Access.Smb.Tests','connector-desktop/tests/Connector.Network.Tests','connector-desktop/tests/Connector.Updater.Tests','connector-desktop/Connector.Desktop.Tests')) {
             dotnet test $project -c Release -p:RestoreLockedMode=true -m:1 -nodeReuse:false -p:BuildInParallel=false -p:UseSharedCompilation=false
             if ($LASTEXITCODE -ne 0) { throw "Targeted tests failed: $project" }
           }
@@ -131,6 +131,72 @@ jobs:
             ${{ runner.temp }}/accepted-predecessor/msi-inventory.json
             ${{ runner.temp }}/accepted-predecessor/extract.log
             ${{ runner.temp }}/encrypted-smb-native.json
+          if-no-files-found: ignore
+  # K9 end-to-end: N installed; the service installs a deliberately failing N+2 (rolled back to N), then N+1 by itself.
+  # The release key is NOT available here: descriptions of channel ci-<run id> are signed by the separate job
+  # sign-connector-ci-release.yml. The N+1/N+2 installers never leave this VM; the descriptions (dispatch inputs)
+  # and signatures (one-day artifact of the signing job) are visible in this public repository, which is harmless
+  # because only a computer whose administrator set exactly channel ci-<run id> accepts them.
+  update-e2e:
+    if: ${{ inputs.iteration_mode == 'update-e2e' }}
+    runs-on: windows-latest
+    environment: production
+    timeout-minutes: 180
+    permissions: {contents: read, actions: write}
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      RELEASE_VERSION: ${{ inputs.version }}
+      IFC_WORKER_URL: ${{ inputs.ifc_worker_url }}
+      NETBIRD_MSI_URL: ${{ inputs.netbird_msi_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-dotnet@v4
+        with: {dotnet-version: '8.0.426'}
+      - name: Assert exact SDK
+        run: if ((dotnet --version) -cne '8.0.426') { throw 'Unexpected release SDK.' }
+      - name: Targeted update tests
+        run: |
+          dotnet test connector-desktop/tests/Connector.Updater.Tests -c Release -p:RestoreLockedMode=true -m:1 -nodeReuse:false -p:BuildInParallel=false -p:UseSharedCompilation=false
+          if ($LASTEXITCODE -ne 0) { throw 'Update tests failed.' }
+      - name: Build N, N+1 and the deliberately failing N+2 from this commit
+        env:
+          ACCESS_CONFIGURATION: ${{ secrets.UNIFIED_CONNECTOR_ACCESS_CONFIGURATION_JSON }}
+        run: |
+          $ErrorActionPreference='Stop'
+          if ($env:RELEASE_VERSION -cnotmatch '^(\d+)\.(\d+)\.(\d+)$') { throw 'Version must be x.y.z.' }
+          $next="$($Matches[1]).$($Matches[2]).$([int]$Matches[3]+1)"; $fault="$($Matches[1]).$($Matches[2]).$([int]$Matches[3]+2)"
+          $inputs=Join-Path $env:RUNNER_TEMP 'e2e-inputs'
+          & connector-desktop/scripts/download_clean_build_inputs.ps1 -OutputDirectory $inputs
+          foreach ($build in @(@($env:RELEASE_VERSION,'n',$false),@($next,'next',$false),@($fault,'fault',$true))) {
+            $arguments=@{Version=$build[0];IfcWorkerPath=(Join-Path $inputs 'ifc.exe');NetBirdMsiPath=(Join-Path $inputs 'netbird.msi');
+              WebView2InstallerPath=(Join-Path $inputs 'webview2.exe');ConnectorAccessConfigurationPath=(Join-Path $inputs 'connector-access.json');
+              AcceptedPredecessorManifest=(Join-Path $inputs 'accepted-predecessor/accepted-1.1.9-image.json');
+              OutputDirectory=(Join-Path $env:RUNNER_TEMP ('e2e-'+$build[1]))}
+            if ($build[2]) { $arguments.CiInjectedInstallFault=$true }
+            & connector-desktop/scripts/build_clean_connector_release.ps1 @arguments
+          }
+          "E2E_NEXT=$next" | Add-Content -LiteralPath $env:GITHUB_ENV
+          "E2E_FAULT=$fault" | Add-Content -LiteralPath $env:GITHUB_ENV
+      - name: Service updates N -> N+1 by itself, after rolling back a failing N+2
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          & connector-desktop/scripts/invoke_hosted_update_e2e.ps1 `
+            -SetupN (Join-Path $env:RUNNER_TEMP "e2e-n/release/PlatformConnector-$env:RELEASE_VERSION.exe") -VersionN $env:RELEASE_VERSION `
+            -SetupNext (Join-Path $env:RUNNER_TEMP "e2e-next/release/PlatformConnector-$env:E2E_NEXT.exe") -VersionNext $env:E2E_NEXT `
+            -SetupFault (Join-Path $env:RUNNER_TEMP "e2e-fault/release/PlatformConnector-$env:E2E_FAULT.exe") -VersionFault $env:E2E_FAULT `
+            -EvidenceDirectory (Join-Path $env:RUNNER_TEMP 'e2e-evidence')
+      - name: Upload evidence only (no descriptions, signatures or installers)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: platform-connector-update-e2e-evidence
+          path: |
+            ${{ runner.temp }}/e2e-evidence/*.json
+            ${{ runner.temp }}/e2e-evidence/*.log
           if-no-files-found: ignore
   package-metadata:
     if: ${{ inputs.iteration_mode == 'package-metadata' }}

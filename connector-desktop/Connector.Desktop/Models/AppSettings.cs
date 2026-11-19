@@ -6,7 +6,6 @@ namespace Connector.Desktop.Models;
 public sealed class AppSettings
 {
     public string ServerUrl { get; set; } = "https://server.structura-most.ru";
-    public string UpdateManifestUrl { get; set; } = "https://server.structura-most.ru/updates/latest.json";
     public string DeviceId { get; set; } = "";
     public string TokenCipherBase64 { get; set; } = "";
     public string SmbLogin { get; set; } = "";

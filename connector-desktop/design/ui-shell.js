@@ -110,17 +110,9 @@ ${entry.page(state)}
   /* ---- confirmation dialogs (Main.dc.html dialogs) ------------------------------------------------- */
   // One confirmation per action. A native action that needs the user's consent (drive disconnection, transfer
   // and return of the previous connector, Model Sharing, IFC patch) asks through the snapshot «confirmation»;
-  // the answer is the explicit «confirm-answer» command with its id. The update is confirmed here before
-  // «update-apply», which then runs without another question.
-  const DIALOGS = {
-    update: state => {
-      const running = M.runningJob(state);
-      const version = state.update?.version;
-      return { title: version ? `Установить версию ${version}?` : 'Установить новую версию?', text: running ? `Коннектор дождётся окончания задания «${running.title}», перезапустится и подключится сам.` : 'Коннектор перезапустится и подключится сам.',
-        items: ['Учётная запись и настройки сохранятся.', 'Windows может спросить разрешение на установку.'], note: '', primary: 'Установить', primaryCls: 'b-pri', cancel: 'Позже',
-        confirm: { cmd: 'update-apply', section: 'settings' } };
-    }
-  };
+  // the answer is the explicit «confirm-answer» command with its id. Application updates need no dialog:
+  // the machine update service installs them by itself after the current job.
+  const DIALOGS = {};
   /** The native confirmation waiting for an answer takes precedence over a page dialog. */
   const dialogModel = state => {
     const c = state.confirmation;

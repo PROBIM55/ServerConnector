@@ -1,13 +1,27 @@
-<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs" xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
   <Package Name="Платформа Коннектор" Manufacturer="Structura" Version="$(var.ProductVersion)"
       UpgradeCode="67B43FCD-4FE8-4D29-9F64-6F190FCD6E51" Scope="perMachine"
       InstallerVersion="500" Compressed="yes" Language="1049" Codepage="1251">
-    <MajorUpgrade DowngradeErrorMessage="Установлена более новая версия Платформа Коннектора." />
+    <!-- afterInstallInitialize: the previous version is removed inside the same transaction, so a failed silent
+         update rolls back to it instead of leaving the computer without the product. -->
+    <MajorUpgrade Schedule="afterInstallInitialize" DowngradeErrorMessage="Установлена более новая версия Платформа Коннектора." />
     <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
     <Property Id="MSIFASTINSTALL" Value="1" />
     <Property Id="ARPPRODUCTICON" Value="PlatformIcon.exe" />
     <Icon Id="PlatformIcon.exe" SourceFile="$(var.DesktopDir)\Connector.Desktop.exe" />
     <Property Id="NETBIRD_WAS_ABSENT" Secure="yes" />
+    <!-- Update channel of a first installation; an administrator's later value is never overwritten. -->
+    <Property Id="UPDATECHANNEL" Value="stable" Secure="yes" />
+    <!-- Folders the update service fills at run time; read back so a real uninstall can remove them. -->
+    <Property Id="UPDATESROOTREMOVE" Secure="yes">
+      <RegistrySearch Id="UpdatesRootSearch" Root="HKLM" Key="Software\Structura\PlatformConnector" Name="UpdatesRoot" Type="raw" Bitness="always64" />
+    </Property>
+    <Property Id="UPDATERSTATEREMOVE" Secure="yes">
+      <RegistrySearch Id="UpdaterStateRootSearch" Root="HKLM" Key="Software\Structura\PlatformConnector" Name="UpdaterStateRoot" Type="raw" Bitness="always64" />
+    </Property>
+    <Property Id="UPDATESIGNALSREMOVE" Secure="yes">
+      <RegistrySearch Id="UpdateSignalsRootSearch" Root="HKLM" Key="Software\Structura\PlatformConnector" Name="UpdateSignalsRoot" Type="raw" Bitness="always64" />
+    </Property>
     <StandardDirectory Id="ProgramMenuFolder" />
     <StandardDirectory Id="DesktopFolder" />
     <StandardDirectory Id="ProgramFiles64Folder">
@@ -17,10 +31,15 @@
           <Directory Id="INFRA" Name="infra"><Directory Id="LOCKS" Name="netbird" /></Directory>
           <Directory Id="PINNED_INSTALLER" Name="installer" />
         </Directory>
+        <Directory Id="UPDATER" Name="Updater"><Directory Id="UPDATERSTATE" Name="state" /></Directory>
       </Directory>
     </StandardDirectory>
     <StandardDirectory Id="CommonAppDataFolder">
-      <Directory Id="SHARED_NETWORK_PARENT" Name="Structura Connector"><Directory Id="SHARED_NETWORK" Name="Network" /></Directory>
+      <Directory Id="SHARED_NETWORK_PARENT" Name="Structura Connector">
+        <Directory Id="SHARED_NETWORK" Name="Network" />
+        <Directory Id="UPDATESFOLDER" Name="Updates" />
+        <Directory Id="UPDATESIGNALS" Name="UpdateSignals" />
+      </Directory>
     </StandardDirectory>
     <Component Id="Application" Directory="INSTALLFOLDER" Guid="*">
       <File Id="DesktopExe" Source="$(var.DesktopDir)\Connector.Desktop.exe" KeyPath="yes">
@@ -47,8 +66,56 @@
     <Component Id="NetBirdOwnership" Directory="SHARED_NETWORK" Guid="A0710F90-3344-482A-9E8F-B6E6FF9EDB15" Permanent="yes" NeverOverwrite="yes" Condition="NETBIRD_WAS_ABSENT = &quot;1&quot;">
       <File Source="$(sys.SOURCEFILEDIR)..\Connector.Unified.Setup\netbird-bundle-owner.json" KeyPath="yes"><PermissionEx Sddl="O:SYG:SYD:P(A;;FA;;;SY)(A;;FA;;;BA)(A;;GRGX;;;BU)" /></File>
     </Component>
+    <!-- PlatformConnectorUpdater: LocalSystem service, delayed automatic start, restarted on failure. Installed and
+         controlled by the standard ServiceInstall/ServiceControl tables; delayed start through MsiServiceConfig;
+         restart-on-failure through WiX util ServiceConfig (MsiServiceConfigFailureActions is documented as unreliable).
+         The service never fails its start, so Wait="yes" cannot roll an update back. -->
+    <Component Id="UpdaterService" Directory="UPDATER" Guid="5E3B7C2A-9D41-4F6B-8A0E-2C7D9B14F360">
+      <File Id="UpdaterExe" Source="$(var.DesktopDir)\Updater\PlatformConnectorUpdater.exe" KeyPath="yes" />
+      <ServiceInstall Id="UpdaterServiceInstall" Name="PlatformConnectorUpdater" DisplayName="Платформа Коннектор — обновление"
+          Description="Устанавливает новые версии Платформа Коннектора без участия пользователя. Принимает только выпуски, подписанные ключом Structura."
+          Type="ownProcess" Start="auto" ErrorControl="normal" Account="LocalSystem" Vital="yes">
+        <ServiceConfig DelayedAutoStart="yes" OnInstall="yes" OnReinstall="yes" />
+        <util:ServiceConfig FirstFailureActionType="restart" SecondFailureActionType="restart" ThirdFailureActionType="restart"
+            RestartServiceDelayInSeconds="60" ResetPeriodInDays="1" />
+      </ServiceInstall>
+      <ServiceControl Id="UpdaterServiceControl" Name="PlatformConnectorUpdater" Start="install" Stop="both" Remove="uninstall" Wait="yes" />
+    </Component>
+    <!-- Updates: written by SYSTEM and administrators only; users read update-status.json. -->
+    <Component Id="UpdatesFolder" Directory="UPDATESFOLDER" Guid="C1F0A6D2-4B7E-4E59-9A23-71D5E8B0C4A9">
+      <CreateFolder><PermissionEx Sddl="O:SYG:SYD:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;GRGX;;;BU)" /></CreateFolder>
+      <RegistryValue Root="HKLM" Key="Software\Structura\PlatformConnector" Name="UpdatesRoot" Type="string" Value="[UPDATESFOLDER]" KeyPath="yes" />
+      <!-- A real uninstall removes the status file; the old product of a major upgrade must not. -->
+      <util:RemoveFolderEx Id="RemoveUpdatesRoot" On="uninstall" Property="UPDATESROOTREMOVE" Condition="NOT UPGRADINGPRODUCTCODE" />
+    </Component>
+    <!-- Service state, downloaded installers and the service journal: below Program Files, where an ordinary user
+         can never create anything beforehand; protected DACL, SYSTEM and administrators only. -->
+    <Component Id="UpdaterState" Directory="UPDATERSTATE" Guid="D3B19C47-52E8-4A6F-9E21-6C07F8A4B5D2">
+      <CreateFolder><PermissionEx Sddl="O:SYG:SYD:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)" /></CreateFolder>
+      <RegistryValue Root="HKLM" Key="Software\Structura\PlatformConnector" Name="UpdaterStateRoot" Type="string" Value="[UPDATERSTATE]" KeyPath="yes" />
+      <util:RemoveFolderEx Id="RemoveUpdaterState" On="uninstall" Property="UPDATERSTATEREMOVE" Condition="NOT UPGRADINGPRODUCTCODE" />
+    </Component>
+    <!-- Application flags: users list the folder and create files (no subfolders); each user reads, writes and
+         deletes only the files they created (CREATOR OWNER). The service only reads here. -->
+    <Component Id="UpdateSignalsFolder" Directory="UPDATESIGNALS" Guid="F47C1B93-6E2D-4A08-9C5B-D3E1A7024B68">
+      <CreateFolder><PermissionEx Sddl="O:SYG:SYD:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;;0x1200a3;;;BU)(A;OIIO;0x130187;;;CO)" /></CreateFolder>
+      <RegistryValue Root="HKLM" Key="Software\Structura\PlatformConnector" Name="UpdateSignalsRoot" Type="string" Value="[UPDATESIGNALS]" KeyPath="yes" />
+      <util:RemoveFolderEx Id="RemoveUpdateSignals" On="uninstall" Property="UPDATESIGNALSREMOVE" Condition="NOT UPGRADINGPRODUCTCODE" />
+    </Component>
+    <!-- Channel (stable/pilot) chosen by the administrator: written once, kept across upgrades. -->
+    <Component Id="UpdateChannel" Directory="INSTALLFOLDER" Guid="2B9E6D04-7A1C-4F35-8E62-A0C4D5B7193E" NeverOverwrite="yes" Permanent="yes">
+      <RegistryValue Root="HKLM" Key="Software\Structura\PlatformConnector" Name="UpdateChannel" Type="string" Value="[UPDATECHANNEL]" KeyPath="yes" />
+    </Component>
+<?ifdef CiInjectedInstallFault ?>
+    <!-- Cloud rollback check only (never defined by a release build): fails the transaction after the previous
+         version has been removed, to prove that afterInstallInitialize restores it. -->
+    <CustomAction Id="CiInjectedInstallFault" Directory="INSTALLFOLDER" ExeCommand="&quot;[System64Folder]cmd.exe&quot; /c exit 1603"
+        Execute="deferred" Impersonate="no" Return="check" />
+    <InstallExecuteSequence><Custom Action="CiInjectedInstallFault" Before="InstallFinalize" Condition="NOT REMOVE" /></InstallExecuteSequence>
+<?endif?>
     <Feature Id="Complete" Title="Платформа Коннектор" Level="1">
-      <Files Include="$(var.DesktopDir)\**" Directory="INSTALLFOLDER"><Exclude Files="$(var.DesktopDir)\Connector.Desktop.exe" /><Exclude Files="$(var.DesktopDir)\**\*.pdb" /></Files>
+      <Files Include="$(var.DesktopDir)\**" Directory="INSTALLFOLDER"><Exclude Files="$(var.DesktopDir)\Connector.Desktop.exe" /><Exclude Files="$(var.DesktopDir)\Updater\PlatformConnectorUpdater.exe" /><Exclude Files="$(var.DesktopDir)\**\*.pdb" /></Files>
+      <ComponentRef Id="UpdaterService" /><ComponentRef Id="UpdatesFolder" /><ComponentRef Id="UpdaterState" /><ComponentRef Id="UpdateSignalsFolder" /><ComponentRef Id="UpdateChannel" />
       <ComponentRef Id="Application" /><ComponentRef Id="ProtectedAppRoot" /><ComponentRef Id="ProtectedNetwork" /><ComponentRef Id="ProtectedScripts" /><ComponentRef Id="ProtectedInfra" /><ComponentRef Id="ProtectedLocks" /><ComponentRef Id="ProtectedInstaller" />
       <ComponentRef Id="Configuration" /><ComponentRef Id="Preflight" /><ComponentRef Id="Verifier" /><ComponentRef Id="IdentityLock" /><ComponentRef Id="NetBirdPackage" /><ComponentRef Id="SharedNetworkParent" /><ComponentRef Id="SharedNetworkRoot" /><ComponentRef Id="NetBirdOwnership" />
     </Feature>

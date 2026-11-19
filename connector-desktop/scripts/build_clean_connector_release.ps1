@@ -6,7 +6,10 @@ param(
     [Parameter(Mandatory)][string]$WebView2InstallerPath,
     [Parameter(Mandatory)][string]$ConnectorAccessConfigurationPath,
     [Parameter(Mandatory)][string]$AcceptedPredecessorManifest,
-    [Parameter(Mandatory)][string]$OutputDirectory
+    [Parameter(Mandatory)][string]$OutputDirectory,
+    # Cloud rollback check only: compiles a deferred failure after RemoveExistingProducts into the MSI.
+    # Never set by a release build; marked in release.json and never uploaded by the update check.
+    [switch]$CiInjectedInstallFault
 )
 $ErrorActionPreference='Stop'
 Set-StrictMode -Version Latest
@@ -39,8 +42,19 @@ $imageOutput=Join-Path $out 'image'
 & (Join-Path $PSScriptRoot 'build_package_update.ps1') -LocalOnly -PublishOnly -PackVersion $Version -Channel stable -IfcWorkerPath $IfcWorkerPath -IfcWorkerSha256 (Get-Content (Join-Path $desktopRoot 'workers/accepted-engines.json') -Raw | ConvertFrom-Json).ifcOptimizer.sha256 -PackageOutputDir $imageOutput
 $image=Get-Content -LiteralPath (Join-Path $imageOutput 'desktop-image.json') -Raw | ConvertFrom-Json
 $publish=[string]$image.publishDirectory
-@{schemaVersion=1;installation='machine-msi';version=$Version;legacyImport=$false} | ConvertTo-Json |
-    Set-Content -LiteralPath (Join-Path $publish 'connector-install.json') -Encoding utf8
+# The machine update service (PlatformConnectorUpdater) is part of the same image: Program Files\Platform Connector\Updater\.
+# Same pinned SDK/runtime as the application, self-contained, one trimmed file; nothing else may land in that folder.
+$updaterDir=Join-Path $publish 'Updater'
+if (Test-Path -LiteralPath $updaterDir) { throw 'The Updater folder of the image must be fresh.' }
+& dotnet publish (Join-Path $desktopRoot 'src/Connector.Updater/Connector.Updater.csproj') -c Release -r win-x64 -p:RestoreLockedMode=true "-p:Version=$Version" `
+    -p:DebugType=None -p:DebugSymbols=false -o $updaterDir -m:1 -nodeReuse:false -p:BuildInParallel=false -p:UseSharedCompilation=false
+if ($LASTEXITCODE -ne 0) { throw 'Update service publish failed.' }
+$updaterFiles=@(Get-ChildItem -LiteralPath $updaterDir -Recurse -Force)
+if ($updaterFiles.Count -ne 1 -or $updaterFiles[0].Name -cne 'PlatformConnectorUpdater.exe' -or
+    [Diagnostics.FileVersionInfo]::GetVersionInfo($updaterFiles[0].FullName).FileVersion -cne "$Version.0") { throw 'The update service must publish as exactly one file of this version.' }
+foreach ($retired in @('connector-install.json','connector-update.json')) {
+    if (Test-Path -LiteralPath (Join-Path $publish $retired)) { throw "Retired update switch $retired must not be in the image." }
+}
 $config=Join-Path $out 'connector-access.json'
 Copy-Item -LiteralPath $ConnectorAccessConfigurationPath -Destination $config
 $imageManifest=Join-Path $out 'desktop-image-manifest.json'
@@ -56,14 +70,16 @@ foreach($extra in @(
 }
 $manifest|ConvertTo-Json -Depth 6|Set-Content -LiteralPath $imageManifest -Encoding utf8
 function Invoke-Build([string[]]$Arguments) {
-    & dotnet @Arguments -m:1 -nodeReuse:false -p:BuildInParallel=false -p:UseSharedCompilation=false
+    # --no-incremental: several versions are built in one job; WiX does not track DefineConstants changes.
+    & dotnet @Arguments --no-incremental -m:1 -nodeReuse:false -p:BuildInParallel=false -p:UseSharedCompilation=false
     if ($LASTEXITCODE -ne 0) { throw 'Cloud installer build failed.' }
 }
 $msiDir=Join-Path $out 'msi'
 Invoke-Build -Arguments @('build',(Join-Path $desktopRoot 'Connector.Clean.Setup/Connector.Clean.Setup.wixproj'),'-c','Release','-o',$msiDir,
     "-p:ProductVersion=$Version","-p:DesktopPublishDir=$publish","-p:ConnectorAccessConfigurationPath=$config",
     "-p:NetBirdMsiPath=$NetBirdMsiPath","-p:NetBirdPreflightScriptPath=$(Join-Path $PSScriptRoot 'netbird_windows_preflight.ps1')",
-    "-p:NetBirdVerifierScriptPath=$(Join-Path $PSScriptRoot 'verify_netbird_installer.ps1')","-p:NetBirdIdentityLockPath=$lock")
+    "-p:NetBirdVerifierScriptPath=$(Join-Path $PSScriptRoot 'verify_netbird_installer.ps1')","-p:NetBirdIdentityLockPath=$lock",
+    "-p:CiInjectedInstallFault=$(if ($CiInjectedInstallFault) { 'true' } else { 'false' })")
 $msis=@(Get-ChildItem -LiteralPath $msiDir -File -Filter '*.msi')
 if ($msis.Count -ne 1) { throw 'Expected exactly one fresh application MSI.' }
 $installer=New-Object -ComObject WindowsInstaller.Installer
@@ -86,9 +102,10 @@ if ((Get-AuthenticodeSignature -LiteralPath $final).Status -ne 'NotSigned' -or
     (Get-AuthenticodeSignature -LiteralPath $msis[0].FullName).Status -ne 'NotSigned') { throw 'Unsigned candidate contains an unexpected signature state.' }
 @{schemaVersion=1;version=$Version;sourceSha=$env:GITHUB_SHA;sourceRun=$env:GITHUB_RUN_ID;
     fileName=[IO.Path]::GetFileName($final);bytes=(Get-Item $final).Length;sha256=(Get-FileHash $final).Hash.ToLowerInvariant();
-    artifactKind='unsigned-cloud-candidate';authenticodeStatus=[string](Get-AuthenticodeSignature -LiteralPath $final).Status;
+    artifactKind=$(if ($CiInjectedInstallFault) { 'ci-injected-install-fault' } else { 'unsigned-cloud-candidate' });ciInjectedInstallFault=[bool]$CiInjectedInstallFault;authenticodeStatus=[string](Get-AuthenticodeSignature -LiteralPath $final).Status;
     freshInstallation=$true;legacyPayloads=$false;legacyImport=$false;blenderIncluded=$false;
     sdkVersion='8.0.426';runtimeVersion='8.0.32';desktopImageManifestSha256=(Get-FileHash -LiteralPath $imageManifest).Hash.ToLowerInvariant();
+    updateServiceSha256=(Get-FileHash -LiteralPath (Join-Path $updaterDir 'PlatformConnectorUpdater.exe')).Hash.ToLowerInvariant();
     netBirdSha256=(Get-FileHash $NetBirdMsiPath).Hash.ToLowerInvariant();webView2Sha256=(Get-FileHash $WebView2InstallerPath).Hash.ToLowerInvariant()} |
     ConvertTo-Json | Set-Content -LiteralPath (Join-Path $release 'release.json') -Encoding utf8
 Write-Host "CLEAN_RELEASE_EXE=$final"

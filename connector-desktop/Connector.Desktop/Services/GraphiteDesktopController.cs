@@ -330,7 +330,7 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
                 : null,
             ["teklaStandard"] = GraphiteSnapshotFacts.TeklaStandard(_connectorHost.Settings, picked),
             ["tekla"] = TeklaSnapshot(),
-            ["update"] = GraphiteSnapshotFacts.Update(_connectorHost.UpdateInfo, _connectorHost.HasPendingUpdate),
+            ["update"] = GraphiteSnapshotFacts.Update(_connectorHost.UpdateState, _connectorHost.JustUpdated),
             ["about"] = AboutSnapshot(),
             ["agrInstall"] = _platformTools.AgrInstallProgress is { } install
                 ? new { phase = install.Phase, completedBytes = install.CompletedBytes, totalBytes = install.TotalBytes }
@@ -400,6 +400,10 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
             case "update-check":
                 StartOperation(CheckUpdatesAsync, request.Command, cancellationToken);
                 break;
+            case "update-manual":
+                // Fixed product address only; nothing from the page is used.
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(global::Connector.Updates.UpdateLocations.ManualDownloadUrl) { UseShellExecute = true })?.Dispose();
+                break;
             case "confirm-answer":
                 // Explicit answer of the page dialog. Only the id of the confirmation the native action is waiting
                 // for is accepted, once; the message itself came through the trusted-document RPC channel.
@@ -408,9 +412,6 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
                 break;
             case "drop-input":
                 DropInput(ReadString(request.Payload, "target"), request.DroppedPaths ?? Array.Empty<string>());
-                break;
-            case "update-download":
-                StartSupportAction(DesktopSupportAction.DownloadPendingUpdate, request.Command, cancellationToken);
                 break;
             case "settings-log":
             case "cad-log":
@@ -427,10 +428,6 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
                 break;
             case "diagnostics":
                 StartSupportAction(DesktopSupportAction.ExportDiagnostics, request.Command, cancellationToken);
-                break;
-            case "update-apply":
-                // The page asks first (its own dialog), like the update toast; one confirmation only.
-                StartOperation(() => _connectorHost.InstallPendingUpdateAsync(confirmBeforeRun: false), request.Command, cancellationToken);
                 break;
             case "firm-sync-all":
                 StartOperation(_connectorHost.RunTeklaInteractiveSyncAsync, request.Command, cancellationToken);
@@ -1468,17 +1465,16 @@ public sealed class GraphiteDesktopController : IAsyncDisposable
         catch (Exception ex) { _connectorHost.Log($"Graphite job journal update failed ({ex.GetType().Name})."); }
     }
 
-    /// <summary>«Проверить обновления» without native dialogs: the outcome is the notice of the command.</summary>
+    /// <summary>
+    /// «Проверить обновления»: asks the machine update service to check now. The result arrives with the
+    /// service status (the «Обновление» card follows it); the command itself only confirms the request.
+    /// </summary>
     private async Task CheckUpdatesAsync()
     {
-        var before = _connectorHost.UpdateInfo.CheckedAtUtc;
-        await _connectorHost.CheckUpdatesAsync(showDialogs: false);
-        var info = _connectorHost.UpdateInfo;
-        if (info.CheckFailed) throw UserError("Не удалось проверить обновления. Проверьте подключение к интернету.");
-        if (info.CheckedAtUtc == before) throw UserError("Проверка обновлений сейчас недоступна для этой установки.");
-        lock (_gate) _operationResults["update-check"] = _connectorHost.HasPendingUpdate
-            ? ("Доступна новая версия" + (DesktopUpdateNotes.SafeVersion(info.Version) is { } version ? " " + version : "") + ".", "ok")
-            : ("Установлена актуальная версия.", "info");
+        if (!_connectorHost.UpdateState.ServiceAvailable)
+            throw UserError("Служба обновления не отвечает. Переустановите коннектор, если это повторяется.");
+        await _connectorHost.RequestUpdateCheckAsync();
+        lock (_gate) _operationResults["update-check"] = ("Проверка обновлений запущена — результат появится здесь через минуту.", "info");
     }
 
     /// <summary>Runs a module command as a local journal entry; the module's own outcome decides its result.</summary>

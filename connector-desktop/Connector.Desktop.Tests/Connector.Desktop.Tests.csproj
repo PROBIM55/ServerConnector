@@ -17,7 +17,6 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
-    <PackageReference Include="Velopack" Version="1.2.161" />
     <PackageReference Include="dnlib" Version="4.4.0" />
     <PackageReference Include="System.ServiceProcess.ServiceController" Version="8.0.0" />
   </ItemGroup>
@@ -25,12 +24,6 @@
   <ItemGroup>
     <!-- Compile the small unit under test directly so the test output does
          not copy the desktop application's bundled Git/VPN payload. -->
-    <Compile Include="..\Connector.Desktop\Services\UpdateService.cs"
-             Link="Services\UpdateService.cs" />
-    <Compile Include="..\Connector.Desktop\Services\PackageUpdateService.cs"
-             Link="Services\PackageUpdateService.cs" />
-    <Compile Include="..\Connector.Desktop\Services\SignedManifestUpdateSource.cs"
-             Link="Services\SignedManifestUpdateSource.cs" />
     <Compile Include="..\Connector.Desktop\Services\TcpConnectivityProbe.cs"
              Link="Services\TcpConnectivityProbe.cs" />
     <Compile Include="..\Connector.Desktop\Services\VpnConfigComparer.cs"
@@ -59,6 +52,8 @@
     <Compile Include="..\Connector.Desktop\Services\ConnectorJobJournal.cs" Link="Services\ConnectorJobJournal.cs" />
     <Compile Include="..\Connector.Desktop\Services\PageConfirmationBroker.cs" Link="Services\PageConfirmationBroker.cs" />
     <Compile Include="..\Connector.Desktop\Services\DesktopUpdateNotes.cs" Link="Services\DesktopUpdateNotes.cs" />
+    <Compile Include="..\Connector.Desktop\Services\DesktopUpdateClient.cs" Link="Services\DesktopUpdateClient.cs" />
+    <ProjectReference Include="..\src\Connector.Updates\Connector.Updates.csproj" />
     <Compile Include="..\Connector.Desktop\Services\WindowWorkAreaFit.cs" Link="Services\WindowWorkAreaFit.cs" />
     <ProjectReference Include="..\src\Connector.Network\Connector.Network.csproj" />
     <ProjectReference Include="..\src\Connector.CommonAccess.Runtime\Connector.CommonAccess.Runtime.csproj" />

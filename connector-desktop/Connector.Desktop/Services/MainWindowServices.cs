@@ -18,7 +18,7 @@ public sealed class MainWindowServices
         VpnProvisioningService vpnProvisioning,
         ModelSharingProvisioningService modelSharingProvisioning,
         IfcExportPatchService ifcExportPatch,
-        PackageUpdateService packageUpdates,
+        IDesktopUpdateClient updates,
         bool trayIconVisible = true,
         bool allowOwnedFixtureClose = false,
         bool runLoadedExternalActions = true,
@@ -34,7 +34,7 @@ public sealed class MainWindowServices
         VpnProvisioning = vpnProvisioning ?? throw new ArgumentNullException(nameof(vpnProvisioning));
         ModelSharingProvisioning = modelSharingProvisioning ?? throw new ArgumentNullException(nameof(modelSharingProvisioning));
         IfcExportPatch = ifcExportPatch ?? throw new ArgumentNullException(nameof(ifcExportPatch));
-        PackageUpdates = packageUpdates ?? throw new ArgumentNullException(nameof(packageUpdates));
+        Updates = updates ?? throw new ArgumentNullException(nameof(updates));
         TrayIconVisible = trayIconVisible;
         AllowOwnedFixtureClose = allowOwnedFixtureClose;
         RunLoadedExternalActions = runLoadedExternalActions;
@@ -51,7 +51,8 @@ public sealed class MainWindowServices
     public VpnProvisioningService VpnProvisioning { get; }
     public ModelSharingProvisioningService ModelSharingProvisioning { get; }
     public IfcExportPatchService IfcExportPatch { get; }
-    public PackageUpdateService PackageUpdates { get; }
+    /// <summary>Status of the machine update service and the application's two flags for it.</summary>
+    public IDesktopUpdateClient Updates { get; }
     public bool TrayIconVisible { get; }
     public bool AllowOwnedFixtureClose { get; }
     public bool RunLoadedExternalActions { get; }
@@ -69,5 +70,5 @@ public sealed class MainWindowServices
         new VpnProvisioningService(),
         new ModelSharingProvisioningService(),
         new IfcExportPatchService(),
-        PackageUpdateService.CreateDefault());
+        new DesktopUpdateClient());
 }

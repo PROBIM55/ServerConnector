@@ -140,14 +140,27 @@ public static class GraphiteSnapshotFacts
         return v + " " + r;
     }
 
-    /// <summary>Available version and «Что нового» of the pending update; the list is empty when the manifest has none.</summary>
-    public static object Update(DesktopUpdateInfo info, bool available) => new
+    /// <summary>
+    /// The update state of the machine service as the page shows it: kind (current, available, downloading,
+    /// installing, failed, unknown), the ready text, version, percent, error code and «Что нового» lines.
+    /// <paramref name="justUpdated"/> is the completed update announced once after the restart.
+    /// </summary>
+    public static object Update(DesktopUpdateState state, global::Connector.Updates.CompletedUpdate? justUpdated = null) => new
     {
-        available,
-        version = available ? DesktopUpdateNotes.SafeVersion(info.Version) : null,
-        notes = available ? DesktopUpdateNotes.Lines(info.Notes).ToArray() : Array.Empty<string>(),
-        checkedAt = info.CheckedAtUtc?.ToString("O", CultureInfo.InvariantCulture),
-        checkFailed = info.CheckFailed
+        available = state.HasNewerVersion,
+        kind = state.Kind,
+        text = state.Text,
+        version = DesktopUpdateNotes.SafeVersion(state.Version),
+        percent = state.Percent,
+        errorCode = state.ErrorCode,
+        notes = state.HasNewerVersion ? state.Notes.ToArray() : Array.Empty<string>(),
+        checkedAt = state.CheckedAtUtc?.ToString("O", CultureInfo.InvariantCulture),
+        checkFailed = state.ErrorCode is not null,
+        updated = justUpdated is null ? null : new
+        {
+            version = DesktopUpdateNotes.SafeVersion(justUpdated.Version),
+            notes = justUpdated.Notes.Select(DesktopUpdateNotes.SafeLine).OfType<string>().Take(8).ToArray()
+        }
     };
 
     public static object? Confirmation(PendingPageConfirmation? pending) => pending is null ? null : new

@@ -62,11 +62,6 @@ public sealed class SettingsService
             settings.ServerUrl = "https://server.structura-most.ru";
         }
 
-        if (string.IsNullOrWhiteSpace(settings.UpdateManifestUrl))
-        {
-            settings.UpdateManifestUrl = "https://server.structura-most.ru/updates/latest.json";
-        }
-
         if (string.IsNullOrWhiteSpace(settings.SmbSharePath))
         {
             settings.SmbSharePath = @"\\62.113.36.107\BIM_Models";

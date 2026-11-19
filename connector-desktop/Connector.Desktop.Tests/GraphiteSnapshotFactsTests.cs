@@ -2,6 +2,7 @@ using System.Text.Json;
 using Connector.Desktop.Features.GraphiteWeb;
 using Connector.Desktop.Models;
 using Connector.Desktop.Services;
+using Connector.Updates;
 using Xunit;
 
 namespace Connector.Desktop.Tests;
@@ -63,16 +64,67 @@ public sealed class GraphiteSnapshotFactsTests
         Assert.Equal("2026.04.0 r1", GraphiteSnapshotFacts.Join("2026.04.0 r1", "r1"));
     }
 
+    private static UpdateStatus Status(UpdatePhase phase, string? available = "1.1.16", int? percent = null, string? code = null) =>
+        new("1.1.15", available, phase, percent, null, code, DateTimeOffset.UtcNow, null, ["- Первое", "Второе https://x.test"], null, DateTimeOffset.UtcNow);
+
+
     [Fact]
-    public void Update_shows_the_version_and_changes_only_when_one_is_pending()
+    public void Update_card_follows_the_service_in_five_states()
     {
-        var info = new DesktopUpdateInfo("1.1.13", "- Первое\n- Второе", DateTimeOffset.UtcNow, false);
-        var pending = Json(GraphiteSnapshotFacts.Update(info, available: true));
-        Assert.Equal("1.1.13", pending.GetProperty("version").GetString());
-        Assert.Equal(["Первое", "Второе"], pending.GetProperty("notes").EnumerateArray().Select(line => line.GetString()));
-        var none = Json(GraphiteSnapshotFacts.Update(info, available: false));
-        Assert.Equal(JsonValueKind.Null, none.GetProperty("version").ValueKind);
+        var now = DateTimeOffset.UtcNow;
+        Assert.Equal("Установлена актуальная версия.", DesktopUpdateState.From(Status(UpdatePhase.Idle, available: null), now).Text);
+        Assert.Equal("Доступна версия 1.1.16 — установится автоматически.", DesktopUpdateState.From(Status(UpdatePhase.Ready), now).Text);
+        Assert.Equal("Загружается 1.1.16, 42 %.", DesktopUpdateState.From(Status(UpdatePhase.Downloading, percent: 42), now).Text);
+        Assert.Equal("Устанавливается версия 1.1.16, приложение перезапустится.", DesktopUpdateState.From(Status(UpdatePhase.Installing), now, "1.1.15", true).Text);
+        Assert.Equal("Не удалось обновить (installer-failed) — повторим автоматически.",
+            DesktopUpdateState.From(Status(UpdatePhase.Failed, code: UpdateErrorCodes.InstallerFailed), now).Text);
+        // A failed check without a newer version is not an update failure.
+        var check = DesktopUpdateState.From(Status(UpdatePhase.Idle, available: null, code: UpdateErrorCodes.Network), now);
+        Assert.Equal("current", check.Kind);
+        Assert.Contains("(network)", check.Text);
+        // Catalog at its download limit: still «available», not an error for the user.
+        Assert.Equal("available", DesktopUpdateState.From(Status(UpdatePhase.Idle, code: UpdateErrorCodes.DownloadBusy), now).Kind);
+        // No status file: the service does not answer.
+        Assert.False(DesktopUpdateState.From(null, now).ServiceAvailable);
+    }
+
+    [Fact]
+    public void Stale_or_foreign_installing_never_closes_the_application()
+    {
+        var now = DateTimeOffset.UtcNow;
+        UpdateStatus Installing(DateTimeOffset written, string version = "1.1.16") =>
+            new("1.1.15", version, UpdatePhase.Installing, null, null, null, now, null, [], null, written);
+        Assert.True(DesktopUpdateState.From(Installing(now.AddSeconds(-30)), now, "1.1.15", true).CloseForInstallation);
+        // Heartbeat older than 3 minutes: the service stopped or died mid-way.
+        var stale = DesktopUpdateState.From(Installing(now.AddMinutes(-4)), now, "1.1.15", true);
+        Assert.False(stale.CloseForInstallation);
+        Assert.Equal("unavailable", stale.Kind);
+        Assert.Contains("https://bimplatforma.ru/api/platform/connectors/unified/stable/download", stale.Text);
+        // Own version unknown or not parsable: never treated as newer.
+        Assert.False(DesktopUpdateState.From(Installing(now.AddSeconds(-10)), now, null, true).CloseForInstallation);
+        Assert.False(DesktopUpdateState.From(Installing(now.AddSeconds(-10)), now, "1.1.15.0-dev", true).CloseForInstallation);
+        // Not newer than this application (status left over from its own installation).
+        Assert.False(DesktopUpdateState.From(Installing(now.AddSeconds(-10), "1.1.15"), now, "1.1.15", true).CloseForInstallation);
+        // Service stopped or no heartbeat for a day.
+        Assert.Equal("unavailable", DesktopUpdateState.From(Installing(now), now, "1.1.15", false).Kind);
+        var silent = new UpdateStatus("1.1.15", null, UpdatePhase.Idle, null, null, null, now, null, [], null, now.AddDays(-2));
+        Assert.Equal("unavailable", DesktopUpdateState.From(silent, now, "1.1.15", true).Kind);
+    }
+
+    [Fact]
+    public void Update_snapshot_shows_version_and_safe_notes_only_when_newer()
+    {
+        var pending = Json(GraphiteSnapshotFacts.Update(DesktopUpdateState.From(Status(UpdatePhase.Ready), DateTimeOffset.UtcNow)));
+        Assert.True(pending.GetProperty("available").GetBoolean());
+        Assert.Equal("available", pending.GetProperty("kind").GetString());
+        Assert.Equal("1.1.16", pending.GetProperty("version").GetString());
+        Assert.Equal(["Первое"], pending.GetProperty("notes").EnumerateArray().Select(line => line.GetString()));
+        var none = Json(GraphiteSnapshotFacts.Update(DesktopUpdateState.From(Status(UpdatePhase.Idle, available: null), DateTimeOffset.UtcNow),
+            new CompletedUpdate("1.1.15", DateTimeOffset.UtcNow, ["Быстрее вход"])));
+        Assert.False(none.GetProperty("available").GetBoolean());
         Assert.Equal(0, none.GetProperty("notes").GetArrayLength());
+        Assert.Equal("1.1.15", none.GetProperty("updated").GetProperty("version").GetString());
+        Assert.Equal("Быстрее вход", none.GetProperty("updated").GetProperty("notes")[0].GetString());
     }
 
     [Fact]

@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Shared contract of the machine update service and the desktop application:
+       the signed release description (schema 2), the pinned key, the status file and the
+       two user signal files. No Velopack, no network code, no Windows service code. -->
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsTrimmable>true</IsTrimmable>
+    <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
+    <RootNamespace>Connector.Updates</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- The one pinned release key of the product. It is compiled in; nothing at run time can replace it. -->
+    <EmbeddedResource Include="..\..\Connector.Desktop\Assets\update-public-key.pem"
+                      LogicalName="Connector.Updates.update-public-key.pem"
+                      Condition="Exists('..\..\Connector.Desktop\Assets\update-public-key.pem')" />
+  </ItemGroup>
+  <Target Name="RequirePinnedUpdateKey" BeforeTargets="BeforeBuild">
+    <Error Condition="!Exists('..\..\Connector.Desktop\Assets\update-public-key.pem')"
+           Text="Connector.Updates requires Connector.Desktop\Assets\update-public-key.pem (the pinned release key)." />
+  </Target>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Connector.Updater.Tests" />
+  </ItemGroup>
+</Project>

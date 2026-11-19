@@ -2,6 +2,7 @@
   <PropertyGroup>
     <OutputType>Package</OutputType><InstallerPlatform>x64</InstallerPlatform>
     <DefineConstants>ProductVersion=$(ProductVersion);DesktopDir=$(DesktopPublishDir);AccessConfiguration=$(ConnectorAccessConfigurationPath);NetBirdMsi=$(NetBirdMsiPath);NetBirdPreflight=$(NetBirdPreflightScriptPath);NetBirdVerifier=$(NetBirdVerifierScriptPath);NetBirdLock=$(NetBirdIdentityLockPath)</DefineConstants>
+    <DefineConstants Condition="'$(CiInjectedInstallFault)' == 'true'">$(DefineConstants);CiInjectedInstallFault=1</DefineConstants>
   </PropertyGroup>
   <ItemGroup><PackageReference Include="WixToolset.Util.wixext" Version="6.0.2" /></ItemGroup>
 </Project>

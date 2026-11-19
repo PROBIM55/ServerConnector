@@ -16,7 +16,9 @@ try
     if (new WindowsPrincipal(identity).IsInRole(WindowsBuiltInRole.Administrator)) throw new InvalidOperationException("Probe must run as an ordinary user.");
     var appRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Platform Connector");
     var desktop = Path.Combine(appRoot, "Connector.Desktop.exe");
-    if (!File.Exists(desktop) || !File.Exists(Path.Combine(appRoot, "connector-install.json"))) throw new InvalidOperationException("Fresh machine application missing.");
+    if (!File.Exists(desktop) || !File.Exists(Path.Combine(appRoot, "Updater", "PlatformConnectorUpdater.exe"))) throw new InvalidOperationException("Fresh machine application or its update service missing.");
+    Progress("update-folders-as-ordinary-user");
+    var updateFolders = UpdateFolderProof(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "Structura Connector"));
     if (Directory.EnumerateFiles(appRoot, "blender.exe", SearchOption.AllDirectories).Any()) throw new InvalidOperationException("Blender must be optional.");
     Progress("protected-network-readiness");
     var pinnedMsi = Path.Combine(appRoot, "Network", "installer", "netbird_installer_0.79.0_windows_amd64.msi");
@@ -121,12 +123,41 @@ try
         shortcuts = true, shortcutLaunched = true, msiProductRegistered = true, shortcutProof = shortcuts,
         bundledGit = true, protectedNetworkReady = true, protectedNetworkCheckSeconds, singleInstance, trayReactivation,
         tokenRequired = false, credentialCreated = false,
-        legacyImport = false, blenderIncluded = false }));
+        legacyImport = false, blenderIncluded = false,
+        updatesFolderClosedToUser = updateFolders.Closed, updateStateUnreadable = updateFolders.StateUnreadable,
+        updateSignalAccepted = updateFolders.SignalAccepted }));
 }
 catch (Exception error)
 {
     File.WriteAllText(output, JsonSerializer.Serialize(new { success = false, failure = error.Message, type = error.GetType().Name }));
     Environment.ExitCode = 1;
+}
+
+// An ordinary user can read the service status but write nothing in the update folders, cannot even list the
+// service state (downloads, journal), and can create only its own flag file in UpdateSignals.
+static (bool Closed, bool StateUnreadable, bool SignalAccepted) UpdateFolderProof(string machineRoot)
+{
+    var updates = Path.Combine(machineRoot, "Updates");
+    if (!Directory.Exists(updates)) throw new InvalidOperationException("The update folder was not created by the installer.");
+    var closed = false;
+    try { File.WriteAllText(Path.Combine(updates, "probe-" + Guid.NewGuid().ToString("N") + ".txt"), "x"); }
+    catch (UnauthorizedAccessException) { closed = true; }
+    if (!closed) throw new InvalidOperationException("An ordinary user could write into the update folder.");
+    var stateUnreadable = false;
+    var stateFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Platform Connector", "Updater", "state");
+    try { _ = Directory.GetFiles(stateFolder); }
+    catch (UnauthorizedAccessException) { stateUnreadable = true; }
+    catch (DirectoryNotFoundException) { stateUnreadable = true; }
+    if (!stateUnreadable) throw new InvalidOperationException("An ordinary user could list the update service state.");
+    var sid = WindowsIdentity.GetCurrent().User!.Value;
+    var flag = Path.Combine(machineRoot, "UpdateSignals", "check-" + sid + ".flag");
+    File.WriteAllText(flag, DateTimeOffset.UtcNow.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'"));
+    var subfolderRefused = false;
+    try { Directory.CreateDirectory(Path.Combine(machineRoot, "UpdateSignals", "probe-" + Guid.NewGuid().ToString("N"))); }
+    catch (UnauthorizedAccessException) { subfolderRefused = true; }
+    if (!subfolderRefused) throw new InvalidOperationException("An ordinary user could create a folder among the update signals.");
+    File.Delete(flag);
+    return (closed, stateUnreadable, true);
 }
 
 internal static class Native

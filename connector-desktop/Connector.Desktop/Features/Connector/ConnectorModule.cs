@@ -47,15 +47,14 @@ public sealed class ConnectorModule : IFeatureModule
     public void LoadFromSettings(string decryptedToken) => _view.LoadFromSettings(decryptedToken);
 
     // Replaces the SACRED ConnectByTokenInternalAsync's six post-connect control writes.
-    public void ApplyConnectResult(string deviceId, int heartbeatSeconds, string updateManifestUrl, string smbLogin, string smbSharePath) =>
-        _view.ApplyConnectResult(deviceId, heartbeatSeconds, updateManifestUrl, smbLogin, smbSharePath);
+    public void ApplyConnectResult(string deviceId, int heartbeatSeconds, string smbLogin, string smbSharePath) =>
+        _view.ApplyConnectResult(deviceId, heartbeatSeconds, smbLogin, smbSharePath);
 
     // Like StandardModule.FlushPathEdits: capture the typed token from the moved PasswordBox so ReadSettingsFromUi can
     // source it from _settings. The shell calls this at the top of ApplyAndPersist. Returns the trimmed token.
     public string FlushEditsToSettings() => _view.GetTokenText();
 
-    // Mirror CheckUpdatesAsync's normalised-URL echo write + ConnectSmbInternalAsync's chosen-login write.
-    public void SetUpdateManifestUrl(string url) => _view.SetUpdateManifestUrl(url);
+    // Mirror ConnectSmbInternalAsync's chosen-login write.
     public void SetSmbLogin(string login) => _view.SetSmbLogin(login);
 
     // Activated => no engine refresh needed (the engine pushes state on connect/heartbeat/update ticks). Kept to

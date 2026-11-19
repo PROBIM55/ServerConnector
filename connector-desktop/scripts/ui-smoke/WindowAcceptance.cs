@@ -83,7 +83,7 @@ internal static class WindowAcceptance
             new VpnProvisioningService(Path.Combine(root, "vpn")),
             new ModelSharingProvisioningService(Path.Combine(root, "model-sharing")),
             new IfcExportPatchService(Path.Combine(root, "ifc-patch")),
-            new PackageUpdateService(null),
+            new NoDesktopUpdateClient(),
             trayIconVisible: false, allowOwnedFixtureClose: true, runLoadedExternalActions: false,
             webViewUserDataDirectory: Path.Combine(root, "webview-profile"),
             loadedInitializationCompleted: () => loaded.TrySetResult(),

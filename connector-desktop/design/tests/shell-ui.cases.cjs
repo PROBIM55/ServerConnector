@@ -74,7 +74,7 @@ test('notices: each one is reported once, success and error keep their kind', ()
   assert.equal(PC.model.inferKind('Действие запущено.'), 'progress');
   assert.equal(PC.sections.ownerOf('bridge-check').id, 'tekla');
   assert.equal(PC.sections.ownerOf('models-unmount').id, 'folders');
-  assert.equal(PC.sections.ownerOf('update-apply').id, 'settings');
+  assert.equal(PC.sections.ownerOf('update-check').id, 'settings');
   const toasts = PC.shell.toasts({ toasts: [{ id: '4', kind: 'error', message: 'Выберите папку проекта.' }, { id: '3', kind: 'ok', message: 'Готово.' }] });
   assert.match(toasts, /role="alert" class="card toast error"><span class="chip t-bad">!<\/span><span>Выберите папку проекта\.<\/span>/);
   assert.match(toasts, /role="status" class="card toast ok"><span class="chip t-ok">✓<\/span>/);
@@ -101,7 +101,7 @@ test('palette is built from the registry and the snapshot, not from a fixed list
   const labels = PC.sections.palette(state, 'обнов').map(item => item.label);
   assert.equal(labels[0], 'Обновить стандарт Tekla');
   assert.ok(labels.includes('Проверить обновления'));
-  assert.ok(labels.includes('Установить обновление 1.1.13'));
+  assert.ok(!labels.some(label => label.startsWith('Установить обновление')), 'the service installs by itself');
   assert.ok(PC.sections.palette(state, 'BIM').some(item => item.kind === 'Папка'));
   assert.ok(PC.sections.palette(state, 'Анализ').some(item => item.kind === 'Задание'));
   const noTekla = stateFrom(PC, withGrants(['folders'], []));

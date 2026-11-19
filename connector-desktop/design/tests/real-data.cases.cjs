@@ -111,9 +111,27 @@ test('settings: available version with its changes, build and component versions
   const noNotes = F.signedIn();
   noNotes.update.notes = [];
   assert.doesNotMatch(PC.pages.settings(stateFrom(PC, noNotes)), /<ul class="bullets"/);
+  // The service installs by itself: no install button, no dialog about a Windows prompt.
+  const html2 = PC.pages.settings(stateFrom(PC, F.signedIn()));
+  assert.match(html2, /Доступна версия 1\.1\.13 — установится автоматически\./);
+  assert.doesNotMatch(html2, /Установить|Windows может спросить/);
+  assert.match(html2, /data-cmd="update-check"[^>]*>Проверить обновления/);
   const state = stateFrom(PC, F.signedIn());
   state.ui.dialog = { name: 'update', args: {} };
-  assert.match(PC.shell.dialog(state), /<h2>Установить версию 1\.1\.13\?<\/h2>[\s\S]*дождётся окончания задания «Применение плана Tekla»/);
+  assert.equal(PC.shell.dialog(state), '');
+});
+
+test('settings: download progress, installation, failure with code and the one-time «обновлён до» notice', () => {
+  const at = (update) => { const snap = F.signedIn(); snap.update = { ...snap.update, ...update }; return PC.pages.settings(stateFrom(PC, snap)); };
+  assert.match(at({ kind: 'downloading', text: 'Загружается 1.1.13, 42 %.', percent: 42 }), /Загружается 1\.1\.13, 42 %\.[\s\S]*width: 42%/);
+  assert.match(at({ kind: 'installing', text: 'Устанавливается версия 1.1.13, приложение перезапустится.' }), /Устанавливается версия 1\.1\.13, приложение перезапустится\./);
+  assert.match(at({ kind: 'failed', text: 'Не удалось обновить (installer-failed) — повторим автоматически.', errorCode: 'installer-failed' }),
+    /Не удалось обновить \(installer-failed\) — повторим автоматически\./);
+  const broken = at({ available: false, kind: 'unavailable', version: null, notes: [],
+    text: 'Служба обновления не работает — новые версии не устанавливаются. Скачайте и установите коннектор вручную: https://bimplatforma.ru/api/platform/connectors/unified/stable/download' });
+  assert.match(broken, /Служба обновления не работает[\s\S]*data-cmd="update-manual"[^>]*>Скачать установщик/);
+  const done = at({ available: false, kind: 'current', text: 'Установлена актуальная версия.', version: null, notes: [], updated: { version: '1.1.13', notes: ['Быстрее вход'] } });
+  assert.match(done, /Коннектор обновлён до 1\.1\.13\.[\s\S]*<li>Быстрее вход<\/li>/);
 });
 
 test('a native confirmation is one page dialog answered by the explicit command with its id', () => {

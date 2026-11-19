@@ -109,7 +109,6 @@
     tile: state => { const c = conn(state); return { label: 'Подключение', value: c.chip[0], meta: (c.ready && M.network(state).line) || 'Учётная запись и защищённое соединение', tone: c.ready ? 'ok' : 'warn' }; },
     commands: [
       { label: 'Проверить обновления', cmd: 'update-check' },
-      { label: 'Установить обновление', dialog: 'update', when: state => state.updateAvailable, title: state => state.update?.version ? 'Установить обновление ' + state.update.version : null },
       { label: 'Открыть журнал', cmd: 'settings-log' },
       { label: 'Сохранить диагностику', cmd: 'diagnostics' },
       { label: 'Светлая тема', ui: 'theme', data: { id: 'light' }, when: state => state.theme !== 'light' },

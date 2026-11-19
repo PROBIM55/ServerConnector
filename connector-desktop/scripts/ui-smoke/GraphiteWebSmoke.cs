@@ -231,7 +231,7 @@ internal static class GraphiteWebSmoke
         var loadedInitialization = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         int applicationWindowsBefore = Application.Current.Windows.Count;
         var window = new MainWindow(new MainWindowServices(settings, autoStart, runtime, windowTekla, shellTekla, vpn,
-            modelSharing, ifcPatch, new PackageUpdateService(null),
+            modelSharing, ifcPatch, new NoDesktopUpdateClient(),
             trayIconVisible: false,
             allowOwnedFixtureClose: true,
             runLoadedExternalActions: false,
@@ -461,8 +461,7 @@ internal static class GraphiteWebSmoke
             return Task.CompletedTask;
         }
         public Task ConnectByTokenAsync(string token, bool showSuccessDialog) => throw new InvalidOperationException("Network disabled in smoke.");
-        public Task CheckUpdatesAsync(bool showDialogs) => throw new InvalidOperationException("Network disabled in smoke.");
-        public Task InstallPendingUpdateAsync(bool confirmBeforeRun) => throw new InvalidOperationException("Updates disabled in smoke.");
+        public Task RequestUpdateCheckAsync() => throw new InvalidOperationException("Updates disabled in smoke.");
         public Task RunTeklaInteractiveSyncAsync() => throw new InvalidOperationException("Tekla modification disabled in smoke.");
         public Task RestartManagedServerAsync(string serviceKey, System.Windows.Controls.Button button, string displayName) => throw new InvalidOperationException("Server modification disabled in smoke.");
         public MessageBoxResult ShowDialog(string message, string title, MessageBoxButton buttons, MessageBoxImage image) => throw new InvalidOperationException("Foreground dialogs disabled in smoke.");

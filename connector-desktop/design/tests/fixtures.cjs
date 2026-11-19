@@ -64,7 +64,8 @@ const signedIn = () => ({
     { id: 'xs', path: 'C:\\Company\\TeklaFirm', installed: '2026.03.0 r1', available: null, updateAvailable: false, checkedAt: ago(8), failed: false },
     { id: 'ext', path: 'C:\\TeklaStructures\\2025.0\\Environments\\common\\Extensions', installed: '2026.03.0 r1', available: '2026.04.0 r1', updateAvailable: true, checkedAt: ago(8), failed: false },
     { id: 'lib', path: null, installed: null, available: null, updateAvailable: false, checkedAt: null, failed: false }] },
-  update: { available: true, version: '1.1.13', notes: ['Работа рядом с прежним Structura Connector', 'Стандарт Tekla обновляется и в новом режиме', 'Защита заданий AutoCAD и Tekla'], checkedAt: ago(10), checkFailed: false },
+  update: { available: true, kind: 'available', text: 'Доступна версия 1.1.13 — установится автоматически.', version: '1.1.13', percent: null, errorCode: null, updated: null,
+    notes: ['Работа рядом с прежним Structura Connector', 'Стандарт Tekla обновляется и в новом режиме', 'Защита заданий AutoCAD и Tekla'], checkedAt: ago(10), checkFailed: false },
   about: { version: '1.1.12', build: '8f3c99b', netbird: '0.79.0', webView2: '141.0.3537.71', ifcEngine: '0.1.2' },
   confirmation: null
 });

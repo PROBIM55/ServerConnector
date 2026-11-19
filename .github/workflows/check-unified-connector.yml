@@ -116,6 +116,7 @@ jobs:
             'connector-desktop/Connector.Desktop.Tests/Connector.Desktop.Tests.csproj',
             'connector-desktop/Connector.JobModules.Tests/Connector.JobModules.Tests.csproj',
             'connector-desktop/tests/Connector.Network.Tests/Connector.Network.Tests.csproj',
+            'connector-desktop/tests/Connector.Updater.Tests/Connector.Updater.Tests.csproj',
             'connector-access/tests/Connector.Access.Tests/Connector.Access.Tests.csproj',
             'connector-access/tests/Connector.Access.Client.Tests/Connector.Access.Client.Tests.csproj',
             'connector-access/tests/Connector.Access.NetBird.Tests/Connector.Access.NetBird.Tests.csproj',

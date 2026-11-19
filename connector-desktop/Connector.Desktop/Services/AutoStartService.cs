@@ -47,25 +47,7 @@ public sealed class AutoStartService : IAutoStartService
         return key?.GetValue(ValueName) is string;
     }
 
-    private static string ResolveLauncherPath()
-    {
-        var exe = Environment.ProcessPath ?? throw new InvalidOperationException("Cannot resolve process path.");
-        var directory = Path.GetDirectoryName(exe);
-        if (string.IsNullOrWhiteSpace(directory))
-        {
-            return exe;
-        }
-
-        // A managed Velopack install runs the app below current/. Autostart must target
-        // the stable root launcher so it follows the version switched by Update.exe.
-        var currentDirectory = new DirectoryInfo(directory);
-        if (!string.Equals(currentDirectory.Name, "current", StringComparison.OrdinalIgnoreCase) ||
-            currentDirectory.Parent is null)
-        {
-            return exe;
-        }
-
-        var stableLauncher = Path.Combine(currentDirectory.Parent.FullName, Path.GetFileName(exe));
-        return File.Exists(stableLauncher) ? stableLauncher : exe;
-    }
+    // The machine installation runs the application from Program Files\Platform Connector directly.
+    private static string ResolveLauncherPath() =>
+        Environment.ProcessPath ?? throw new InvalidOperationException("Cannot resolve process path.");
 }
