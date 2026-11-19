@@ -1,0 +1,130 @@
+name: Publish Platform Connector release
+run-name: Platform Connector ${{ inputs.version }} to ${{ inputs.channel }}
+# Owner's one way to release a version into channel pilot or stable, move it from pilot to stable, pause and resume.
+# The Platform server fetches the result from fixed addresses (do not change them):
+#   https://github.com/PROBIM55/ServerConnector/releases/download/platform-connector-channel-<channel>/connector-release.json (+ .sig)
+#   https://github.com/PROBIM55/ServerConnector/releases/download/platform-connector-v<version>/PlatformConnector-<version>.exe
+# Jobs: plan (no environment, read-only token) shows the owner the installer and the channel state in the run summary;
+# sign (environment release-signing, owner approval) computes everything again, refuses if it differs from plan, and
+# signs in the only step that has UPDATE_SIGNING_KEY_PEM (no token, no network); publish (no key) uploads.
+# Description and signature reach publish only as job outputs; the job with the key runs no artifact action, and every
+# action is pinned to a full commit SHA. A failed publish is completed with "Re-run failed jobs".
+# Security precondition outside this file: branch master accepts changes only from the owner (repository rules).
+# Rules: connector-desktop/scripts/connector_release_description.ps1 (mirrors Connector.Updates/ReleaseDescription.cs).
+on:
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: "Channel"
+        required: true
+        type: choice
+        options: [pilot, stable]
+      version:
+        description: "Version x.y.z"
+        required: true
+        type: string
+      source_run_id:
+        description: "First publication: successful run of build-unified-connector-candidate.yml (installer mode). 0: version already published"
+        required: false
+        default: '0'
+        type: string
+      paused:
+        description: "Pause distribution (clients install nothing)"
+        required: false
+        default: false
+        type: boolean
+      minimum_version:
+        description: "Oldest installation that may update to this version automatically"
+        required: false
+        default: '1.1.15'
+        type: string
+      notes:
+        description: "Lines for the user separated by | (1..8 lines, up to 200 characters each)"
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: publish-connector-release
+  cancel-in-progress: false
+env:
+  RELEASE_CHANNEL: ${{ inputs.channel }}
+  RELEASE_VERSION: ${{ inputs.version }}
+  RELEASE_SOURCE_RUN_ID: ${{ inputs.source_run_id }}
+  RELEASE_PAUSED: ${{ inputs.paused }}
+  RELEASE_MINIMUM_VERSION: ${{ inputs.minimum_version }}
+  RELEASE_NOTES: ${{ inputs.notes }}
+jobs:
+  plan:
+    if: ${{ github.ref == 'refs/heads/master' }}
+    runs-on: windows-latest
+    timeout-minutes: 30
+    permissions: {contents: read, actions: read}
+    defaults:
+      run: {shell: pwsh}
+    outputs:
+      channel: ${{ steps.plan.outputs.channel }}
+      version: ${{ steps.plan.outputs.version }}
+      paused: ${{ steps.plan.outputs.paused }}
+      minimum_version: ${{ steps.plan.outputs.minimum_version }}
+      installer_file: ${{ steps.plan.outputs.installer_file }}
+      installer_size: ${{ steps.plan.outputs.installer_size }}
+      installer_sha256: ${{ steps.plan.outputs.installer_sha256 }}
+      source: ${{ steps.plan.outputs.source }}
+      channel_current: ${{ steps.plan.outputs.channel_current }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with: {persist-credentials: false}
+      - name: Show what will be signed (no key)
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: '& connector-desktop/scripts/new_release_description.ps1 -Mode Plan'
+  sign:
+    needs: plan
+    runs-on: windows-latest
+    environment: release-signing
+    timeout-minutes: 30
+    permissions: {contents: read, actions: read}
+    defaults:
+      run: {shell: pwsh}
+    outputs:
+      description_base64: ${{ steps.sign.outputs.description_base64 }}
+      signature_base64: ${{ steps.sign.outputs.signature_base64 }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with: {persist-credentials: false}
+      - name: Build the exact description bytes and compare them with plan (token, no key)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PLAN_CHANNEL: ${{ needs.plan.outputs.channel }}
+          PLAN_VERSION: ${{ needs.plan.outputs.version }}
+          PLAN_PAUSED: ${{ needs.plan.outputs.paused }}
+          PLAN_MINIMUM_VERSION: ${{ needs.plan.outputs.minimum_version }}
+          PLAN_INSTALLER_FILE: ${{ needs.plan.outputs.installer_file }}
+          PLAN_INSTALLER_SIZE: ${{ needs.plan.outputs.installer_size }}
+          PLAN_INSTALLER_SHA256: ${{ needs.plan.outputs.installer_sha256 }}
+          PLAN_SOURCE: ${{ needs.plan.outputs.source }}
+          PLAN_CHANNEL_CURRENT: ${{ needs.plan.outputs.channel_current }}
+        run: '& connector-desktop/scripts/new_release_description.ps1 -Mode Build -OutputDirectory "$env:RUNNER_TEMP/release-description"'
+      - name: Sign the description (key, no token)
+        id: sign
+        env:
+          SIGN_KEY_PEM: ${{ secrets.UPDATE_SIGNING_KEY_PEM }}
+        run: '& connector-desktop/scripts/sign_release_description.ps1 -DescriptionDirectory "$env:RUNNER_TEMP/release-description"'
+  publish:
+    needs: sign
+    runs-on: windows-latest
+    timeout-minutes: 60
+    permissions: {contents: write, actions: read}
+    defaults:
+      run: {shell: pwsh}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with: {persist-credentials: false}
+      - name: Publish installer, then signature, then description
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_DESCRIPTION_BASE64: ${{ needs.sign.outputs.description_base64 }}
+          RELEASE_SIGNATURE_BASE64: ${{ needs.sign.outputs.signature_base64 }}
+        run: '& connector-desktop/scripts/publish_connector_release.ps1'

@@ -5,7 +5,6 @@ param(
     [Parameter(Mandatory)][string]$Channel,
     [Parameter(Mandatory)][string]$FeedUrl,
     [Parameter(Mandatory)][string]$IfcWorkerPath,
-    [Parameter(Mandatory)][string]$UpdateSigningKeyPemPath,
     [Parameter(Mandatory)][string]$HelperManifestSigningKeyPemPath,
     [Parameter(Mandatory)][string]$HelperReleasePublicKeyFile,
     [Parameter(Mandatory)][string]$ConnectorAccessConfigurationPath,

@@ -3,8 +3,10 @@ run-name: Connector CI signature ${{ inputs.request_id }}
 # Signs the two disposable release descriptions of the cloud update check (channel ci-<run id>) of
 # build-unified-connector-candidate.yml. No checkout of anything but this commit's scripts, no build, no packages:
 # the release key lives only in the protected environment "release-signing" (owner approval, branch master).
-# Only channel "ci-<ci_run_id>" of an in-progress build run of the same commit with paused=false is accepted
-# (scripts/sign_ci_release_documents.ps1).
+# Two steps: the request is checked with the job token and without the key; the key reaches only the signing step,
+# which has no token and no network (scripts/sign_ci_release_documents.ps1 -Stage Verify / -Stage Sign).
+# Only channel "ci-<ci_run_id>" of an in-progress build run of the same commit with paused=false is accepted.
+# Every action is pinned to a full commit SHA.
 on:
   workflow_dispatch:
     inputs:
@@ -23,25 +25,31 @@ jobs:
     runs-on: windows-latest
     environment: release-signing
     timeout-minutes: 10
+    env:
+      SIGN_REQUEST_ID: ${{ inputs.request_id }}
+      SIGN_CI_RUN_ID: ${{ inputs.ci_run_id }}
+      SIGN_SOURCE_SHA: ${{ inputs.source_sha }}
+      SIGN_DOCUMENT1_SHA256: ${{ inputs.document1_sha256 }}
+      SIGN_DOCUMENT2_SHA256: ${{ inputs.document2_sha256 }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           persist-credentials: false
-      - name: Sign disposable CI descriptions without building or exporting keys
+      - name: Check the request (token, no key)
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
-          SIGN_REQUEST_ID: ${{ inputs.request_id }}
-          SIGN_CI_RUN_ID: ${{ inputs.ci_run_id }}
-          SIGN_SOURCE_SHA: ${{ inputs.source_sha }}
           SIGN_DOCUMENT1_BASE64: ${{ inputs.document1_base64 }}
-          SIGN_DOCUMENT1_SHA256: ${{ inputs.document1_sha256 }}
           SIGN_DOCUMENT2_BASE64: ${{ inputs.document2_base64 }}
-          SIGN_DOCUMENT2_SHA256: ${{ inputs.document2_sha256 }}
+        run: |
+          & 'connector-desktop/scripts/sign_ci_release_documents.ps1' -Stage Verify -WorkDirectory "$env:RUNNER_TEMP/ci-documents"
+      - name: Sign the checked descriptions (key, no token)
+        shell: pwsh
+        env:
           SIGN_KEY_PEM: ${{ secrets.UPDATE_SIGNING_KEY_PEM }}
         run: |
-          & 'connector-desktop/scripts/sign_ci_release_documents.ps1' -OutputDirectory "$env:RUNNER_TEMP/signature"
-      - uses: actions/upload-artifact@v4
+          & 'connector-desktop/scripts/sign_ci_release_documents.ps1' -Stage Sign -WorkDirectory "$env:RUNNER_TEMP/ci-documents" -OutputDirectory "$env:RUNNER_TEMP/signature"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: connector-ci-signature-${{ inputs.request_id }}
           path: ${{ runner.temp }}/signature/*.sig

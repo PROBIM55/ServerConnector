@@ -1,43 +1,31 @@
 #Requires -Version 7.4
+# Signs the machine-helper manifest of the migration helper (schema 4) in sign-unified-release-document.yml,
+# environment production, key UNIFIED_HELPER_MANIFEST_SIGNING_KEY_PEM. Nothing else is accepted: release
+# descriptions of the update channels are signed only by publish-connector-release.yml and sign-connector-ci-release.yml.
 [CmdletBinding()]
 param([Parameter(Mandatory)][string]$OutputDirectory)
 $ErrorActionPreference = 'Stop'
-if ($env:SIGN_REQUEST_ID -cnotmatch '^[a-f0-9]{32}$' -or
-    $env:SIGN_PURPOSE -cnotmatch '^(updates|helper)$' -or
-    $env:SIGN_DOCUMENT_SHA256 -cnotmatch '^[a-f0-9]{64}$') { throw 'Invalid signing request metadata' }
-if ($env:SIGN_SOURCE_SHA -cnotmatch '^[a-f0-9]{40}$' -or $env:GITHUB_SHA -cne $env:SIGN_SOURCE_SHA) {
-    throw 'Signing workflow source differs from the expected commit'
-}
-$bytes = [Convert]::FromBase64String($env:SIGN_DOCUMENT_BASE64)
-if ($bytes.Length -eq 0 -or $bytes.Length -gt 16384 -or
-    [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($bytes)).ToLowerInvariant() -cne $env:SIGN_DOCUMENT_SHA256) {
-    throw 'Signing document length or digest differs'
-}
-. (Join-Path $PSScriptRoot 'validate_release_signing_document.ps1')
-Assert-ReleaseSigningDocument $bytes $env:SIGN_PURPOSE
-$root = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
-$publicPath = if ($env:SIGN_PURPOSE -ceq 'updates') {
-    Join-Path $root 'Connector.Desktop/Assets/update-public-key.pem'
-} else { Join-Path $root 'installer/release-public-key.pem' }
-$pem = $env:SIGN_KEY_PEM
-$private = [Security.Cryptography.ECDsa]::Create()
-$public = [Security.Cryptography.ECDsa]::Create()
 try {
-    $private.ImportFromPem($pem)
-    $public.ImportFromPem([IO.File]::ReadAllText($publicPath))
-    if ($private.KeySize -ne 256 -or
-        [Convert]::ToBase64String($private.ExportSubjectPublicKeyInfo()) -cne
-        [Convert]::ToBase64String($public.ExportSubjectPublicKeyInfo())) { throw 'Signing key does not match the repository pin' }
-    $signature = $private.SignData($bytes, [Security.Cryptography.HashAlgorithmName]::SHA256,
-        [Security.Cryptography.DSASignatureFormat]::IeeeP1363FixedFieldConcatenation)
-    if ($signature.Length -ne 64 -or -not $public.VerifyData($bytes, $signature,
-        [Security.Cryptography.HashAlgorithmName]::SHA256,
-        [Security.Cryptography.DSASignatureFormat]::IeeeP1363FixedFieldConcatenation)) { throw 'Signature verification failed' }
+    if ($env:SIGN_REQUEST_ID -cnotmatch '^[a-f0-9]{32}$' -or
+        $env:SIGN_DOCUMENT_SHA256 -cnotmatch '^[a-f0-9]{64}$') { throw 'Invalid signing request metadata' }
+    if ($env:SIGN_SOURCE_SHA -cnotmatch '^[a-f0-9]{40}$' -or $env:GITHUB_SHA -cne $env:SIGN_SOURCE_SHA) {
+        throw 'Signing workflow source differs from the expected commit'
+    }
+    $bytes = [Convert]::FromBase64String($env:SIGN_DOCUMENT_BASE64)
+    if ($bytes.Length -eq 0 -or $bytes.Length -gt 16384 -or
+        [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($bytes)).ToLowerInvariant() -cne $env:SIGN_DOCUMENT_SHA256) {
+        throw 'Signing document length or digest differs'
+    }
+    . (Join-Path $PSScriptRoot 'validate_release_signing_document.ps1')
+    Assert-ReleaseSigningDocument $bytes 'helper'
     if (Test-Path -LiteralPath $OutputDirectory) { throw 'Signing output directory already exists' }
+    # The one signing implementation: key from SIGN_KEY_PEM of this step, pin check, verification of the signature.
+    . (Join-Path $PSScriptRoot 'connector_release_description.ps1')
+    $root = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
+    $signatures = Invoke-PinnedReleaseSignature -Documents @(, $bytes) -PublicKeyPemPath (Join-Path $root 'installer/release-public-key.pem')
     [void][IO.Directory]::CreateDirectory($OutputDirectory)
-    [IO.File]::WriteAllBytes((Join-Path $OutputDirectory 'document.sig'), $signature)
-    Write-Host 'Release document signature verified; signing keys remain in CI.'
+    [IO.File]::WriteAllBytes((Join-Path $OutputDirectory 'document.sig'), $signatures[0])
+    Write-Host 'Helper manifest signature verified; the signing key remains in CI.'
 } finally {
-    $private.Dispose(); $public.Dispose(); $pem = $null
     $env:SIGN_KEY_PEM = $null
 }

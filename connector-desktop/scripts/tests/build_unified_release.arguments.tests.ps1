@@ -27,13 +27,19 @@ if ($assignment.Count -ne 1 -or $assignment[0].Right.Expression -isnot [Manageme
     throw 'PACKAGE_PARAMETERS_MUST_BE_A_HASHTABLE'
 }
 $keys = @($assignment[0].Right.Expression.KeyValuePairs | ForEach-Object { $_.Item1.Value.ToString() } | Sort-Object)
-$expectedKeys = @('Channel','FeedUrl','IfcWorkerPath','PackVersion','PackageOutputDir','UpdateSigningKeyPemPath') | Sort-Object
+$expectedKeys = @('Channel','FeedUrl','IfcWorkerPath','PackVersion','PackageOutputDir') | Sort-Object
 if ((Compare-Object $expectedKeys $keys).Count) { throw 'PACKAGE_PARAMETER_KEYS_MISMATCH' }
+# The update-feed signing parameters were removed with sign_update_feed.ps1; the child must not accept them again.
+$childParameters = @($childAst.ParamBlock.Parameters | ForEach-Object { $_.Name.VariablePath.UserPath })
+if (@($childParameters | Where-Object { $_ -in @('UpdateSigningKeyPemPath','HostedSigningRef') }).Count) { throw 'CHILD_STILL_ACCEPTS_UPDATE_SIGNING' }
+# Nothing is signed with the update key any more, so the release build must not ask for its private half.
+$parentParameters = @($parentAst.ParamBlock.Parameters | ForEach-Object { $_.Name.VariablePath.UserPath })
+if ($parentParameters -contains 'UpdateSigningKeyPemPath') { throw 'PARENT_STILL_REQUIRES_UPDATE_KEY' }
 
 # Use the actual child script's ParamBlock so PowerShell performs the same script-parameter binding.
 $fixturePath = Join-Path ([IO.Path]::GetTempPath()) ('build-package-update-args-' + [Guid]::NewGuid().ToString('N') + '.ps1')
 $fixtureTail = @'
-[ordered]@{FeedUrl=$FeedUrl;PackVersion=$PackVersion;Channel=$Channel;IfcWorkerPath=$IfcWorkerPath;UpdateSigningKeyPemPath=$UpdateSigningKeyPemPath;HostedSigningRef=$HostedSigningRef;PackageOutputDir=$PackageOutputDir}|ConvertTo-Json -Compress
+[ordered]@{FeedUrl=$FeedUrl;PackVersion=$PackVersion;Channel=$Channel;IfcWorkerPath=$IfcWorkerPath;PackageOutputDir=$PackageOutputDir}|ConvertTo-Json -Compress
 '@
 [IO.File]::WriteAllText($fixturePath, $childAst.ParamBlock.Extent.Text + "`r`n" + $fixtureTail, [Text.UTF8Encoding]::new($false))
 try {
@@ -42,11 +48,10 @@ try {
         Channel = 'preview'
         FeedUrl = 'https://feed.example.invalid/updates'
         IfcWorkerPath = 'C:\fixture inputs\worker.exe'
-        UpdateSigningKeyPemPath = 'C:\fixture keys\update.pem'
         PackageOutputDir = 'C:\fixture output\release package'
     }
     $legacy = @('-PackVersion',$sample.PackVersion,'-Channel',$sample.Channel,'-FeedUrl',$sample.FeedUrl,
-        '-IfcWorkerPath',$sample.IfcWorkerPath,'-UpdateSigningKeyPemPath',$sample.UpdateSigningKeyPemPath,
+        '-IfcWorkerPath',$sample.IfcWorkerPath,
         '-PackageOutputDir',$sample.PackageOutputDir)
     $legacyRejected = $false
     try {
@@ -62,12 +67,6 @@ try {
     $actual = (& $fixturePath @sample) | ConvertFrom-Json -ErrorAction Stop
     foreach ($name in $expectedKeys) {
         if ([string]$actual.$name -cne [string]$sample[$name]) { throw ('HASHTABLE_BINDING_MISMATCH_' + $name) }
-    }
-    $sample.UpdateSigningKeyPemPath = $null
-    $sample.HostedSigningRef = 'bad1b462ea6621a90989966c98e1c09412076a84'
-    $hosted = (& $fixturePath @sample) | ConvertFrom-Json -ErrorAction Stop
-    foreach ($name in @($expectedKeys) + 'HostedSigningRef') {
-        if ([string]$hosted.$name -cne [string]$sample[$name]) { throw ('HOSTED_BINDING_MISMATCH_' + $name) }
     }
     'BUILD_UNIFIED_RELEASE_ARGUMENTS_TESTS_PASSED'
 } finally {
