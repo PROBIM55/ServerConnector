@@ -257,7 +257,8 @@ public sealed class NetBirdProviderTests : IDisposable
         var policy = JsonNode.Parse(fixture.AppliedPolicyJson!)!;
         var sources = policy["rules"]![0]!["sources"]!.AsArray().Select(node => node!.GetValue<string>()).ToArray();
         Assert.Equal(new[] { "g1" }, sources);
-        Assert.Equal(new[] { "g1", "gdns" }, fixture.RevokedSetupKeyAutoGroups);
+        Assert.Empty(fixture.RevokedSetupKeyAutoGroups);
+        Assert.Empty(fixture.SetupKeyAutoGroups);
     }
 
     [Theory]
@@ -297,7 +298,291 @@ public sealed class NetBirdProviderTests : IDisposable
         Assert.Equal(0, fixture.SetupKeyCreateCount);
     }
 
-    private NetBirdDeviceAccessGrantProvider CreateProvider(HttpMessageHandler handler, string? dnsDistributionGroupId = null)
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task SharedGatewayProducts_UseOneRuleAndOnlyAuthorizedPorts(bool includeSmbResource)
+    {
+        var fixture = new NetBirdFixtureHandler { PeerExists = true, PeerConnected = true };
+        var provider = CreateProvider(fixture, bindings:
+        [
+            new() { Product = ConnectorProduct.Structura, DestinationGroupId = "gateway", Ports = [24444, 24443] },
+            new() { Product = ConnectorProduct.Platform, DestinationGroupId = "gateway", Ports = [24443, 24444] },
+            new() { ResourceId = "models", ResourceKind = "smb", DestinationGroupId = "gateway", Ports = [445, 24443, 24444] },
+        ]);
+        var command = Apply(1) with
+        {
+            Modules = [new(ConnectorProduct.Structura, "sync", [ConnectorPermission.Read]),
+                new(ConnectorProduct.Platform, "tekla", [ConnectorPermission.Read])],
+            Resources = includeSmbResource ? [new("models", "smb", null, [ConnectorPermission.Read])] : [],
+        };
+
+        await provider.ApplyAsync(command, default);
+        var state = await provider.GetStateAsync(Device(1), default);
+
+        Assert.Equal("ready", state.Value!.Status);
+        Assert.Equal(1, fixture.MaximumSubmittedRules);
+        var rules = JsonNode.Parse(fixture.AppliedPolicyJson!)!["rules"]!.AsArray();
+        var rule = Assert.Single(rules)!;
+        Assert.Equal(new[] { "gateway" }, rule["destinations"]!.AsArray().Select(n => n!.GetValue<string>()));
+        Assert.Equal(includeSmbResource ? new[] { "445", "24443", "24444" } : new[] { "24443", "24444" },
+            rule["ports"]!.AsArray().Select(n => n!.GetValue<string>()));
+        Assert.False(rule["bidirectional"]!.GetValue<bool>());
+    }
+
+    [Theory]
+    [InlineData("destination")]
+    [InlineData("protocol")]
+    [InlineData("direction")]
+    public async Task DifferentNetworkTuples_CannotBecomeAnIncompleteSinglePolicy(string difference)
+    {
+        var fixture = new NetBirdFixtureHandler { PeerExists = true, PeerConnected = true };
+        var provider = CreateProvider(fixture, bindings:
+        [
+            new() { Product = ConnectorProduct.Structura, DestinationGroupId = "gateway", Ports = [443] },
+            new() { Product = ConnectorProduct.Platform, DestinationGroupId = difference == "destination" ? "other" : "gateway",
+                Protocol = difference == "protocol" ? "udp" : "tcp", Bidirectional = difference == "direction", Ports = [8443] },
+        ]);
+        var command = Apply(1) with { Modules = [new(ConnectorProduct.Structura, "sync", [ConnectorPermission.Read]),
+            new(ConnectorProduct.Platform, "tekla", [ConnectorPermission.Read])] };
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => provider.ApplyAsync(command, default).AsTask());
+
+        Assert.Equal(0, fixture.PolicyWriteCount);
+        Assert.False(fixture.PolicyExists);
+    }
+
+    [Fact]
+    public async Task UncoveredProduct_StillPreventsPolicyWrite()
+    {
+        var fixture = new NetBirdFixtureHandler { PeerExists = true, PeerConnected = true };
+        var provider = CreateProvider(fixture);
+        var command = Apply(1) with { Modules = [new(ConnectorProduct.Structura, "sync", [ConnectorPermission.Read]),
+            new(ConnectorProduct.Platform, "tekla", [ConnectorPermission.Read])] };
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => provider.ApplyAsync(command, default).AsTask());
+        Assert.Equal(0, fixture.PolicyWriteCount);
+    }
+
+    [Theory]
+    [InlineData("destination")]
+    [InlineData("protocol")]
+    [InlineData("direction")]
+    public async Task NewUnsupportedGrant_RemovesPreviousWirePolicyBeforeReportingFailure(string difference)
+    {
+        var fixture = new NetBirdFixtureHandler { PeerExists = true, PeerConnected = true };
+        var provider = CreateProvider(fixture, bindings:
+        [
+            new() { Product = ConnectorProduct.Structura, DestinationGroupId = "gateway", Ports = [443] },
+            new() { Product = ConnectorProduct.Platform, DestinationGroupId = difference == "destination" ? "other" : "gateway",
+                Protocol = difference == "protocol" ? "udp" : "tcp", Bidirectional = difference == "direction", Ports = [8443] },
+        ]);
+        await provider.ApplyAsync(Apply(1), default);
+        Assert.True(fixture.PolicyExists);
+        var next = Apply(2) with { Modules = [new(ConnectorProduct.Structura, "sync", [ConnectorPermission.Read]),
+            new(ConnectorProduct.Platform, "tekla", [ConnectorPermission.Read])] };
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => provider.ApplyAsync(next, default).AsTask());
+
+        Assert.False(fixture.PolicyExists);
+        Assert.Equal(1, fixture.PolicyWriteCount);
+        Assert.NotEqual("ready", (await provider.GetStateAsync(Device(2), default)).Value!.Status);
+    }
+
+    [Fact]
+    public async Task AllPortsGrant_IsNotNarrowedToOtherBindingsPortList()
+    {
+        var fixture = new NetBirdFixtureHandler { PeerExists = true, PeerConnected = true };
+        var provider = CreateProvider(fixture, bindings:
+        [
+            new() { Product = ConnectorProduct.Structura, DestinationGroupId = "gateway", Ports = [] },
+            new() { Product = ConnectorProduct.Platform, DestinationGroupId = "gateway", Ports = [443] },
+        ]);
+        var command = Apply(1) with { Modules = [new(ConnectorProduct.Structura, "sync", [ConnectorPermission.Read]),
+            new(ConnectorProduct.Platform, "tekla", [ConnectorPermission.Read])] };
+
+        await provider.ApplyAsync(command, default);
+
+        Assert.Empty(JsonNode.Parse(fixture.AppliedPolicyJson!)!["rules"]![0]!["ports"]!.AsArray());
+        Assert.Equal("ready", (await provider.GetStateAsync(Device(1), default)).Value!.Status);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Revoke_UnpinsOnlyOwnedKeyEvenWhenAlreadyRevoked(bool alreadyRevoked)
+    {
+        var fixture = new NetBirdFixtureHandler { IncludeUnrelatedSetupKey = true };
+        var provider = CreateProvider(fixture);
+        await Assert.ThrowsAsync<NetBirdPeerNotReadyException>(() => provider.ApplyAsync(Apply(1), default).AsTask());
+        fixture.PeerExists = true;
+        if (alreadyRevoked) fixture.RevokeKeyWithoutClearingGroups();
+
+        var receipt = await provider.RevokeAsync(Revoke(2), default);
+
+        Assert.Equal(2, receipt.AppliedRevision);
+        Assert.True(fixture.SetupKeyRevoked);
+        Assert.Empty(fixture.SetupKeyAutoGroups);
+        Assert.False(fixture.GroupExists);
+        Assert.False(fixture.PeerExists);
+        Assert.Equal(0, fixture.UnrelatedKeyRequests);
+        Assert.Equal("revoked", (await provider.GetStateAsync(Device(2), default)).Value!.Status);
+    }
+
+    [Fact]
+    public async Task OptimisticKeyUpdateWithoutDurableGroupCleanup_CannotConfirmApplyOrRevoke()
+    {
+        var fixture = new NetBirdFixtureHandler { OptimisticSetupKeyUpdate = true };
+        var provider = CreateProvider(fixture);
+        await Assert.ThrowsAsync<NetBirdPeerNotReadyException>(() => provider.ApplyAsync(Apply(1), default).AsTask());
+        fixture.PeerExists = true;
+        fixture.PeerConnected = true;
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => provider.ApplyAsync(Apply(1), default).AsTask());
+        await Assert.ThrowsAsync<InvalidOperationException>(() => provider.RevokeAsync(Revoke(2), default).AsTask());
+
+        Assert.True(fixture.GroupExists);
+        Assert.True(fixture.PeerExists);
+        Assert.NotEmpty(fixture.SetupKeyAutoGroups);
+        using var state = JsonDocument.Parse(await File.ReadAllTextAsync(Assert.Single(Directory.GetFiles(_root, "*.json"))));
+        Assert.Equal(0, state.RootElement.GetProperty("appliedRevision").GetInt64());
+    }
+
+    [Fact]
+    public async Task BootstrapRead_DoesNotWaitForAReconcilerHoldingTheDeviceLock()
+    {
+        var fixture = new NetBirdFixtureHandler();
+        var provider = CreateProvider(fixture);
+        await Assert.ThrowsAsync<NetBirdPeerNotReadyException>(() => provider.ApplyAsync(Apply(1), default).AsTask());
+        var gate = HoldPolicyListing(fixture, out var entered);
+
+        var reconcile = provider.ApplyAsync(Apply(1), default).AsTask();
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        var bootstrap = await provider.GetAsync(Device(1), default).AsTask().WaitAsync(TimeSpan.FromSeconds(2));
+        var state = await provider.GetStateAsync(Device(1), default).AsTask().WaitAsync(TimeSpan.FromSeconds(2));
+        gate.SetResult();
+
+        Assert.True(bootstrap.IsSuccess);
+        Assert.Equal("fixture-setup-key", bootstrap.Value!.SetupKey);
+        Assert.Equal("connecting", state.Value!.Status);
+        await Assert.ThrowsAsync<NetBirdPeerNotReadyException>(() => reconcile);
+    }
+
+    [Fact]
+    public async Task SecondReconciler_WaitsForTheDeviceLockInsteadOfFailingBusy()
+    {
+        var fixture = new NetBirdFixtureHandler();
+        var provider = CreateProvider(fixture);
+        await Assert.ThrowsAsync<NetBirdPeerNotReadyException>(() => provider.ApplyAsync(Apply(1), default).AsTask());
+        var gate = HoldPolicyListing(fixture, out var entered);
+
+        var first = provider.ApplyAsync(Apply(1), default).AsTask();
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        var second = provider.ApplyAsync(Apply(1), default).AsTask();
+        await Task.Delay(300);
+        var secondWaited = !second.IsCompleted;
+        gate.SetResult();
+
+        Assert.True(secondWaited);
+        await Assert.ThrowsAsync<NetBirdPeerNotReadyException>(() => first);
+        await Assert.ThrowsAsync<NetBirdPeerNotReadyException>(() => second);
+    }
+
+    [Fact]
+    public async Task DeviceLockWait_IsBoundedAndReportsBusy()
+    {
+        var fixture = new NetBirdFixtureHandler();
+        var provider = CreateProvider(fixture, stateLockTimeout: TimeSpan.FromMilliseconds(200));
+        await Assert.ThrowsAsync<NetBirdPeerNotReadyException>(() => provider.ApplyAsync(Apply(1), default).AsTask());
+        var gate = HoldPolicyListing(fixture, out var entered);
+
+        var first = provider.ApplyAsync(Apply(1), default).AsTask();
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        var busy = await Assert.ThrowsAsync<NetBirdProviderBusyException>(
+            () => provider.RevokeAsync(Revoke(2), default).AsTask().WaitAsync(TimeSpan.FromSeconds(5)));
+        gate.SetResult();
+
+        Assert.IsAssignableFrom<DeviceAccessProviderBusyException>(busy);
+        await Assert.ThrowsAsync<NetBirdPeerNotReadyException>(() => first);
+    }
+
+    [Fact]
+    public async Task FreshlyRegisteredPeer_ThatConnectsWithinTheWait_CompletesInTheSameAttempt()
+    {
+        var fixture = new NetBirdFixtureHandler();
+        var provider = CreateProvider(fixture);
+        var notReady = await Assert.ThrowsAsync<NetBirdPeerNotReadyException>(() => provider.ApplyAsync(Apply(1), default).AsTask());
+        fixture.PeerExists = true;
+        fixture.PeerConnected = false;
+        fixture.ConnectAfterPeerReads = 2;
+
+        var receipt = await provider.ApplyAsync(Apply(1), default);
+
+        Assert.IsAssignableFrom<DeviceAccessProviderNotReadyException>(notReady);
+        Assert.Equal(1, receipt.AppliedRevision);
+        Assert.True(fixture.PolicyExists);
+        Assert.True(fixture.SetupKeyRevoked);
+    }
+
+    [Fact]
+    public async Task FreshlyRegisteredPeer_WithoutConnectWait_IsHandedBackAsNotReady()
+    {
+        var fixture = new NetBirdFixtureHandler();
+        var provider = CreateProvider(fixture, peerConnectWait: TimeSpan.Zero);
+        await Assert.ThrowsAsync<NetBirdPeerNotReadyException>(() => provider.ApplyAsync(Apply(1), default).AsTask());
+        fixture.PeerExists = true;
+        fixture.PeerConnected = false;
+        fixture.ConnectAfterPeerReads = 2;
+
+        await Assert.ThrowsAsync<NetBirdPeerNotReadyException>(() => provider.ApplyAsync(Apply(1), default).AsTask());
+
+        Assert.False(fixture.PolicyExists);
+    }
+
+    [Fact]
+    public async Task ConfirmingAttempt_ListsPoliciesOnceForIsolationAndPolicyLookup()
+    {
+        var fixture = new NetBirdFixtureHandler { DnsGroupId = "gdns" };
+        var provider = CreateProvider(fixture, "gdns");
+        await Assert.ThrowsAsync<NetBirdPeerNotReadyException>(() => provider.ApplyAsync(Apply(1), default).AsTask());
+        fixture.PeerExists = true;
+        fixture.PeerConnected = true;
+        fixture.ResetCounters();
+
+        await provider.ApplyAsync(Apply(1), default);
+
+        Assert.Equal(1, fixture.PolicyListCount);
+        Assert.Equal(1, fixture.DeviceGroupReadCount);
+    }
+
+    [Fact]
+    public async Task IdleDeviceLocks_AreNotRetained()
+    {
+        var fixture = new NetBirdFixtureHandler();
+        var provider = CreateProvider(fixture);
+
+        await Assert.ThrowsAsync<NetBirdPeerNotReadyException>(() => provider.ApplyAsync(Apply(1), default).AsTask());
+        await provider.RevokeAsync(Revoke(2), default);
+
+        Assert.Equal(0, provider.LocalLockCount);
+    }
+
+    private static TaskCompletionSource HoldPolicyListing(NetBirdFixtureHandler fixture, out TaskCompletionSource entered)
+    {
+        var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var reached = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        fixture.BeforeRequest = async request =>
+        {
+            if (request.Method != HttpMethod.Get || request.RequestUri!.AbsolutePath != "/api/policies") return;
+            reached.TrySetResult();
+            await gate.Task;
+        };
+        entered = reached;
+        return gate;
+    }
+
+    private NetBirdDeviceAccessGrantProvider CreateProvider(HttpMessageHandler handler, string? dnsDistributionGroupId = null,
+        IReadOnlyList<NetBirdAccessBinding>? bindings = null, TimeSpan? stateLockTimeout = null, TimeSpan? peerConnectWait = null)
     {
         Directory.CreateDirectory(_root);
         var options = new NetBirdOptions
@@ -305,7 +590,7 @@ public sealed class NetBirdProviderTests : IDisposable
             ManagementUri = new Uri("https://netbird.test/"),
             AccessToken = "fixture-service-token",
             StateDirectory = _root,
-            AccessBindings =
+            AccessBindings = bindings ??
             [
                 new NetBirdAccessBinding
                 {
@@ -317,6 +602,8 @@ public sealed class NetBirdProviderTests : IDisposable
                 },
             ],
             DnsDistributionGroupId = dnsDistributionGroupId,
+            StateLockTimeout = stateLockTimeout ?? TimeSpan.FromSeconds(10),
+            PeerConnectWait = peerConnectWait ?? TimeSpan.FromSeconds(3),
         };
         return new NetBirdDeviceAccessGrantProvider(
             new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(5) },
@@ -375,6 +662,9 @@ public sealed class NetBirdProviderTests : IDisposable
         public string ResponsePeerId { get; set; } = "peer-1";
         public bool SetupKeyExists { get; private set; }
         public bool SetupKeyRevoked { get; private set; }
+        public bool IncludeUnrelatedSetupKey { get; set; }
+        public bool OptimisticSetupKeyUpdate { get; set; }
+        public int UnrelatedKeyRequests { get; private set; }
         public IReadOnlyList<string> RevokedSetupKeyAutoGroups { get; private set; } = [];
         public bool PolicyExists { get; private set; }
         public bool UnsafeAllPolicy { get; set; }
@@ -387,6 +677,22 @@ public sealed class NetBirdProviderTests : IDisposable
         public string? AppliedPolicyJson => _policyJson;
         public int SetupKeyCreateCount { get; private set; }
         public int PolicyWriteCount { get; private set; }
+        public int MaximumSubmittedRules { get; private set; }
+        public Func<HttpRequestMessage, Task>? BeforeRequest { get; set; }
+        public int? ConnectAfterPeerReads { get; set; }
+        private int _peerReads;
+        private int _policyListCount;
+        private int _deviceGroupReadCount;
+        public int PolicyListCount => _policyListCount;
+        public int DeviceGroupReadCount => _deviceGroupReadCount;
+
+        public void ResetCounters()
+        {
+            _policyListCount = 0;
+            _deviceGroupReadCount = 0;
+        }
+
+        public void RevokeKeyWithoutClearingGroups() => SetupKeyRevoked = true;
 
         public void MutatePolicy(string mutation)
         {
@@ -417,6 +723,7 @@ public sealed class NetBirdProviderTests : IDisposable
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
+            if (BeforeRequest is { } beforeRequest) await beforeRequest(request);
             var path = request.RequestUri!.AbsolutePath;
             var method = request.Method;
             if (method == HttpMethod.Get && path == "/api/groups")
@@ -443,16 +750,32 @@ public sealed class NetBirdProviderTests : IDisposable
                 return Json(Group());
             }
             if (path == "/api/groups/g1" && method == HttpMethod.Get)
+            {
+                Interlocked.Increment(ref _deviceGroupReadCount);
                 return GroupExists ? Json(Group()) : Missing();
+            }
             if (DnsGroupId is not null && path == "/api/groups/" + DnsGroupId && method == HttpMethod.Get)
                 return DnsGroupAvailable ? Json(DnsGroup()) : Missing();
             if (path == "/api/groups/g1" && method == HttpMethod.Delete)
             {
+                if (SetupKeyExists && _setupAutoGroups.Contains("g1"))
+                    return new HttpResponseMessage(HttpStatusCode.BadRequest) { Content = new StringContent("group is linked to a setup key") };
                 GroupExists = false;
                 return Empty();
             }
             if (method == HttpMethod.Get && path == "/api/setup-keys")
-                return Json(SetupKeyExists ? new[] { SetupKey(masked: true) } : Array.Empty<object>());
+            {
+                var keys = new List<object>();
+                if (SetupKeyExists) keys.Add(SetupKey(masked: true));
+                if (IncludeUnrelatedSetupKey) keys.Add(new { id = "foreign-key", name = "unrelated-key", expires = DateTimeOffset.UtcNow.AddDays(1),
+                    valid = true, revoked = false, used_times = 0, auto_groups = new[] { "foreign-group" }, key = "********" });
+                return Json(keys);
+            }
+            if (path == "/api/setup-keys/foreign-key")
+            {
+                UnrelatedKeyRequests++;
+                throw new InvalidOperationException("Unrelated setup keys must not be read or modified.");
+            }
             if (method == HttpMethod.Post && path == "/api/setup-keys")
             {
                 var body = JsonNode.Parse(await request.Content!.ReadAsStringAsync(cancellationToken))!.AsObject();
@@ -470,10 +793,21 @@ public sealed class NetBirdProviderTests : IDisposable
                 var body = JsonNode.Parse(await request.Content!.ReadAsStringAsync(cancellationToken))!.AsObject();
                 RevokedSetupKeyAutoGroups = body["auto_groups"]!.AsArray().Select(node => node!.GetValue<string>()).ToArray();
                 SetupKeyRevoked = true;
+                if (!OptimisticSetupKeyUpdate) _setupAutoGroups = RevokedSetupKeyAutoGroups.ToArray();
+                else
+                {
+                    var optimistic = JsonSerializer.SerializeToNode(SetupKey(masked: true), JsonOptions)!;
+                    optimistic["auto_groups"] = JsonSerializer.SerializeToNode(RevokedSetupKeyAutoGroups, JsonOptions);
+                    return Json(optimistic);
+                }
                 return Json(SetupKey(masked: true));
             }
             if (path == "/api/peers/peer-1" && method == HttpMethod.Get)
+            {
+                if (PeerExists && ConnectAfterPeerReads is { } connectAfter && Interlocked.Increment(ref _peerReads) >= connectAfter)
+                    PeerConnected = true;
                 return PeerExists ? Json(Peer()) : Missing();
+            }
             if (path == "/api/peers/peer-1" && method == HttpMethod.Delete)
             {
                 PeerExists = false;
@@ -481,6 +815,7 @@ public sealed class NetBirdProviderTests : IDisposable
             }
             if (method == HttpMethod.Get && path == "/api/policies")
             {
+                Interlocked.Increment(ref _policyListCount);
                 var policies = new List<JsonNode>();
                 if (UnsafeAllPolicy)
                 {
@@ -508,6 +843,10 @@ public sealed class NetBirdProviderTests : IDisposable
                 (method == HttpMethod.Put && path == "/api/policies/p1"))
             {
                 var policy = JsonNode.Parse(await request.Content!.ReadAsStringAsync(cancellationToken))!.AsObject();
+                var rules = policy["rules"]!.AsArray();
+                MaximumSubmittedRules = Math.Max(MaximumSubmittedRules, rules.Count);
+                // NetBird 0.79 silently retains only the first policy rule.
+                if (rules.Count > 1) policy["rules"] = new JsonArray(rules[0]!.DeepClone());
                 policy["id"] = "p1";
                 _policyJson = policy.ToJsonString(JsonOptions);
                 PolicyExists = true;

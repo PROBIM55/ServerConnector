@@ -3,6 +3,8 @@
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows</TargetFramework>
+    <RuntimeFrameworkVersion>8.0.32</RuntimeFrameworkVersion>
+    <TargetLatestRuntimePatch>false</TargetLatestRuntimePatch>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
@@ -22,6 +24,8 @@
     <ProjectReference Include="..\src\Connector.Network\Connector.Network.csproj" />
     <ProjectReference Include="..\src\Connector.CommonAccess.Runtime\Connector.CommonAccess.Runtime.csproj" />
     <ProjectReference Include="..\src\Connector.SmbAccess\Connector.SmbAccess.csproj" />
+    <!-- Status of the machine update service and the pinned release key; the application installs nothing itself. -->
+    <ProjectReference Include="..\src\Connector.Updates\Connector.Updates.csproj" />
     <ProjectReference Include="..\..\connector-access\src\Connector.Access.Client\Connector.Access.Client.csproj" />
   </ItemGroup>
 
@@ -33,7 +37,6 @@
   <ItemGroup>
     <PackageReference Include="dnlib" Version="4.4.0" />
     <PackageReference Include="System.ServiceProcess.ServiceController" Version="8.0.0" />
-    <PackageReference Include="Velopack" Version="1.2.161" />
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4191.47" />
   </ItemGroup>
 
@@ -43,32 +46,18 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Content Include="..\design\*.html;..\design\*.js;..\design\style.css">
+    <Content Include="..\design\*.html;..\design\*.js;..\design\*.css">
       <Link>ui\%(Filename)%(Extension)</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
     </Content>
-    <Content Include="..\design\brand\structura-logo.png;..\design\brand\platform-field-refined-v3.png">
-      <Link>ui\brand\%(Filename)%(Extension)</Link>
+    <!-- Manrope (SIL OFL 1.1) is served locally: the page has no network access. -->
+    <Content Include="..\design\fonts\Manrope-Variable.ttf;..\design\fonts\Manrope-OFL.txt">
+      <Link>ui\fonts\%(Filename)%(Extension)</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
     </Content>
   </ItemGroup>
-
-  <ItemGroup>
-    <Content Include="connector-update.json">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
-    </Content>
-  </ItemGroup>
-
-  <ItemGroup>
-    <EmbeddedResource Include="Assets\update-public-key.pem" Condition="Exists('Assets\update-public-key.pem')" />
-  </ItemGroup>
-
-  <Target Name="RequireSignedUpdateKeyForRelease" BeforeTargets="BeforeBuild" Condition="'$(Configuration)' == 'Release'">
-    <Error Condition="!Exists('Assets\update-public-key.pem')" Text="Release build requires Connector.Desktop\Assets\update-public-key.pem." />
-  </Target>
 
   <ItemGroup>
     <Content Include="..\scripts\vpn-recovery\connector_vpn_recovery.ps1;..\scripts\vpn-recovery\install_connector_vpn_recovery.ps1">

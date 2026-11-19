@@ -32,7 +32,7 @@ try {
         if ($actual -ne $engine.sha256) { throw "Engine pin mismatch: $($engine.path)" }
         @{ path = $engine.path; version = $engine.version; sha256 = $actual }
     }
-    $ui = foreach ($relative in @('desktop.html','desktop-bridge.js','app.js','review-pages.js','style.css','kit-tokens.js','icons.js','brand/structura-logo.png','brand/platform-field-refined-v3.png')) {
+    $ui = foreach ($relative in @('desktop.html','desktop-bridge.js','app.js','tokens.css','style.css','ui-core.js','ui-model.js','ui-pages-work.js','ui-pages-tools.js','ui-pages-settings.js','ui-sections.js','ui-shell.js','fonts/Manrope-Variable.ttf','fonts/Manrope-OFL.txt')) {
         $actual = Get-EntryHash ('ui/' + $relative)
         $expected = (Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path $root ('design/' + $relative))).Hash.ToLowerInvariant()
         if ($actual -ne $expected) { throw "UI differs from accepted source: $relative" }

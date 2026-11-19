@@ -10,6 +10,44 @@ public sealed class CommonConnectorConnectionCoordinatorTests
     private static readonly Uri ManagementUri = new("https://netbird.test");
 
     [Fact]
+    public async Task First_bootstrap_with_settling_local_overlay_waits_without_second_enrollment()
+    {
+        var events = new List<string>();
+        var access = new FakeAccess(events, State("connecting"), State("ready"), State("ready"));
+        var overlay = new SequenceOverlay(ReadyOverlay() with
+        {
+            Status = NetworkServiceStatus.Connecting, SignalConnected = false,
+        }, ReadyOverlay());
+        var coordinator = new CommonConnectorConnectionCoordinator(access, overlay, new FakeGate(events));
+        var pending = await coordinator.EnrollAndConnectAsync("one-time-token", "Workstation");
+        Assert.Equal(CommonConnectorConnectionStatus.AwaitingVpnAuthorization, pending.Status);
+        Assert.Null(pending.AccessProfile);
+        var ready = await coordinator.ResumeAndConnectAsync();
+        Assert.Equal(CommonConnectorConnectionStatus.Ready, ready.Status);
+        Assert.Equal(1, access.EnrollmentCalls);
+    }
+
+    [Fact]
+    public async Task LostLocalOverlay_keeps_specific_diagnostic_after_request_catch()
+    {
+        var events = new List<string>();
+        var access = new FakeAccess(events, State("ready"), State("ready"));
+        var overlay = new SequenceOverlay(ReadyOverlay(), ReadyOverlay() with
+        {
+            Status = NetworkServiceStatus.Disconnected, SignalConnected = false,
+        });
+        var coordinator = new CommonConnectorConnectionCoordinator(access, overlay, new FakeGate(events));
+        await coordinator.ReconnectAsync();
+
+        await Assert.ThrowsAsync<NetworkGateException>(() => coordinator.OpenProtectedServiceAsync("platform", "jobs").AsTask());
+
+        Assert.Equal("overlay_not_ready", coordinator.Current.DiagnosticCode);
+        Assert.Null(coordinator.Current.AccessProfile);
+        await Assert.ThrowsAsync<NetworkGateException>(() => coordinator.OpenProtectedServiceAsync("platform", "jobs").AsTask());
+        Assert.Equal("overlay_not_ready", coordinator.Current.DiagnosticCode);
+    }
+
+    [Fact]
     public async Task UnavailableOverlayPreflight_RejectsBeforeOneTimeEnrollment()
     {
         var events = new List<string>();
@@ -96,7 +134,136 @@ public sealed class CommonConnectorConnectionCoordinatorTests
     }
 
     [Fact]
-    public async Task ExistingReadyFromAnotherManagementPlane_IsRejectedWithoutProfileOrRoute()
+    public async Task FreshDevice_SchedulesProvidersBeforeBootstrap_ThenResumesSameEnrollment()
+    {
+        var events = new List<string>();
+        var access = new FakeAccess(events, State("connecting"), State("ready"))
+        {
+            StateFailure = new ConnectorEnrollmentProtocolException("not initialized", 403, "vpn_state_unavailable"),
+            ProfileFailure = new ConnectorEnrollmentProtocolException("not yet applied", 403, "access_pending_or_denied"),
+        };
+        var overlay = new FakeOverlay(events, ReadyOverlay());
+        var coordinator = new CommonConnectorConnectionCoordinator(access, overlay, new FakeGate(events));
+
+        var initial = await coordinator.EnrollAndConnectAsync("one-time-token", "Workstation");
+
+        Assert.Equal(CommonConnectorConnectionStatus.AccessPending, initial.Status);
+        Assert.Null(initial.AccessProfile);
+        Assert.Equal(new[] { "enroll", "state", "profile" }, events);
+        Assert.Equal(0, overlay.ConnectCalls);
+        access.StateFailure = null;
+        access.ProfileFailure = null;
+
+        var ready = await coordinator.ResumeAndConnectAsync();
+
+        Assert.Equal(CommonConnectorConnectionStatus.Ready, ready.Status);
+        Assert.Equal(new[] { "enroll", "state", "profile", "state", "bootstrap", "connect", "state", "profile" }, events);
+        Assert.Equal(1, access.EnrollmentCalls);
+        Assert.NotNull(ready.AccessProfile);
+    }
+
+    [Theory]
+    [InlineData(401, "device_unauthorized")]
+    [InlineData(403, "unexpected_denial")]
+    [InlineData(500, "vpn_state_unavailable")]
+    public async Task StateFailure_DoesNotInitializeProvidersForOtherErrors(int status, string code)
+    {
+        var events = new List<string>();
+        var access = new FakeAccess(events)
+        {
+            StateFailure = new ConnectorEnrollmentProtocolException("denied", status, code),
+        };
+        var overlay = new FakeOverlay(events, ReadyOverlay());
+        var coordinator = new CommonConnectorConnectionCoordinator(access, overlay, new FakeGate(events));
+
+        var error = await Assert.ThrowsAsync<ConnectorEnrollmentProtocolException>(() => coordinator.ReconnectAsync().AsTask());
+
+        Assert.Equal(code, error.ErrorCode);
+        Assert.Equal(0, access.ProfileCalls);
+        Assert.Equal(0, overlay.ConnectCalls);
+        Assert.Null(coordinator.Current.AccessProfile);
+    }
+
+    [Fact]
+    public async Task FreshDevice_ProfileAuthenticationFailureIsNotHiddenAsProvisioning()
+    {
+        var events = new List<string>();
+        var access = new FakeAccess(events)
+        {
+            StateFailure = new ConnectorEnrollmentProtocolException("not initialized", 403, "vpn_state_unavailable"),
+            ProfileFailure = new ConnectorEnrollmentProtocolException("revoked", 401, "device_unauthorized"),
+        };
+        var coordinator = new CommonConnectorConnectionCoordinator(access, new FakeOverlay(events, ReadyOverlay()), new FakeGate(events));
+
+        var error = await Assert.ThrowsAsync<ConnectorEnrollmentProtocolException>(() => coordinator.ReconnectAsync().AsTask());
+
+        Assert.Equal("device_unauthorized", error.ErrorCode);
+        Assert.Equal(CommonConnectorConnectionStatus.EnrollmentRequired, coordinator.Current.Status);
+        Assert.Null(coordinator.Current.AccessProfile);
+        Assert.Equal(new[] { "state", "profile" }, events);
+    }
+
+    [Fact]
+    public async Task BootstrapNotPrepared_RemainsPendingWithoutConnectingOrOpeningAccess()
+    {
+        var events = new List<string>();
+        var access = new FakeAccess(events, State("connecting"))
+        {
+            BootstrapFailure = new ConnectorEnrollmentProtocolException("not prepared", 403, "vpn_bootstrap_unavailable"),
+        };
+        var overlay = new FakeOverlay(events, ReadyOverlay());
+        var coordinator = new CommonConnectorConnectionCoordinator(access, overlay, new FakeGate(events));
+
+        var result = await coordinator.ReconnectAsync();
+
+        Assert.Equal(CommonConnectorConnectionStatus.AwaitingVpnAuthorization, result.Status);
+        Assert.Null(result.AccessProfile);
+        Assert.Equal(0, overlay.ConnectCalls);
+        Assert.Equal(0, access.ProfileCalls);
+    }
+
+    [Fact]
+    public async Task VpnReady_ProfileStillPendingDoesNotAdmitProtectedRequests()
+    {
+        var events = new List<string>();
+        var access = new FakeAccess(events, State("ready"))
+        {
+            ProfileFailure = new ConnectorEnrollmentProtocolException("not applied", 403, "access_pending_or_denied"),
+        };
+        var gate = new FakeGate(events);
+        var overlay = new FakeOverlay(events, ReadyOverlay());
+        var coordinator = new CommonConnectorConnectionCoordinator(access, overlay, gate);
+
+        var result = await coordinator.ReconnectAsync();
+
+        Assert.Equal(CommonConnectorConnectionStatus.AccessPending, result.Status);
+        Assert.Null(result.AccessProfile);
+        Assert.Equal(0, overlay.StatusCalls);
+        await Assert.ThrowsAsync<NetworkGateException>(() => coordinator.OpenProtectedServiceAsync("platform", "jobs").AsTask());
+        Assert.Empty(gate.Services);
+    }
+
+    [Fact]
+    public async Task CallerCancelledAfterInitialReady_ClosesRealCoordinatorAdmission()
+    {
+        var events = new List<string>();
+        var access = new FakeAccess(events, State("ready"));
+        var gate = new FakeGate(events);
+        var coordinator = new CommonConnectorConnectionCoordinator(access, new FakeOverlay(events, ReadyOverlay()), gate);
+        var ready = await coordinator.ReconnectAsync();
+        using var user = new CancellationTokenSource();
+        user.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => CommonConnectorProvisioningWaiter.WaitAsync(_ => ValueTask.FromResult(ready),
+            ct => coordinator.ResumeAndConnectAsync(ct), async ct => { await coordinator.DisconnectAsync(ct); }, user.Token).AsTask());
+
+        Assert.Equal(CommonConnectorConnectionStatus.Disconnected, coordinator.Current.Status);
+        await Assert.ThrowsAsync<NetworkGateException>(() => coordinator.OpenProtectedServiceAsync("platform", "jobs").AsTask());
+        Assert.Empty(gate.Services);
+    }
+
+    [Fact]
+    public async Task ExistingReadyFromAnotherManagementPlane_IsRejectedWithoutRoute()
     {
         var events = new List<string>();
         var access = new FakeAccess(events, State("ready"));
@@ -107,7 +274,7 @@ public sealed class CommonConnectorConnectionCoordinatorTests
 
         Assert.Equal(CommonConnectorConnectionStatus.Unknown, result.Status);
         Assert.Equal("overlay_identity_mismatch", result.DiagnosticCode);
-        Assert.Equal(0, access.ProfileCalls);
+        Assert.Equal(1, access.ProfileCalls);
         Assert.Equal(0, access.BootstrapCalls);
     }
 
@@ -124,8 +291,359 @@ public sealed class CommonConnectorConnectionCoordinatorTests
 
         var result = await coordinator.ReconnectAsync();
 
-        Assert.Equal(CommonConnectorConnectionStatus.Unknown, result.Status);
+        // Not admitted; the server's expected addresses may still follow an older peer observation.
+        Assert.Equal(CommonConnectorConnectionStatus.AwaitingVpnAuthorization, result.Status);
+        Assert.Equal("overlay_address_mismatch", result.DiagnosticCode);
+        Assert.Null(result.AccessProfile);
+        Assert.Equal(1, access.ProfileCalls);
+        await Assert.ThrowsAsync<NetworkGateException>(() => coordinator.OpenProtectedServiceAsync("platform", "jobs").AsTask());
+    }
+
+    [Theory]
+    [InlineData("unknown", "vpn_state_unknown")]
+    [InlineData("degraded", "vpn_state_degraded")]
+    public async Task ServerStateSettling_RemainsPendingWithoutBootstrapProfileOrAdmission(string serverStatus, string diagnostic)
+    {
+        var events = new List<string>();
+        var access = new FakeAccess(events, State(serverStatus));
+        var overlay = new FakeOverlay(events, ReadyOverlay());
+        var gate = new FakeGate(events);
+        var coordinator = new CommonConnectorConnectionCoordinator(access, overlay, gate);
+
+        var result = await coordinator.ReconnectAsync();
+
+        Assert.Equal(CommonConnectorConnectionStatus.AwaitingVpnAuthorization, result.Status);
+        Assert.Equal(diagnostic, result.DiagnosticCode);
+        Assert.Equal(0, access.BootstrapCalls);
         Assert.Equal(0, access.ProfileCalls);
+        Assert.Equal(0, overlay.ConnectCalls);
+        await Assert.ThrowsAsync<NetworkGateException>(() => coordinator.OpenProtectedServiceAsync("platform", "jobs").AsTask());
+        Assert.Empty(gate.Services);
+    }
+
+    [Theory]
+    [InlineData("netbird_status_unknown", CommonConnectorConnectionStatus.AwaitingVpnAuthorization, "overlay_status_unavailable")]
+    [InlineData("netbird_installation_untrusted", CommonConnectorConnectionStatus.Unknown, "overlay_trust_unavailable")]
+    public async Task LocalDaemonStatusUnavailable_SettlesButUntrustedInstallationIsDefinitive(
+        string overlayCode, CommonConnectorConnectionStatus expected, string diagnostic)
+    {
+        var events = new List<string>();
+        var access = new FakeAccess(events, State("ready"));
+        var overlay = new FakeOverlay(events, ReadyOverlay() with { Status = NetworkServiceStatus.Unknown, DiagnosticCode = overlayCode });
+        var coordinator = new CommonConnectorConnectionCoordinator(access, overlay, new FakeGate(events));
+
+        var result = await coordinator.ReconnectAsync();
+
+        Assert.Equal(expected, result.Status);
+        Assert.Equal(diagnostic, result.DiagnosticCode);
+        Assert.Null(result.AccessProfile);
+    }
+
+    [Theory]
+    [InlineData("access_pending", "access_profile_pending")]
+    [InlineData("access_pending_or_denied", "access_profile_pending_or_denied")]
+    public async Task ProfilePendingWireCodes_KeepWaitingAndMarkTheAmbiguousLegacyAnswer(string wireCode, string diagnostic)
+    {
+        var events = new List<string>();
+        var access = new FakeAccess(events, State("ready"))
+        {
+            ProfileFailure = new ConnectorEnrollmentProtocolException("pending", 403, wireCode),
+        };
+        var coordinator = new CommonConnectorConnectionCoordinator(access, new FakeOverlay(events, ReadyOverlay()), new FakeGate(events));
+
+        var result = await coordinator.ReconnectAsync();
+
+        Assert.Equal(CommonConnectorConnectionStatus.AccessPending, result.Status);
+        Assert.Equal(diagnostic, result.DiagnosticCode);
+    }
+
+    [Theory]
+    [InlineData(true, "access_denied")]
+    [InlineData(true, "device_not_active")]
+    [InlineData(true, "provider_configuration")]
+    [InlineData(false, "access_denied")]
+    [InlineData(false, "device_not_active")]
+    [InlineData(false, "provider_configuration")]
+    public async Task ProfileDefinitiveWireCodes_EndTheConnectWithTheirOwnDiagnostic(bool freshDevice, string wireCode)
+    {
+        var events = new List<string>();
+        var access = new FakeAccess(events, State("ready"))
+        {
+            StateFailure = freshDevice ? new ConnectorEnrollmentProtocolException("not initialized", 403, "vpn_state_unavailable") : null,
+            ProfileFailure = new ConnectorEnrollmentProtocolException("denied", 403, wireCode),
+        };
+        var coordinator = new CommonConnectorConnectionCoordinator(access, new FakeOverlay(events, ReadyOverlay()), new FakeGate(events));
+
+        var error = await Assert.ThrowsAsync<ConnectorEnrollmentProtocolException>(() => coordinator.ReconnectAsync().AsTask());
+
+        Assert.Equal(wireCode, error.ErrorCode);
+        Assert.False(CommonConnectorProvisioningWaiter.IsTransient(error));
+        Assert.Equal(CommonConnectorConnectionStatus.Failed, coordinator.Current.Status);
+        Assert.Equal(wireCode, coordinator.Current.DiagnosticCode);
+        Assert.Null(coordinator.Current.AccessProfile);
+    }
+
+    [Fact]
+    public async Task FreshDeviceAmbiguousLegacyAnswer_IsMarkedForTheWaitLimit()
+    {
+        var events = new List<string>();
+        var access = new FakeAccess(events)
+        {
+            StateFailure = new ConnectorEnrollmentProtocolException("not initialized", 403, "vpn_state_unavailable"),
+            ProfileFailure = new ConnectorEnrollmentProtocolException("pending or denied", 403, "access_pending_or_denied"),
+        };
+        var coordinator = new CommonConnectorConnectionCoordinator(access, new FakeOverlay(events, ReadyOverlay()), new FakeGate(events));
+
+        var result = await coordinator.ReconnectAsync();
+
+        Assert.Equal(CommonConnectorConnectionStatus.AccessPending, result.Status);
+        Assert.Equal("access_providers_pending_or_denied", result.DiagnosticCode);
+    }
+
+    [Theory]
+    [InlineData("state")]
+    [InlineData("bootstrap")]
+    public async Task VpnNotConfigured503_IsDefinitiveWithItsOwnDiagnostic(string endpoint)
+    {
+        var events = new List<string>();
+        var notConfigured = new ConnectorEnrollmentProtocolException("not configured", 503, "vpn_not_configured");
+        var access = new FakeAccess(events, State("connecting"))
+        {
+            StateFailure = endpoint == "state" ? notConfigured : null,
+            BootstrapFailure = endpoint == "bootstrap" ? notConfigured : null,
+        };
+        var coordinator = new CommonConnectorConnectionCoordinator(access, new FakeOverlay(events, ReadyOverlay()), new FakeGate(events));
+
+        var error = await Assert.ThrowsAsync<ConnectorEnrollmentProtocolException>(() => coordinator.ReconnectAsync().AsTask());
+
+        Assert.False(CommonConnectorProvisioningWaiter.IsTransient(error));
+        Assert.Equal("vpn_not_configured", coordinator.Current.DiagnosticCode);
+    }
+
+    [Fact]
+    public async Task RepeatedNetBirdUpFailureWithOneKey_EndsTheWaitAfterThreeAttempts()
+    {
+        var events = new List<string>();
+        var access = new FakeAccess(events, State("connecting"), State("connecting"), State("connecting"));
+        var overlay = new FailingUpOverlay();
+        var coordinator = new CommonConnectorConnectionCoordinator(access, overlay, new FakeGate(events));
+        var clock = new CommonConnectorProvisioningWaiterTests.ManualTimeProvider();
+        var pending = CommonConnectorProvisioningWaiter.WaitAsync(ct => coordinator.ReconnectAsync(ct),
+            ct => coordinator.ResumeAndConnectAsync(ct), async ct => { await coordinator.DisconnectAsync(ct); },
+            timeProvider: clock).AsTask();
+        for (var retry = 0; retry < 2; retry++) await clock.AdvanceArmedAsync();
+
+        var error = await Assert.ThrowsAsync<NetworkGateException>(() => pending.WaitAsync(TimeSpan.FromSeconds(10)));
+
+        Assert.Equal("netbird_up_failed_repeatedly", error.Code);
+        Assert.Equal(3, overlay.ConnectCalls);
+        Assert.Equal("netbird_up_failed_repeatedly", coordinator.Current.DiagnosticCode);
+        Assert.DoesNotContain("one-time-setup-key", error.ToString());
+    }
+
+    [Fact]
+    public async Task StaleServerObservation_IsReportedAsClockSkew()
+    {
+        var events = new List<string>();
+        var access = new FakeAccess(events, State("ready") with { ObservedAtUtc = DateTimeOffset.UtcNow.AddMinutes(-10) });
+        var coordinator = new CommonConnectorConnectionCoordinator(access, new FakeOverlay(events, ReadyOverlay()), new FakeGate(events));
+
+        var error = await Assert.ThrowsAsync<ConnectorClockSkewException>(() => coordinator.ReconnectAsync().AsTask());
+
+        Assert.True(error.Skew >= TimeSpan.FromMinutes(9));
+        Assert.Equal("clock_skew", coordinator.Current.DiagnosticCode);
+    }
+
+    [Fact]
+    public async Task BootstrapOfNewerRevision_IsARaceThatKeepsWaitingWithoutUp()
+    {
+        var events = new List<string>();
+        var access = new FakeAccess(events, State("connecting")) { BootstrapRevision = 2 };
+        var overlay = new FakeOverlay(events, ReadyOverlay());
+        var coordinator = new CommonConnectorConnectionCoordinator(access, overlay, new FakeGate(events));
+
+        var result = await coordinator.ReconnectAsync();
+
+        Assert.Equal(CommonConnectorConnectionStatus.AwaitingVpnAuthorization, result.Status);
+        Assert.Equal("vpn_revision_advanced", result.DiagnosticCode);
+        Assert.Equal(0, overlay.ConnectCalls);
+    }
+
+    [Fact]
+    public async Task ProfileOfAnotherRevision_IsARaceThatKeepsWaitingWithoutAdmission()
+    {
+        var events = new List<string>();
+        var access = new FakeAccess(events, State("ready")) { ProfileRevision = 2 };
+        var gate = new FakeGate(events);
+        var coordinator = new CommonConnectorConnectionCoordinator(access, new FakeOverlay(events, ReadyOverlay()), gate);
+
+        var result = await coordinator.ReconnectAsync();
+
+        Assert.Equal(CommonConnectorConnectionStatus.AccessPending, result.Status);
+        Assert.Equal("access_profile_revision_pending", result.DiagnosticCode);
+        Assert.Null(result.AccessProfile);
+        await Assert.ThrowsAsync<NetworkGateException>(() => coordinator.OpenProtectedServiceAsync("platform", "jobs").AsTask());
+        Assert.Empty(gate.Services);
+    }
+
+    [Fact]
+    public async Task BootstrapConsumedWhileConnecting_WaitsAndRereadsStateInsteadOfFailing()
+    {
+        var events = new List<string>();
+        var access = new FakeAccess(events, State("connecting"), State("ready"))
+        {
+            BootstrapFailure = new ConnectorEnrollmentProtocolException("consumed", 403, "vpn_bootstrap_consumed"),
+        };
+        var overlay = new FakeOverlay(events, ReadyOverlay());
+        var coordinator = new CommonConnectorConnectionCoordinator(access, overlay, new FakeGate(events));
+        var clock = new CommonConnectorProvisioningWaiterTests.ManualTimeProvider();
+        var pending = CommonConnectorProvisioningWaiter.WaitAsync(ct => coordinator.ReconnectAsync(ct),
+            ct => coordinator.ResumeAndConnectAsync(ct), async ct => { await coordinator.DisconnectAsync(ct); },
+            timeProvider: clock).AsTask();
+        await clock.AdvanceArmedAsync();
+
+        var result = await pending.WaitAsync(TimeSpan.FromSeconds(10));
+
+        Assert.Equal(CommonConnectorConnectionStatus.Ready, result.Status);
+        Assert.Equal(1, access.BootstrapCalls);
+        Assert.Equal(0, overlay.ConnectCalls);
+        Assert.Equal(new[] { "state", "bootstrap", "state", "profile" }, events);
+    }
+
+    [Fact]
+    public async Task BootstrapConsumedWhileConnecting_ReportsPendingNotAFailure()
+    {
+        var events = new List<string>();
+        var access = new FakeAccess(events, State("connecting"))
+        {
+            BootstrapFailure = new ConnectorEnrollmentProtocolException("consumed", 403, "vpn_bootstrap_consumed"),
+        };
+        var coordinator = new CommonConnectorConnectionCoordinator(access, new FakeOverlay(events, ReadyOverlay()), new FakeGate(events));
+
+        var result = await coordinator.ReconnectAsync();
+
+        Assert.Equal(CommonConnectorConnectionStatus.AwaitingVpnAuthorization, result.Status);
+        Assert.Equal("vpn_bootstrap_consumed", result.DiagnosticCode);
+    }
+
+    [Fact]
+    public async Task ProviderBusy_WaitsForRetryAfterThenContinues()
+    {
+        var events = new List<string>();
+        var access = new FakeAccess(events, State("ready"))
+        {
+            StateFailure = new ConnectorEnrollmentProtocolException("busy", 503, "vpn_provider_busy", TimeSpan.FromSeconds(7)),
+        };
+        var coordinator = new CommonConnectorConnectionCoordinator(access, new FakeOverlay(events, ReadyOverlay()), new FakeGate(events));
+        var clock = new CommonConnectorProvisioningWaiterTests.ManualTimeProvider();
+        var pending = CommonConnectorProvisioningWaiter.WaitAsync(ct => coordinator.ReconnectAsync(ct),
+            ct => coordinator.ResumeAndConnectAsync(ct), async ct => { await coordinator.DisconnectAsync(ct); },
+            timeProvider: clock,
+            progress: _ => access.StateFailure = null).AsTask();
+
+        var waited = await clock.AdvanceArmedAsync();
+        var result = await pending.WaitAsync(TimeSpan.FromSeconds(10));
+
+        Assert.Equal(TimeSpan.FromSeconds(7), waited);
+        Assert.Equal(CommonConnectorConnectionStatus.Ready, result.Status);
+    }
+
+    [Fact]
+    public async Task ProviderBusy_IsAWaitingStateNotAFailure()
+    {
+        var events = new List<string>();
+        var access = new FakeAccess(events)
+        {
+            StateFailure = new ConnectorEnrollmentProtocolException("busy", 503, "vpn_provider_busy", TimeSpan.FromSeconds(2)),
+        };
+        var coordinator = new CommonConnectorConnectionCoordinator(access, new FakeOverlay(events, ReadyOverlay()), new FakeGate(events));
+
+        await Assert.ThrowsAsync<ConnectorEnrollmentProtocolException>(() => coordinator.ReconnectAsync().AsTask());
+
+        Assert.Equal(CommonConnectorConnectionStatus.AwaitingVpnAuthorization, coordinator.Current.Status);
+        Assert.Equal("vpn_provider_busy", coordinator.Current.DiagnosticCode);
+    }
+
+    [Fact]
+    public async Task VpnStateNotSupported_IsTreatedLikeUninitializedProviderState()
+    {
+        var events = new List<string>();
+        var access = new FakeAccess(events)
+        {
+            StateFailure = new ConnectorEnrollmentProtocolException("no state", 403, "vpn_state_not_supported"),
+            ProfileFailure = new ConnectorEnrollmentProtocolException("pending", 403, "access_pending"),
+        };
+        var coordinator = new CommonConnectorConnectionCoordinator(access, new FakeOverlay(events, ReadyOverlay()), new FakeGate(events));
+
+        var result = await coordinator.ReconnectAsync();
+
+        Assert.Equal(CommonConnectorConnectionStatus.AccessPending, result.Status);
+        Assert.Equal("access_providers_initializing", result.DiagnosticCode);
+    }
+
+    [Theory]
+    [InlineData("vpn_future_code", CommonConnectorConnectionStatus.Failed)]
+    [InlineData("access_revision_regressed", CommonConnectorConnectionStatus.Failed)]
+    public async Task UnknownOrDefinitiveProfileCodes_AreNotRetriedAndKeepTheirCode(string code, CommonConnectorConnectionStatus expected)
+    {
+        var events = new List<string>();
+        var access = new FakeAccess(events, State("ready"))
+        {
+            ProfileFailure = new ConnectorEnrollmentProtocolException("no", 403, code),
+        };
+        var coordinator = new CommonConnectorConnectionCoordinator(access, new FakeOverlay(events, ReadyOverlay()), new FakeGate(events));
+        var clock = new CommonConnectorProvisioningWaiterTests.ManualTimeProvider();
+
+        var error = await Assert.ThrowsAsync<ConnectorEnrollmentProtocolException>(() =>
+            CommonConnectorProvisioningWaiter.WaitAsync(ct => coordinator.ReconnectAsync(ct),
+                ct => coordinator.ResumeAndConnectAsync(ct), async ct => { await coordinator.DisconnectAsync(ct); },
+                timeProvider: clock).AsTask());
+
+        Assert.Equal(code, error.ErrorCode);
+        Assert.Equal(expected, coordinator.Current.Status);
+        Assert.Equal(code, coordinator.Current.DiagnosticCode);
+    }
+
+    [Fact]
+    public async Task NetBirdUp_RunsOncePerIssuedBootstrapWhileTheServerAwaitsThePeer()
+    {
+        var events = new List<string>();
+        var access = new FakeAccess(events, State("connecting"), State("connecting"), State("connecting"), State("connecting"), State("ready"));
+        var overlay = new FakeOverlay(events, ReadyOverlay());
+        var coordinator = new CommonConnectorConnectionCoordinator(access, overlay, new FakeGate(events));
+        var clock = new CommonConnectorProvisioningWaiterTests.ManualTimeProvider();
+        var pending = CommonConnectorProvisioningWaiter.WaitAsync(ct => coordinator.ReconnectAsync(ct),
+            ct => coordinator.ResumeAndConnectAsync(ct), async ct => { await coordinator.DisconnectAsync(ct); },
+            timeProvider: clock).AsTask();
+        for (var poll = 0; poll < 3; poll++) await clock.AdvanceArmedAsync();
+
+        var result = await pending.WaitAsync(TimeSpan.FromSeconds(10));
+
+        Assert.Equal(CommonConnectorConnectionStatus.Ready, result.Status);
+        Assert.Equal(1, access.BootstrapCalls);
+        Assert.Equal(1, overlay.ConnectCalls);
+        Assert.Equal(new[] { "state", "bootstrap", "connect", "state", "state", "state", "state", "profile" }, events);
+    }
+
+    [Fact]
+    public async Task NetBirdUp_RunsAgainWhenTheDaemonLostItsRegistration()
+    {
+        var events = new List<string>();
+        var access = new FakeAccess(events, State("connecting"), State("connecting"), State("connecting"), State("connecting"));
+        var loggedOut = ReadyOverlay() with
+        {
+            Status = NetworkServiceStatus.Disconnected, ManagementUri = null, ManagementConnected = false, SignalConnected = false,
+            AssignedInternalAddresses = [],
+        };
+        var overlay = new ScriptedOverlay(events, ReadyOverlay(), loggedOut, ReadyOverlay());
+        var coordinator = new CommonConnectorConnectionCoordinator(access, overlay, new FakeGate(events));
+
+        Assert.Equal(CommonConnectorConnectionStatus.AwaitingVpnAuthorization, (await coordinator.ReconnectAsync()).Status);
+        var second = await coordinator.ResumeAndConnectAsync();
+
+        Assert.Equal(CommonConnectorConnectionStatus.AwaitingVpnAuthorization, second.Status);
+        Assert.Equal(2, access.BootstrapCalls);
+        Assert.Equal(2, overlay.ConnectCalls);
     }
 
     [Fact]
@@ -221,7 +739,7 @@ public sealed class CommonConnectorConnectionCoordinatorTests
     }
 
     [Fact]
-    public async Task OverlayChangeBetweenCoordinatorAndGate_IsRejectedBeforeRouteCreation()
+    public async Task RealGate_ReusesOnlyTheCurrentCoordinatorsObservation()
     {
         var events = new List<string>();
         var access = new FakeAccess(events, State("ready"), State("ready"));
@@ -231,11 +749,11 @@ public sealed class CommonConnectorConnectionCoordinatorTests
         var coordinator = new CommonConnectorConnectionCoordinator(access, overlay, gate);
         await coordinator.ReconnectAsync();
 
-        var error = await Assert.ThrowsAsync<NetworkGateException>(() =>
-            coordinator.OpenProtectedServiceAsync("platform", "jobs").AsTask());
-
-        Assert.Equal("overlay_identity_mismatch", error.Code);
-        Assert.Equal(CommonConnectorConnectionStatus.Failed, coordinator.Current.Status);
+        using var route = await coordinator.OpenProtectedServiceAsync("platform", "jobs");
+        // This fixture's probe opens no socket. Actual socket freshness is
+        // covered by BoundProtectedServiceTransportTests after DNS resolution.
+        Assert.Equal(CommonConnectorConnectionStatus.Ready, coordinator.Current.Status);
+        Assert.Equal(ReadyOverlay().ManagementUri, route.Overlay.ManagementUri);
     }
 
     [Fact]
@@ -377,6 +895,244 @@ public sealed class CommonConnectorConnectionCoordinatorTests
         Assert.Equal(CommonConnectorConnectionStatus.Ready, (await active).Status);
     }
 
+    [Fact]
+    public async Task Restore_DeviceRevokedOnServer_ForgetsCredentialAndRequiresSignIn()
+    {
+        var events = new List<string>();
+        var access = new AccountAccess { ResumeFailure = DeviceUnauthorized(), ForgetResult = true };
+        var coordinator = new CommonConnectorConnectionCoordinator(
+            access, new FakeOverlay(events, ReadyOverlay()), new FakeGate(events));
+
+        var snapshot = await coordinator.ResumeAndConnectAsync();
+
+        Assert.Equal(CommonConnectorConnectionStatus.EnrollmentRequired, snapshot.Status);
+        Assert.Equal("device_revoked", snapshot.DiagnosticCode);
+        Assert.Null(snapshot.DeviceId);
+        Assert.Equal(1, access.ForgetCalls);
+        Assert.False(access.HasCredential);
+        Assert.Empty(events);
+    }
+
+    [Fact]
+    public async Task Restore_RejectedCertificateWhileServerKeepsEnrollment_KeepsCredential()
+    {
+        var events = new List<string>();
+        var access = new AccountAccess { ResumeFailure = DeviceUnauthorized(), ForgetResult = false };
+        var coordinator = new CommonConnectorConnectionCoordinator(
+            access, new FakeOverlay(events, ReadyOverlay()), new FakeGate(events));
+
+        var error = await Assert.ThrowsAsync<ConnectorEnrollmentProtocolException>(() =>
+            coordinator.ResumeAndConnectAsync().AsTask());
+
+        Assert.Equal("device_unauthorized", error.ErrorCode);
+        Assert.Equal(CommonConnectorConnectionStatus.EnrollmentRequired, coordinator.Current.Status);
+        Assert.Equal("issued_credential_rejected", coordinator.Current.DiagnosticCode);
+        Assert.True(access.HasCredential);
+        Assert.Equal(1, access.ForgetCalls);
+        Assert.Equal(2, access.ResumeCalls); // retried once with the refreshed receipt
+    }
+
+    [Fact]
+    public async Task Restore_KeyAcceptedAfterRejection_RetriesWithRefreshedReceipt()
+    {
+        var events = new List<string>();
+        var access = new AccountAccess
+        {
+            ResumeFailure = DeviceUnauthorized(), ResumeFailsOnlyOnce = true,
+            StateFailure = new HttpRequestException("reached the retried connection"),
+        };
+        var coordinator = new CommonConnectorConnectionCoordinator(
+            access, new FakeOverlay(events, ReadyOverlay()), new FakeGate(events));
+
+        await Assert.ThrowsAsync<HttpRequestException>(() => coordinator.ResumeAndConnectAsync().AsTask());
+
+        Assert.Equal(2, access.ResumeCalls);
+        Assert.Equal(1, access.ForgetCalls);
+        Assert.True(access.HasCredential);
+    }
+
+    [Fact]
+    public async Task Restore_RejectionWithClockSkew_ReportsClockAndKeepsCredential()
+    {
+        var events = new List<string>();
+        var access = new AccountAccess
+        {
+            ResumeFailure = DeviceUnauthorized(),
+            ForgetFailure = new ConnectorClockSkewException(TimeSpan.FromMinutes(4)),
+        };
+        var coordinator = new CommonConnectorConnectionCoordinator(
+            access, new FakeOverlay(events, ReadyOverlay()), new FakeGate(events));
+
+        var error = await Assert.ThrowsAsync<ConnectorClockSkewException>(() => coordinator.ResumeAndConnectAsync().AsTask());
+
+        Assert.Equal(TimeSpan.FromMinutes(4), error.Skew);
+        Assert.Equal(CommonConnectorConnectionStatus.Failed, coordinator.Current.Status);
+        Assert.Equal("clock_skew", coordinator.Current.DiagnosticCode);
+        Assert.True(access.HasCredential);
+    }
+
+    [Fact]
+    public async Task Restore_KeyProofLocalFailure_KeepsCredentialAndOriginalRejection()
+    {
+        var events = new List<string>();
+        var access = new AccountAccess
+        {
+            ResumeFailure = DeviceUnauthorized(),
+            ForgetFailure = new ConnectorEnrollmentStateException("The stored key cannot be read."),
+        };
+        var coordinator = new CommonConnectorConnectionCoordinator(
+            access, new FakeOverlay(events, ReadyOverlay()), new FakeGate(events));
+
+        var error = await Assert.ThrowsAsync<ConnectorEnrollmentProtocolException>(() =>
+            coordinator.ResumeAndConnectAsync().AsTask());
+
+        Assert.Equal("device_unauthorized", error.ErrorCode);
+        Assert.Equal(1, access.ForgetCalls);
+        Assert.True(access.HasCredential);
+        Assert.Equal("issued_credential_rejected", coordinator.Current.DiagnosticCode);
+    }
+
+    public static TheoryData<Exception> TransientReproofFailures => new()
+    {
+        new ConnectorEnrollmentProtocolException("busy", 503, "vpn_provider_busy", TimeSpan.FromSeconds(5)),
+        new HttpRequestException("network unreachable"),
+    };
+
+    [Theory]
+    [MemberData(nameof(TransientReproofFailures))]
+    public async Task Restore_KeyProofTransientFailure_KeepsCredentialAndStaysRetryable(Exception transient)
+    {
+        var events = new List<string>();
+        var access = new AccountAccess { ResumeFailure = DeviceUnauthorized(), ForgetFailure = transient };
+        var coordinator = new CommonConnectorConnectionCoordinator(
+            access, new FakeOverlay(events, ReadyOverlay()), new FakeGate(events));
+
+        var error = await Assert.ThrowsAnyAsync<Exception>(() => coordinator.ResumeAndConnectAsync().AsTask());
+
+        // The second proof did not reach a verdict: neither a sign-in demand nor a forgotten device.
+        Assert.Same(transient, error);
+        Assert.True(CommonConnectorProvisioningWaiter.IsTransient(error));
+        Assert.True(access.HasCredential);
+        Assert.NotEqual(CommonConnectorConnectionStatus.EnrollmentRequired, coordinator.Current.Status);
+        Assert.NotEqual("issued_credential_rejected", coordinator.Current.DiagnosticCode);
+    }
+
+    [Theory]
+    [InlineData(503, "service_unavailable")]
+    [InlineData(408, "timeout")]
+    [InlineData(0, null)]
+    public async Task Restore_TransientFailure_NeverForgetsCredential(int status, string? code)
+    {
+        var events = new List<string>();
+        var access = new AccountAccess
+        {
+            ResumeFailure = status == 0
+                ? new HttpRequestException("connection reset")
+                : new ConnectorEnrollmentProtocolException("transient", status, code),
+            ForgetResult = true,
+        };
+        var coordinator = new CommonConnectorConnectionCoordinator(
+            access, new FakeOverlay(events, ReadyOverlay()), new FakeGate(events));
+
+        await Assert.ThrowsAnyAsync<Exception>(() => coordinator.ResumeAndConnectAsync().AsTask());
+
+        Assert.Equal(0, access.ForgetCalls);
+        Assert.True(access.HasCredential);
+        Assert.Equal(CommonConnectorConnectionStatus.Failed, coordinator.Current.Status);
+    }
+
+    [Fact]
+    public async Task SignOut_RevocationNotConfirmedInWindow_KeepsCredential()
+    {
+        var events = new List<string>();
+        var access = new AccountAccess
+        {
+            RevokeFailure = new ConnectorEnrollmentProtocolException("pending", 408, "self_revoke_timeout"),
+        };
+        var coordinator = new CommonConnectorConnectionCoordinator(
+            access, new FakeOverlay(events, ReadyOverlay()), new FakeGate(events));
+
+        var error = await Assert.ThrowsAsync<ConnectorEnrollmentProtocolException>(() => coordinator.SignOutAsync().AsTask());
+
+        Assert.Equal("self_revoke_timeout", error.ErrorCode);
+        Assert.Equal(0, access.ClearCalls);
+        Assert.True(access.HasCredential);
+        Assert.Equal(CommonConnectorConnectionStatus.Failed, coordinator.Current.Status);
+
+        access.RevokeFailure = null;
+        var signedOut = await coordinator.SignOutAsync();
+        Assert.Equal(CommonConnectorConnectionStatus.EnrollmentRequired, signedOut.Status);
+        Assert.Equal("signed_out", signedOut.DiagnosticCode);
+        Assert.False(access.HasCredential);
+    }
+
+    private static ConnectorEnrollmentProtocolException DeviceUnauthorized() =>
+        new("issued device credential rejected", (int)HttpStatusCode.Unauthorized, "device_unauthorized");
+
+    private sealed class AccountAccess : IConnectorEnrollmentClient, IConnectorDeviceAccessClient,
+        IConnectorAccountSessionClient, IConnectorExactDeviceRevocationClient
+    {
+        public Exception? ResumeFailure { get; init; }
+        public bool ResumeFailsOnlyOnce { get; init; }
+        public Exception? StateFailure { get; init; }
+        public int ResumeCalls { get; private set; }
+        public bool ForgetResult { get; init; }
+        public Exception? ForgetFailure { get; init; }
+        public Exception? RevokeFailure { get; set; }
+        public int ForgetCalls { get; private set; }
+        public int ClearCalls { get; private set; }
+        public bool HasCredential { get; private set; } = true;
+
+        public ValueTask<DeviceEnrollmentResponse> EnrollAsync(string enrollmentToken, string deviceDisplayName,
+            CancellationToken cancellationToken = default) => throw new InvalidOperationException("Enrollment is not expected.");
+
+        public ValueTask<DeviceEnrollmentResponse> ResumeAsync(CancellationToken cancellationToken = default)
+        {
+            ResumeCalls++;
+            if (ResumeFailsOnlyOnce && ResumeCalls > 1)
+                return ValueTask.FromResult(new DeviceEnrollmentResponse(
+                    DeviceAccessProtocol.Version, Guid.NewGuid(), "device-1", "certificate", "issuer",
+                    DateTimeOffset.UtcNow.AddHours(1), 1));
+            return ValueTask.FromException<DeviceEnrollmentResponse>(ResumeFailure ?? new InvalidOperationException("Resume must fail."));
+        }
+
+        public ValueTask<DeviceEnrollmentResponse?> GetReceiptAsync(CancellationToken cancellationToken = default) =>
+            throw new InvalidOperationException("Receipt is not expected.");
+
+        public ValueTask<DeviceAccessProfile> GetAccessProfileAsync(CancellationToken cancellationToken = default) =>
+            throw new InvalidOperationException("Profile is not expected.");
+
+        public ValueTask<ConnectorVpnBootstrap> GetVpnBootstrapAsync(CancellationToken cancellationToken = default) =>
+            throw new InvalidOperationException("Bootstrap is not expected.");
+
+        public ValueTask<ConnectorVpnTransportState> GetVpnStateAsync(CancellationToken cancellationToken = default) =>
+            ValueTask.FromException<ConnectorVpnTransportState>(StateFailure ?? new InvalidOperationException("VPN state is not expected."));
+
+        public ValueTask<ConnectorSignOutIdentity?> GetSignOutIdentityAsync(CancellationToken cancellationToken = default) =>
+            ValueTask.FromResult<ConnectorSignOutIdentity?>(HasCredential ? new(Guid.Parse("11111111-1111-1111-1111-111111111111"), "device-1") : null);
+
+        public ValueTask ClearRevokedSessionAsync(ConnectorSignOutIdentity identity, CancellationToken cancellationToken = default)
+        {
+            ClearCalls++;
+            HasCredential = false;
+            return ValueTask.CompletedTask;
+        }
+
+        public ValueTask<bool> ForgetRejectedEnrollmentAsync(CancellationToken cancellationToken = default)
+        {
+            ForgetCalls++;
+            if (ForgetFailure is not null) return ValueTask.FromException<bool>(ForgetFailure);
+            if (ForgetResult) HasCredential = false;
+            return ValueTask.FromResult(ForgetResult);
+        }
+
+        public ValueTask<bool> InspectExactDeviceRevocationAsync(CancellationToken cancellationToken = default) =>
+            ValueTask.FromResult(true);
+
+        public ValueTask RevokeAndConfirmExactAsync(string deviceId, CancellationToken cancellationToken = default) =>
+            RevokeFailure is null ? ValueTask.CompletedTask : ValueTask.FromException(RevokeFailure);
+    }
+
     private static ConnectorVpnTransportState State(string status) => new(
         "device-1",
         1,
@@ -411,9 +1167,14 @@ public sealed class CommonConnectorConnectionCoordinatorTests
         public int ProfileCalls { get; private set; }
         public int StateCalls { get; private set; }
         public int ReceiptCalls { get; private set; }
+        public int EnrollmentCalls { get; private set; }
         public bool BlockEnrollment { get; init; }
         public Exception? StateFailure { get; set; }
+        public Exception? ProfileFailure { get; set; }
+        public Exception? BootstrapFailure { get; set; }
         public Exception? ResumeFailure { get; set; }
+        public long BootstrapRevision { get; init; } = 1;
+        public long ProfileRevision { get; init; } = 1;
         public TaskCompletionSource EnrollmentStarted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public TaskCompletionSource ReleaseEnrollment { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
@@ -423,6 +1184,7 @@ public sealed class CommonConnectorConnectionCoordinatorTests
             CancellationToken cancellationToken = default)
         {
             events.Add("enroll");
+            EnrollmentCalls++;
             EnrollmentStarted.TrySetResult();
             if (BlockEnrollment) await ReleaseEnrollment.Task.WaitAsync(cancellationToken);
             return Receipt();
@@ -443,8 +1205,9 @@ public sealed class CommonConnectorConnectionCoordinatorTests
         {
             events.Add("profile");
             ProfileCalls++;
+            if (ProfileFailure is not null) return ValueTask.FromException<DeviceAccessProfile>(ProfileFailure);
             return ValueTask.FromResult(new DeviceAccessProfile(
-                DeviceAccessProtocol.Version, "device-1", "user-1", "company-1", 1, 1,
+                DeviceAccessProtocol.Version, "device-1", "user-1", "company-1", ProfileRevision, ProfileRevision,
                 DateTimeOffset.UtcNow.AddHours(1),
                 [new ModuleGrant(ConnectorProduct.Structura, "sync", [ConnectorPermission.Read])], []));
         }
@@ -453,8 +1216,9 @@ public sealed class CommonConnectorConnectionCoordinatorTests
         {
             events.Add("bootstrap");
             BootstrapCalls++;
+            if (BootstrapFailure is not null) return ValueTask.FromException<ConnectorVpnBootstrap>(BootstrapFailure);
             return ValueTask.FromResult(new ConnectorVpnBootstrap(
-                "one-time-setup-key", ManagementUri.AbsoluteUri, 1, DateTimeOffset.UtcNow.AddMinutes(5)));
+                "one-time-setup-key", ManagementUri.AbsoluteUri, BootstrapRevision, DateTimeOffset.UtcNow.AddMinutes(5)));
         }
 
         public ValueTask<ConnectorVpnTransportState> GetVpnStateAsync(CancellationToken cancellationToken = default)
@@ -492,6 +1256,43 @@ public sealed class CommonConnectorConnectionCoordinatorTests
             StatusCalls++;
             return ValueTask.FromResult(snapshot);
         }
+    }
+
+    /// <summary>NetBird rejects every 'up'; status reads report an unregistered daemon.</summary>
+    private sealed class FailingUpOverlay : INetworkOverlayClient
+    {
+        public int ConnectCalls { get; private set; }
+
+        public ValueTask<NetworkOverlaySnapshot> ConnectAsync(
+            NetworkOverlayBootstrap bootstrap,
+            CancellationToken cancellationToken = default)
+        {
+            ConnectCalls++;
+            return ValueTask.FromException<NetworkOverlaySnapshot>(
+                new NetworkGateException("netbird_up_failed", "NetBird rejected the bootstrap: [redacted]"));
+        }
+
+        public ValueTask<NetworkOverlaySnapshot> GetStatusAsync(CancellationToken cancellationToken = default) =>
+            ValueTask.FromResult(ReadyOverlay() with { Status = NetworkServiceStatus.Disconnected, ManagementUri = null });
+    }
+
+    /// <summary>One scripted snapshot per 'up' or status read, in order; counts 'up'.</summary>
+    private sealed class ScriptedOverlay(List<string> events, params NetworkOverlaySnapshot[] snapshots) : INetworkOverlayClient
+    {
+        private readonly Queue<NetworkOverlaySnapshot> _snapshots = new(snapshots);
+        public int ConnectCalls { get; private set; }
+
+        public ValueTask<NetworkOverlaySnapshot> ConnectAsync(
+            NetworkOverlayBootstrap bootstrap,
+            CancellationToken cancellationToken = default)
+        {
+            events.Add("connect");
+            ConnectCalls++;
+            return ValueTask.FromResult(_snapshots.Dequeue());
+        }
+
+        public ValueTask<NetworkOverlaySnapshot> GetStatusAsync(CancellationToken cancellationToken = default) =>
+            ValueTask.FromResult(_snapshots.Dequeue());
     }
 
     private sealed class SequenceOverlay(params NetworkOverlaySnapshot[] snapshots) : INetworkOverlayClient

@@ -30,10 +30,12 @@ public interface IShellHost
     // Satisfied by: MainWindow `ThemedDialogs.Show(this, message, title, buttons, image)`.
     MessageBoxResult ShowDialog(string message, string title, MessageBoxButton buttons, MessageBoxImage image);
 
-    // The owner window for OperationProgressWindow (so progress dialogs are modal-parented to the shell).
-    // The View constructs `new OperationProgressWindow(...) { Owner = host.OwnerWindow }`.
-    // Satisfied by: `this` (the MainWindow instance).
+    // Owner window for the native folder pickers. Satisfied by: `this` (the MainWindow instance).
     Window OwnerWindow { get; }
+
+    // Progress of a sync or publication: an entry of the page's job journal («Задания») instead of a native
+    // progress window. Satisfied by: MainWindow through the Graphite controller's journal.
+    ILocalJobProgress BeginOperation(string kind, string title, string? subject, string firstStep);
 
     // The sync gate, READ by the shell's connect flow (ConnectByTokenInternalAsync) and other shell call sites,
     // and read/written by the lifted sync engine. It must remain shell-visible, so it is BACKED in the shell.

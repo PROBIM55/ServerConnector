@@ -17,7 +17,8 @@ public sealed record DesktopPreferences(
     string? ConverterOutputDirectory = null,
     string? TeklaPublishSourcePath = null,
     string? TeklaExtensionsPublishSourcePath = null,
-    string? TeklaLibrariesPublishSourcePath = null);
+    string? TeklaLibrariesPublishSourcePath = null,
+    string? UiTheme = null);
 
 // IPC carries only target selection and the publication comment. Native source
 // paths stay in AppSettings and are resolved by the existing Tekla publisher.
@@ -27,11 +28,10 @@ public sealed record TeklaPublicationRequest(
     bool PublishLibraries,
     string Comment);
 
-// Native-only actions exposed to the Graphite boundary. Implementations must keep
-// download and apply separate: applying an update remains the existing drain path.
+// Native-only actions exposed to the Graphite boundary. Application updates are not among them:
+// the machine update service downloads and installs; the application only reads its status.
 public enum DesktopSupportAction
 {
-    DownloadPendingUpdate,
     ShowReleaseNotes,
     OpenApplicationJournal,
     ClearApplicationJournal,
@@ -81,17 +81,18 @@ public interface IConnectorHost
     // ConnectByTokenInternalAsync(token, showSuccessDialog) — the SACRED engine, called VERBATIM.
     Task ConnectByTokenAsync(string token, bool showSuccessDialog);
 
-    // App self-update "check" path. UpdateAction_Click calls this when there is no pending update.
-    // Satisfied by: MainWindow CheckUpdatesAsync(showDialogs: true).
-    Task CheckUpdatesAsync(bool showDialogs);
+    // «Проверить обновления»: sets the «проверь сейчас» flag for the machine update service (at most once a
+    // minute is honoured there). Nothing is downloaded or installed by the application.
+    Task RequestUpdateCheckAsync();
 
-    // App self-update "install" path. UpdateAction_Click calls this when an update is pending.
-    // Satisfied by: MainWindow InstallPendingUpdateAsync(confirmBeforeRun: true).
-    Task InstallPendingUpdateAsync(bool confirmBeforeRun);
-
-    // Is a self-update currently pending (drives UpdateAction_Click's check-vs-install branch, mirroring the old
-    // `if (_pendingUpdate is null)`). Satisfied by: MainWindow `_pendingUpdate is not null`.
+    // The service knows a newer version (available, downloading, installing or retrying).
     bool HasPendingUpdate { get; }
+
+    // What the page shows about updates, from the service status file.
+    Services.DesktopUpdateState UpdateState => Services.DesktopUpdateState.Unknown;
+
+    // The automatic update completed before this start, shown once («Коннектор обновлён до X» + notes).
+    global::Connector.Updates.CompletedUpdate? JustUpdated => null;
 
     // The Tekla-mirror sync button (ConnectorTeklaSyncButton). Satisfied by: MainWindow's
     // `_standard?.RunInteractiveSyncAsync()` (the existing Стандарт interactive sync, identical to the Стандарт-tab button).
@@ -116,7 +117,7 @@ public interface IConnectorHost
     void UpdateHeaderStatus();
 
     // The shared, mutable settings model — used ONLY for the round-trip of the COLLAPSED vestigial controls
-    // (DeviceId/Interval/AutoStart/SmbSharePath/UpdateManifestUrl) so the view can render them from the live
+    // (DeviceId/Interval/AutoStart/SmbSharePath) so the view can render them from the live
     // settings instead of from shell-pushed strings. LIVE getter — MainWindow reassigns _settings, never cache.
     // Satisfied by: MainWindow's `_settings` field.
     AppSettings Settings { get; }

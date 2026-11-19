@@ -25,7 +25,9 @@ internal sealed record StoredProviderCommand(
     string CompanyId,
     long DesiredRevision,
     IReadOnlyList<ModuleGrant> Modules,
-    IReadOnlyList<ResourceGrant> Resources);
+    IReadOnlyList<ResourceGrant> Resources,
+    int AttemptCount = 0,
+    DateTimeOffset CreatedAtUtc = default);
 
 internal sealed record ProviderPayload(
     string UserId,
@@ -37,9 +39,20 @@ internal enum DispatchFenceStatus { Ready, Superseded, Busy }
 
 internal sealed class DbProviderOutboxRepository
 {
+    private const int SerializationRetries = 3;
     private readonly IDeviceAccessDbConnectionFactory _connections;
+    private readonly ConnectorAccessDispatchSignal? _signal;
+    private readonly DeviceAccessOptions _options;
 
-    public DbProviderOutboxRepository(IDeviceAccessDbConnectionFactory connections) => _connections = connections;
+    public DbProviderOutboxRepository(
+        IDeviceAccessDbConnectionFactory connections,
+        ConnectorAccessDispatchSignal? signal = null,
+        DeviceAccessOptions? options = null)
+    {
+        _connections = connections;
+        _signal = signal;
+        _options = options ?? new DeviceAccessOptions();
+    }
 
     public async ValueTask<IReadOnlyList<StoredProviderState>> EnsureApplyDesiredAsync(
         StoredDevice device,
@@ -48,30 +61,106 @@ internal sealed class DbProviderOutboxRepository
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
-        await using var connection = await _connections.OpenConnectionAsync(cancellationToken);
-        await using var transaction = await connection.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
-        await UpdateDeviceDesiredRevisionAsync(connection, transaction, device.DeviceId, access.AccessRevision, now, cancellationToken);
         var payload = JsonSerializer.Serialize(new ProviderPayload(
             device.UserId,
             device.CompanyId,
             access.Modules,
             access.Resources));
-        foreach (var providerName in providerNames)
+        var (enqueued, rearmed) = await RetrySerializationAsync(async () =>
         {
-            await UpsertStateAndCommandAsync(
-                connection,
-                transaction,
-                device.DeviceId,
-                providerName,
-                DeviceAccessProviderCommandKind.Apply,
-                access.AccessRevision,
-                payload,
-                now,
-                cancellationToken);
-        }
+            await using var connection = await _connections.OpenConnectionAsync(cancellationToken);
+            await using var transaction = await connection.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
+            await UpdateDeviceDesiredRevisionAsync(connection, transaction, device.DeviceId, access.AccessRevision, now, cancellationToken);
+            var enqueuedNow = new List<string>();
+            foreach (var providerName in providerNames)
+            {
+                if (await UpsertStateAndCommandAsync(
+                        connection,
+                        transaction,
+                        device.DeviceId,
+                        providerName,
+                        DeviceAccessProviderCommandKind.Apply,
+                        access.AccessRevision,
+                        payload,
+                        now,
+                        cancellationToken))
+                {
+                    enqueuedNow.Add(providerName);
+                }
+            }
 
-        await transaction.CommitAsync(cancellationToken);
+            var rearmedNow = await RearmAppliesAsync(connection, transaction, device.DeviceId, now, cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            return (enqueuedNow, rearmedNow);
+        }, cancellationToken);
+        _signal?.Notify(rearmed > 0 ? providerNames : (IEnumerable<string>)enqueued);
         return await ReadStatesAsync(device.DeviceId, cancellationToken);
+    }
+
+    // Called for the device's own authenticated vpn/state and vpn/bootstrap
+    // reads: the client waits there (not on /profile) while its VPN grant is
+    // being applied, so these reads also re-arm the current apply.
+    public async ValueTask RearmAppliesAsync(
+        string deviceId,
+        IReadOnlyCollection<string> providerNames,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        var rearmed = await RetrySerializationAsync(async () =>
+        {
+            await using var connection = await _connections.OpenConnectionAsync(cancellationToken);
+            await using var transaction = await connection.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
+            var count = await RearmAppliesAsync(connection, transaction, deviceId, now, cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            return count;
+        }, cancellationToken);
+        if (rearmed > 0) _signal?.Notify(providerNames);
+    }
+
+    // Re-arms only the device's current-revision apply commands that are not
+    // leased: a parked one after it has been parked for the revive interval
+    // (fresh failure count and age), a waiting one (retry scheduled in the
+    // future) at most once per WaitRearmGap since its last attempt. A waiting
+    // one keeps created_at_utc, so its pause keeps growing with its age.
+    private async ValueTask<int> RearmAppliesAsync(
+        DbConnection connection,
+        DbTransaction transaction,
+        string deviceId,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = """
+            UPDATE connector_access_provider_outbox
+            SET status = 'pending',
+                attempt_count = CASE WHEN last_error LIKE 'dead_letter:%' THEN 0 ELSE attempt_count END,
+                last_error = CASE WHEN last_error LIKE 'dead_letter:%' THEN NULL ELSE last_error END,
+                available_at_utc = NULL,
+                dispatch_lease_id = NULL,
+                lease_until_utc = NULL,
+                created_at_utc = CASE WHEN last_error LIKE 'dead_letter:%' THEN @now ELSE created_at_utc END,
+                updated_at_utc = @now
+            WHERE device_id = @device_id
+              AND command_kind = 'apply'
+              AND status IN ('pending', 'error')
+              AND (lease_until_utc IS NULL OR lease_until_utc <= @now)
+              AND EXISTS (
+                  SELECT 1 FROM connector_access_provider_state AS state
+                  WHERE state.device_id = connector_access_provider_outbox.device_id
+                    AND state.provider_name = connector_access_provider_outbox.provider_name
+                    AND state.desired_revision = connector_access_provider_outbox.desired_revision
+                    AND state.desired_action = 'apply')
+              AND ((last_error LIKE 'dead_letter:%' AND updated_at_utc <= @revive_before)
+                   OR ((last_error IS NULL OR last_error NOT LIKE 'dead_letter:%')
+                       AND available_at_utc > @now
+                       AND updated_at_utc <= @wait_rearm_before))
+            """;
+        Add(command, "@device_id", deviceId);
+        Add(command, "@now", now, DbType.DateTimeOffset);
+        Add(command, "@revive_before", now.Subtract(_options.ProviderDeadLetterReviveInterval), DbType.DateTimeOffset);
+        Add(command, "@wait_rearm_before", now.Subtract(ProviderRetryPolicy.WaitRearmGap), DbType.DateTimeOffset);
+        return await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
     public async ValueTask<bool> RevokeAndEnqueueAsync(
@@ -132,13 +221,25 @@ internal sealed class DbProviderOutboxRepository
         }
 
         await transaction.CommitAsync(cancellationToken);
+        _signal?.Notify(providerNames);
         return true;
     }
 
-    public async ValueTask<StoredProviderCommand?> TryClaimNextAsync(
+    public ValueTask<StoredProviderCommand?> TryClaimNextAsync(
         string leaseId,
         DateTimeOffset now,
         DateTimeOffset leaseUntil,
+        CancellationToken cancellationToken,
+        string? providerName = null) =>
+        RetrySerializationAsync(
+            () => TryClaimNextOnceAsync(leaseId, now, leaseUntil, providerName, cancellationToken),
+            cancellationToken);
+
+    private async ValueTask<StoredProviderCommand?> TryClaimNextOnceAsync(
+        string leaseId,
+        DateTimeOffset now,
+        DateTimeOffset leaseUntil,
+        string? providerName,
         CancellationToken cancellationToken)
     {
         await using var connection = await _connections.OpenConnectionAsync(cancellationToken);
@@ -147,7 +248,12 @@ internal sealed class DbProviderOutboxRepository
         await using (var select = connection.CreateCommand())
         {
             select.Transaction = transaction;
-            select.CommandText = """
+            // Only the current desired revision of a (device, provider) pair is
+            // claimable, and the state lease admits one dispatch per pair, so
+            // per-provider lanes keep per-device revision ordering. Revokes go
+            // first, then commands that never failed; parked applies are skipped.
+            var providerFilter = providerName is null ? string.Empty : "AND outbox.provider_name = @provider_name";
+            select.CommandText = $"""
                 SELECT outbox.command_id
                 FROM connector_access_provider_outbox AS outbox
                 INNER JOIN connector_access_provider_state AS state
@@ -156,13 +262,25 @@ internal sealed class DbProviderOutboxRepository
                    AND state.desired_revision = outbox.desired_revision
                    AND state.desired_action = outbox.command_kind
                 WHERE outbox.status IN ('pending', 'error', 'processing')
+                  {providerFilter}
+                  AND (outbox.last_error IS NULL OR outbox.last_error NOT LIKE 'dead_letter:%')
                   AND (outbox.available_at_utc IS NULL OR outbox.available_at_utc <= @now)
                   AND (outbox.lease_until_utc IS NULL OR outbox.lease_until_utc <= @now)
                   AND (state.dispatch_lease_until_utc IS NULL OR state.dispatch_lease_until_utc <= @now)
-                ORDER BY COALESCE(outbox.available_at_utc, outbox.created_at_utc), outbox.created_at_utc, outbox.command_id
+                ORDER BY CASE
+                             WHEN outbox.command_kind = 'revoke' THEN 0
+                             WHEN outbox.attempt_count = 0 AND outbox.last_error IS NULL THEN 1
+                             ELSE 2 END,
+                         COALESCE(outbox.available_at_utc, outbox.created_at_utc),
+                         outbox.created_at_utc,
+                         outbox.command_id
                 LIMIT 1
                 """;
             Add(select, "@now", now, DbType.DateTimeOffset);
+            if (providerName is not null)
+            {
+                Add(select, "@provider_name", providerName);
+            }
             commandId = await select.ExecuteScalarAsync(cancellationToken) as string;
         }
 
@@ -180,13 +298,19 @@ internal sealed class DbProviderOutboxRepository
                     dispatch_lease_id = @lease_id,
                     lease_until_utc = @lease_until,
                     last_error = NULL,
-                    attempt_count = attempt_count + 1,
+                    attempt_count = CASE
+                        WHEN @dead_letter_attempts > 0 AND attempt_count >= @dead_letter_attempts THEN 1
+                        ELSE attempt_count + 1 END,
                     updated_at_utc = @now
                 WHERE command_id = @command_id
                   AND status IN ('pending', 'error', 'processing')
                   AND (lease_until_utc IS NULL OR lease_until_utc <= @now)
                 """;
             Add(claim, "@lease_until", leaseUntil, DbType.DateTimeOffset);
+            // A row reaching a claim with a count at the limit was never parked
+            // (parking is marked in last_error): it was counted by an older
+            // release that retried forever, so its failure count starts over.
+            Add(claim, "@dead_letter_attempts", _options.ProviderDeadLetterAttempts, DbType.Int32);
             Add(claim, "@lease_id", leaseId);
             Add(claim, "@now", now, DbType.DateTimeOffset);
             Add(claim, "@command_id", commandId);
@@ -202,7 +326,7 @@ internal sealed class DbProviderOutboxRepository
             read.Transaction = transaction;
             read.CommandText = """
                 SELECT command_id, provider_name, command_kind, device_id,
-                       desired_revision, payload_json
+                       desired_revision, payload_json, attempt_count, created_at_utc
                 FROM connector_access_provider_outbox
                 WHERE command_id = @command_id
                 """;
@@ -225,14 +349,25 @@ internal sealed class DbProviderOutboxRepository
                 payload.CompanyId,
                 reader.GetInt64(4),
                 payload.Modules,
-                payload.Resources);
+                payload.Resources,
+                Convert.ToInt32(reader.GetValue(6), System.Globalization.CultureInfo.InvariantCulture),
+                DbDeviceAccessRepository.ReadDateTimeOffset(reader, 7));
         }
 
         await transaction.CommitAsync(cancellationToken);
         return command;
     }
 
-    public async ValueTask<DispatchFenceStatus> TryBeginDispatchAsync(
+    public ValueTask<DispatchFenceStatus> TryBeginDispatchAsync(
+        StoredProviderCommand command,
+        DateTimeOffset now,
+        DateTimeOffset leaseUntil,
+        CancellationToken cancellationToken) =>
+        RetrySerializationAsync(
+            () => TryBeginDispatchOnceAsync(command, now, leaseUntil, cancellationToken),
+            cancellationToken);
+
+    private async ValueTask<DispatchFenceStatus> TryBeginDispatchOnceAsync(
         StoredProviderCommand command,
         DateTimeOffset now,
         DateTimeOffset leaseUntil,
@@ -296,6 +431,7 @@ internal sealed class DbProviderOutboxRepository
                     lease_until_utc = NULL,
                     available_at_utc = @available_at,
                     last_error = @error,
+                    attempt_count = CASE WHEN attempt_count > 0 THEN attempt_count - 1 ELSE 0 END,
                     updated_at_utc = @now
                 WHERE command_id = @command_id
                   AND status = 'processing'
@@ -315,6 +451,16 @@ internal sealed class DbProviderOutboxRepository
     }
 
     public async ValueTask CompleteAsync(
+        StoredProviderCommand command,
+        DateTimeOffset now,
+        CancellationToken cancellationToken) =>
+        await RetrySerializationAsync(async () =>
+        {
+            await CompleteOnceAsync(command, now, cancellationToken);
+            return true;
+        }, cancellationToken);
+
+    private async ValueTask CompleteOnceAsync(
         StoredProviderCommand command,
         DateTimeOffset now,
         CancellationToken cancellationToken)
@@ -377,6 +523,20 @@ internal sealed class DbProviderOutboxRepository
         string error,
         DateTimeOffset now,
         DateTimeOffset availableAt,
+        CancellationToken cancellationToken,
+        bool refundAttempt = false) =>
+        await RetrySerializationAsync(async () =>
+        {
+            await FailOnceAsync(command, error, now, availableAt, refundAttempt, cancellationToken);
+            return true;
+        }, cancellationToken);
+
+    private async ValueTask FailOnceAsync(
+        StoredProviderCommand command,
+        string error,
+        DateTimeOffset now,
+        DateTimeOffset availableAt,
+        bool refundAttempt,
         CancellationToken cancellationToken)
     {
         error = error.Length <= 512 ? error : error[..512];
@@ -388,11 +548,15 @@ internal sealed class DbProviderOutboxRepository
             outbox.CommandText = """
                 UPDATE connector_access_provider_outbox
                 SET status = 'error', dispatch_lease_id = NULL, lease_until_utc = NULL,
-                    available_at_utc = @available_at, last_error = @error, updated_at_utc = @now
+                    available_at_utc = @available_at, last_error = @error, updated_at_utc = @now,
+                    attempt_count = CASE
+                        WHEN @refund = 1 AND attempt_count > 0 THEN attempt_count - 1
+                        ELSE attempt_count END
                 WHERE command_id = @command_id AND status = 'processing'
                   AND dispatch_lease_id = @lease_id
                 """;
             Add(outbox, "@error", error);
+            Add(outbox, "@refund", refundAttempt ? 1 : 0, DbType.Int32);
             Add(outbox, "@now", now, DbType.DateTimeOffset);
             Add(outbox, "@available_at", availableAt, DbType.DateTimeOffset);
             Add(outbox, "@command_id", command.CommandId);
@@ -501,7 +665,7 @@ internal sealed class DbProviderOutboxRepository
         }
     }
 
-    private static async ValueTask UpsertStateAndCommandAsync(
+    private async ValueTask<bool> UpsertStateAndCommandAsync(
         DbConnection connection,
         DbTransaction transaction,
         string deviceId,
@@ -562,7 +726,27 @@ internal sealed class DbProviderOutboxRepository
         Add(outbox, "@revision", revision, DbType.Int64);
         Add(outbox, "@payload", payload);
         Add(outbox, "@now", now, DbType.DateTimeOffset);
-        await outbox.ExecuteNonQueryAsync(cancellationToken);
+        return await outbox.ExecuteNonQueryAsync(cancellationToken) > 0;
+    }
+
+    // Each wrapped operation is one complete transaction on its own
+    // connection, so repeating it after a serialization conflict is safe.
+    private static async ValueTask<T> RetrySerializationAsync<T>(
+        Func<ValueTask<T>> operation,
+        CancellationToken cancellationToken)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                return await operation();
+            }
+            catch (Exception exception) when (attempt < SerializationRetries &&
+                                              ProviderRetryPolicy.IsTransientDatabaseConflict(exception))
+            {
+                await Task.Delay(TimeSpan.FromMilliseconds(Random.Shared.Next(10, 50) * attempt), cancellationToken);
+            }
+        }
     }
 
     private static void Add(DbCommand command, string name, object value, DbType? type = null)

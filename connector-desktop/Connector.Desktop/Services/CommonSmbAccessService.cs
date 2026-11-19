@@ -11,7 +11,12 @@ using Platform.Connector.Core;
 
 namespace Connector.SmbAccess;
 
-public sealed record CommonSmbFolder(string ResourceId, string DisplayName, string? Drive);
+/// <param name="ViaLegacyConnector">The legacy share is opened by the previous Structura Connector on this PC.</param>
+/// <param name="LegacyShare">This grant is the exact legacy share (BIM_Models), the subject of the K5 transfer.</param>
+/// <param name="ShareUnc">Display address of the granted share (\\host\share); never a credential.</param>
+/// <param name="CanWrite">The grant allows changes (Publish or Manage); otherwise the share is read-only.</param>
+public sealed record CommonSmbFolder(string ResourceId, string DisplayName, string? Drive, bool ViaLegacyConnector = false,
+    bool LegacyShare = false, string? ShareUnc = null, bool CanWrite = false);
 public sealed record CommonSmbRouteInvalidation(long RouteEpoch);
 
 public sealed class CommonSmbAccessException : Exception
@@ -24,7 +29,7 @@ public sealed class CommonSmbAccessException : Exception
 
 /// <summary>
 /// Consumes short-lived, server-issued SMB access and exposes only safe folder metadata.
-/// Credentials and UNC targets remain private and are never persisted.
+/// Credentials remain private and are never persisted; the UNC address and the read/write grant are display facts.
 /// </summary>
 public sealed class CommonSmbAccessService : IDisposable
 {
@@ -47,12 +52,16 @@ public sealed class CommonSmbAccessService : IDisposable
     private readonly TimeSpan _mappingLivenessInterval;
     private readonly Func<TimeSpan, CancellationToken, Task> _delay;
     private readonly Func<string, CancellationToken, ValueTask<bool>> _authenticatedRead;
+    private readonly ILegacyConnectorDetector? _legacyConnector;
     private readonly CancellationTokenSource _monitorLifetime = new();
     private readonly Task _mappingMonitor;
     private readonly SemaphoreSlim _serial = new(1, 1);
+    private readonly object _routeSync = new();
     private readonly Dictionary<string, OwnedMapping> _ownedMappings = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, OwnedMapping> _pendingMappings = new(StringComparer.OrdinalIgnoreCase);
     private IReadOnlyList<CommonSmbFolder> _folders = Array.Empty<CommonSmbFolder>();
+    private LegacyConnectorSnapshot? _legacyConnectorSnapshot;
+    private LegacyConnectorSnapshot? _operationLegacySnapshot; // guarded by _serial
     private ValidatedAccess? _authorization;
     private long _authorizationEpoch;
     private long _routeEpoch;
@@ -67,7 +76,8 @@ public sealed class CommonSmbAccessService : IDisposable
         TimeProvider? timeProvider = null,
         TimeSpan? mappingLivenessInterval = null,
         Func<TimeSpan, CancellationToken, Task>? delay = null,
-        Func<string, CancellationToken, ValueTask<bool>>? authenticatedRead = null)
+        Func<string, CancellationToken, ValueTask<bool>>? authenticatedRead = null,
+        ILegacyConnectorDetector? legacyConnector = null)
     {
         _transport = transport ?? throw new ArgumentNullException(nameof(transport));
         _currentProfile = currentProfile ?? throw new ArgumentNullException(nameof(currentProfile));
@@ -79,24 +89,27 @@ public sealed class CommonSmbAccessService : IDisposable
             throw new ArgumentOutOfRangeException(nameof(mappingLivenessInterval));
         _delay = delay ?? ((interval, cancellationToken) => Task.Delay(interval, _time, cancellationToken));
         _authenticatedRead = authenticatedRead ?? ReadDirectoryMetadataAsync;
+        _legacyConnector = legacyConnector;
         _port.NetworkChanged += OnNetworkChanged;
         _mappingMonitor = MonitorMappingsAsync(_monitorLifetime.Token);
     }
 
     public IReadOnlyList<CommonSmbFolder> Folders => Volatile.Read(ref _folders);
-    public long RouteEpoch => Volatile.Read(ref _routeEpoch);
+    public long RouteEpoch { get { lock (_routeSync) return _routeEpoch; } }
     public bool IsAuthorizationAdmissionOpen => Volatile.Read(ref _authorizationAdmission) != 0;
+    /// <summary>Latest neighbour-mode evaluation; safe to log (no accounts, paths or credentials).</summary>
+    public LegacyConnectorSnapshot? LegacyConnectorSnapshot => Volatile.Read(ref _legacyConnectorSnapshot);
     public event Action<CommonSmbRouteInvalidation>? RouteInvalidated;
 
     public void EnableAuthorization(long expectedRouteEpoch)
     {
-        if (expectedRouteEpoch != RouteEpoch)
-            throw Error("smb_route_changed", "The network route changed while access was being established.");
-        Interlocked.Increment(ref _authorizationEpoch);
-        Volatile.Write(ref _authorizationAdmission, 1);
-        if (expectedRouteEpoch == RouteEpoch) return;
-        InvalidateAuthorization();
-        throw Error("smb_route_changed", "The network route changed while access was being established.");
+        lock (_routeSync)
+        {
+            if (expectedRouteEpoch != _routeEpoch)
+                throw Error("smb_route_changed", "The network route changed while access was being established.");
+            Interlocked.Increment(ref _authorizationEpoch);
+            Volatile.Write(ref _authorizationAdmission, 1);
+        }
     }
 
     public void InvalidateAuthorization()
@@ -122,7 +135,7 @@ public sealed class CommonSmbAccessService : IDisposable
         }
         finally
         {
-            _serial.Release();
+            ReleaseSerial();
         }
         cancellationToken.ThrowIfCancellationRequested();
     }
@@ -142,6 +155,31 @@ public sealed class CommonSmbAccessService : IDisposable
     /// </summary>
     public Task CleanupOwnedMappingsAfterDrainAsync(CancellationToken cancellationToken = default) =>
         CleanupMappingsAfterDrainAsync(onlyUnsafeRoutes: false, routeEpoch: null, cancellationToken);
+
+    /// <summary>Lists authorized folders without creating Windows drives.</summary>
+    public async Task<IReadOnlyList<CommonSmbFolder>> RefreshAvailableAsync(
+        CancellationToken cancellationToken = default)
+    {
+        await _serial.WaitAsync(cancellationToken).ConfigureAwait(false);
+        long? admission = null;
+        try
+        {
+            admission = RequireAuthorizationAdmission();
+            EnsureNoPendingCleanup();
+            await RefreshAuthorizationCoreAsync(admission.Value, cancellationToken).ConfigureAwait(false);
+            return Folders;
+        }
+        catch
+        {
+            ClearAuthorization();
+            throw;
+        }
+        finally
+        {
+            if (admission.HasValue && !IsAuthorizationAdmissionCurrent(admission.Value)) ClearAuthorization();
+            ReleaseSerial();
+        }
+    }
 
     public async Task<IReadOnlyList<CommonSmbFolder>> RefreshAndMountAsync(
         CancellationToken cancellationToken = default)
@@ -163,6 +201,8 @@ public sealed class CommonSmbAccessService : IDisposable
                     await EnsureLiveRouteAsync(_ownedMappings[alreadyOwned], cancellationToken).ConfigureAwait(false);
                     continue;
                 }
+                // Neighbour mode: the previous connector owns the legacy share; others still mount.
+                if (IsLegacyNeighbourActive(resource)) continue;
 
                 var drive = await FindFreeDriveAsync(cancellationToken).ConfigureAwait(false);
                 await MountCoreAsync(access, resource, drive, cancellationToken).ConfigureAwait(false);
@@ -179,7 +219,7 @@ public sealed class CommonSmbAccessService : IDisposable
         finally
         {
             if (admission.HasValue && !IsAuthorizationAdmissionCurrent(admission.Value)) ClearAuthorization();
-            _serial.Release();
+            ReleaseSerial();
         }
     }
 
@@ -228,7 +268,7 @@ public sealed class CommonSmbAccessService : IDisposable
         finally
         {
             if (admission.HasValue && !IsAuthorizationAdmissionCurrent(admission.Value)) ClearAuthorization();
-            _serial.Release();
+            ReleaseSerial();
         }
 
         try
@@ -266,15 +306,15 @@ public sealed class CommonSmbAccessService : IDisposable
             await MountCoreAsync(access, resource, NormalizeDrive(drive), cancellationToken).ConfigureAwait(false);
             await PublishFoldersAsync(access, admission.Value, cancellationToken).ConfigureAwait(false);
         }
-        catch
+        catch (Exception exception)
         {
-            ClearAuthorization();
+            ClearAuthorization(keepFolders: IsLegacyNeighbourRefusal(exception));
             throw;
         }
         finally
         {
             if (admission.HasValue && !IsAuthorizationAdmissionCurrent(admission.Value)) ClearAuthorization();
-            _serial.Release();
+            ReleaseSerial();
         }
     }
 
@@ -290,8 +330,18 @@ public sealed class CommonSmbAccessService : IDisposable
             EnsureNoPendingCleanup();
             var access = await RefreshAuthorizationCoreAsync(admission.Value, cancellationToken).ConfigureAwait(false);
             var resource = FindResource(access, resourceId);
-            var drive = FindOwnedDrive(resource.ShareUnc) ??
-                throw Error("smb_mapping_not_owned", "The folder is not mounted by this connector process.");
+            var drive = FindOwnedDrive(resource.ShareUnc);
+            if (drive is null)
+            {
+                EnsureNoLegacyNeighbour(resource);
+                // Do not create another drive for an earlier-process or foreign
+                // mapping. UNC equality cannot prove its credentials or ownership.
+                for (var letter = 'D'; letter <= 'Z'; letter++)
+                    if (SameTarget(await _port.GetTargetAsync($"{letter}:", cancellationToken).ConfigureAwait(false), resource.ShareUnc))
+                        throw Error("smb_mapping_not_owned", "This folder already has a mapping outside this connector process.");
+                drive = await FindFreeDriveAsync(cancellationToken).ConfigureAwait(false);
+                await MountCoreAsync(access, resource, drive, cancellationToken).ConfigureAwait(false);
+            }
             if (!_ownedMappings.TryGetValue(drive, out var owned) ||
                 !SameTarget(await _port.GetTargetAsync(drive, cancellationToken).ConfigureAwait(false), resource.ShareUnc))
                 throw Error("smb_mapping_changed", "The mounted folder no longer matches the authorized target.");
@@ -300,15 +350,15 @@ public sealed class CommonSmbAccessService : IDisposable
             await PublishFoldersAsync(access, admission.Value, cancellationToken).ConfigureAwait(false);
             return drive + Path.DirectorySeparatorChar;
         }
-        catch
+        catch (Exception exception)
         {
-            ClearAuthorization();
+            ClearAuthorization(keepFolders: IsLegacyNeighbourRefusal(exception));
             throw;
         }
         finally
         {
             if (admission.HasValue && !IsAuthorizationAdmissionCurrent(admission.Value)) ClearAuthorization();
-            _serial.Release();
+            ReleaseSerial();
         }
     }
 
@@ -350,9 +400,55 @@ public sealed class CommonSmbAccessService : IDisposable
         }
         finally
         {
-            _serial.Release();
+            ReleaseSerial();
         }
     }
+
+    /// <summary>
+    /// K5 rollback: removes only this process's exact drive mappings of the legacy share (WNet
+    /// force=false), so the previous connector can connect again under its own account. Overlay
+    /// shares, earlier-process and foreign mappings are never touched. Open files keep the mapping
+    /// owned and are reported as <c>smb_mapping_busy</c>. Needs no authorization.
+    /// </summary>
+    public async Task<int> ReleaseOwnedLegacyShareAsync(CancellationToken cancellationToken = default)
+    {
+        await _serial.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var released = 0;
+            var mappings = _ownedMappings.Concat(_pendingMappings)
+                .Where(item => IsLegacyShare(item.Value.ShareUnc))
+                .GroupBy(item => item.Key, StringComparer.OrdinalIgnoreCase)
+                .Select(group => group.First())
+                .ToArray();
+            foreach (var (drive, mapping) in mappings)
+            {
+                SmbExactMappingRemoval removal;
+                try
+                {
+                    removal = await _port.TryUnmountExactAsync(drive, mapping.ShareUnc, CancellationToken.None)
+                        .ConfigureAwait(false);
+                }
+                catch (System.ComponentModel.Win32Exception exception) when (exception.NativeErrorCode is 2401 or 2404)
+                {
+                    throw Error("smb_mapping_busy", "Files are open on the mapped legacy share.", exception);
+                }
+                // Missing or re-targeted letters are no longer this connector's mapping either.
+                ForgetMapping(drive);
+                if (removal == SmbExactMappingRemoval.Removed) released++;
+            }
+            if (released > 0 && _authorization is { } access && TryGetAuthorizationAdmission(out var admission))
+                await PublishFoldersAsync(access, admission, CancellationToken.None).ConfigureAwait(false);
+            return released;
+        }
+        finally
+        {
+            ReleaseSerial();
+        }
+    }
+
+    private static bool IsLegacyShare(string shareUnc) =>
+        string.Equals(shareUnc.TrimEnd('\\'), LegacyEncryptedSmbPolicy.ShareUnc, StringComparison.OrdinalIgnoreCase);
 
     private async Task<ValidatedAccess> RefreshAuthorizationCoreAsync(long admission, CancellationToken cancellationToken)
     {
@@ -361,21 +457,43 @@ public sealed class CommonSmbAccessService : IDisposable
             throw Error("smb_profile_missing", "An applied device access profile is required.");
         var now = _time.GetUtcNow();
         ValidateProfile(profile, now);
-        var overlay = await GetLiveReadyOverlayAsync(cancellationToken).ConfigureAwait(false);
+        NetworkOverlaySnapshot overlay;
+        HttpResponseMessage response;
+        if (_transport is IOverlayAwareConnectorRequestTransport liveTransport)
+        {
+            // The real SMB request already obtains a fresh, bound local route.
+            // Do not open a second health route solely to obtain the same evidence.
+            var result = await liveTransport.SendWithOverlayAsync(
+                HttpMethod.Get, "smb/access", body: null, EmptyHeaders, cancellationToken).ConfigureAwait(false);
+            response = result.Response;
+            try { overlay = NormalizeReadyOverlay(result.Overlay); }
+            catch
+            {
+                response.Dispose();
+                SignalRouteInvalidation();
+                throw;
+            }
+        }
+        else
+        {
+            overlay = await GetLiveReadyOverlayAsync(cancellationToken).ConfigureAwait(false);
+            response = await _transport.SendAsync(
+                HttpMethod.Get, "smb/access", body: null, EmptyHeaders, cancellationToken).ConfigureAwait(false);
+        }
+        using (response)
+        {
+            if (response.StatusCode != HttpStatusCode.OK)
+                throw Error(response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden
+                    ? "smb_access_denied"
+                    : "smb_access_unavailable", "The SMB access service did not issue access.");
 
-        using var response = await _transport.SendAsync(
-            HttpMethod.Get, "smb/access", body: null, EmptyHeaders, cancellationToken).ConfigureAwait(false);
-        if (response.StatusCode != HttpStatusCode.OK)
-            throw Error(response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden
-                ? "smb_access_denied"
-                : "smb_access_unavailable", "The SMB access service did not issue access.");
-
-        var receipt = await ReadBoundedAsync<ConnectorSmbAccess>(response, cancellationToken).ConfigureAwait(false) ??
-            throw Error("smb_receipt_invalid", "The SMB access response is empty.");
-        var validated = ValidateReceipt(receipt, profile, overlay, now);
-        _authorization = validated;
-        await PublishFoldersAsync(validated, admission, cancellationToken).ConfigureAwait(false);
-        return validated;
+            var receipt = await ReadBoundedAsync<ConnectorSmbAccess>(response, cancellationToken).ConfigureAwait(false) ??
+                throw Error("smb_receipt_invalid", "The SMB access response is empty.");
+            var validated = ValidateReceipt(receipt, profile, overlay, _time.GetUtcNow());
+            _authorization = validated;
+            await PublishFoldersAsync(validated, admission, cancellationToken).ConfigureAwait(false);
+            return validated;
+        }
     }
 
     private ValidatedAccess ValidateReceipt(
@@ -433,7 +551,8 @@ public sealed class CommonSmbAccessService : IDisposable
             }
             if (!allowed || !seenTargets.Add(normalizedUnc))
                 throw Error("smb_destination_denied", "The SMB destination is not an approved unique endpoint.");
-            resources.Add(new ValidatedResource(item.ResourceId, shareName, normalizedUnc, destination));
+            resources.Add(new ValidatedResource(item.ResourceId, shareName, normalizedUnc, destination,
+                item.Permissions.Any(permission => permission is ConnectorPermission.Publish or ConnectorPermission.Manage)));
         }
 
         return new ValidatedAccess(receipt.DeviceId, receipt.Revision, receipt.ExpiresAtUtc,
@@ -453,17 +572,7 @@ public sealed class CommonSmbAccessService : IDisposable
         try
         {
             var overlay = await _port.GetLiveOverlayAsync(cancellationToken).ConfigureAwait(false);
-            if (overlay.Status != NetworkServiceStatus.Ready || !overlay.StartupCheckPassed ||
-                !overlay.ManagementConnected || !overlay.SignalConnected ||
-                overlay.ManagementUri is null || overlay.AssignedInternalAddresses is null)
-                throw Error("smb_overlay_not_ready", "The managed overlay is not ready.");
-            var addresses = overlay.AssignedInternalAddresses
-                .Where(IsPrivateOverlayIpv4)
-                .Distinct()
-                .ToArray();
-            if (addresses.Length == 0)
-                throw Error("smb_overlay_not_ready", "The managed overlay has no private IPv4 address.");
-            return overlay with { AssignedInternalAddresses = Array.AsReadOnly(addresses) };
+            return NormalizeReadyOverlay(overlay);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
         catch (CommonSmbAccessException)
@@ -478,6 +587,18 @@ public sealed class CommonSmbAccessService : IDisposable
         }
     }
 
+    private static NetworkOverlaySnapshot NormalizeReadyOverlay(NetworkOverlaySnapshot overlay)
+    {
+        if (overlay.Status != NetworkServiceStatus.Ready || !overlay.StartupCheckPassed ||
+            !overlay.ManagementConnected || !overlay.SignalConnected ||
+            overlay.ManagementUri is null || overlay.AssignedInternalAddresses is null)
+            throw Error("smb_overlay_not_ready", "The managed overlay is not ready.");
+        var addresses = overlay.AssignedInternalAddresses.Where(IsPrivateOverlayIpv4).Distinct().ToArray();
+        if (addresses.Length == 0)
+            throw Error("smb_overlay_not_ready", "The managed overlay has no private IPv4 address.");
+        return overlay with { AssignedInternalAddresses = Array.AsReadOnly(addresses) };
+    }
+
     private async Task MountCoreAsync(
         ValidatedAccess access,
         ValidatedResource resource,
@@ -485,6 +606,8 @@ public sealed class CommonSmbAccessService : IDisposable
         CancellationToken cancellationToken)
     {
         EnsureAuthorizationCurrent(access);
+        // Re-evaluated on every native mount: the previous connector can start or stop at any time.
+        if (FindOwnedDrive(resource.ShareUnc) is null) EnsureNoLegacyNeighbour(resource);
         if (_pendingMappings.ContainsKey(drive) || _pendingMappings.Values.Any(mapping => SameTarget(mapping.ShareUnc, resource.ShareUnc)))
             throw Error("smb_cleanup_pending", "A previous SMB mapping cleanup is still unconfirmed.");
         var existingOwnedDrive = FindOwnedDrive(resource.ShareUnc);
@@ -520,6 +643,11 @@ public sealed class CommonSmbAccessService : IDisposable
             SignalRouteInvalidation();
             throw Error("smb_route_unavailable", "The live SMB route is outside the managed overlay.", exception);
         }
+        catch (SmbCredentialConflictException exception)
+        {
+            throw Error("smb_credential_conflict",
+                "The SMB server is already connected under another account in this Windows session.", exception);
+        }
         catch (SmbMappingCleanupException)
         {
             _pendingMappings[drive] = mapping;
@@ -544,8 +672,14 @@ public sealed class CommonSmbAccessService : IDisposable
         bool allowed;
         try
         {
-            allowed = await _port.IsRouteAllowedAsync(mapping.Destination,
+            allowed = await _port.IsShareRouteAllowedAsync(mapping.ShareUnc, mapping.Destination,
                 mapping.AuthorizedOverlayAddresses, cancellationToken).ConfigureAwait(false);
+            if (allowed)
+            {
+                foreach (var owned in _ownedMappings.Where(pair => ReferenceEquals(pair.Value, mapping)))
+                    allowed &= await _port.IsMappingSecurityAllowedAsync(owned.Key, mapping.ShareUnc, cancellationToken)
+                        .ConfigureAwait(false);
+            }
         }
         catch (OperationCanceledException) { throw; }
         catch (Exception exception)
@@ -622,7 +756,7 @@ public sealed class CommonSmbAccessService : IDisposable
         }
         finally
         {
-            _serial.Release();
+            ReleaseSerial();
         }
 
         cancellationToken.ThrowIfCancellationRequested();
@@ -667,7 +801,7 @@ public sealed class CommonSmbAccessService : IDisposable
                         if (IsAuthorizationAdmissionOpen) SignalRouteInvalidation();
                     }
                 }
-                finally { _serial.Release(); }
+                finally { ReleaseSerial(); }
             }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { }
@@ -676,8 +810,14 @@ public sealed class CommonSmbAccessService : IDisposable
     private void SignalRouteInvalidation()
     {
         if (Volatile.Read(ref _disposed) != 0) return;
-        var routeEpoch = Interlocked.Increment(ref _routeEpoch);
-        InvalidateAuthorization();
+        long routeEpoch;
+        lock (_routeSync)
+        {
+            // Publish the epoch together with closed admission. A connection
+            // must not capture the new epoch before this invalidation finishes.
+            routeEpoch = checked(++_routeEpoch);
+            InvalidateAuthorization();
+        }
         var handlers = RouteInvalidated;
         if (handlers is null) return;
         var invalidation = new CommonSmbRouteInvalidation(routeEpoch);
@@ -698,7 +838,9 @@ public sealed class CommonSmbAccessService : IDisposable
             if (drive is not null &&
                 !SameTarget(await _port.GetTargetAsync(drive, cancellationToken).ConfigureAwait(false), resource.ShareUnc))
                 drive = null;
-            folders.Add(new CommonSmbFolder(resource.ResourceId, resource.ShareName, drive));
+            folders.Add(new CommonSmbFolder(resource.ResourceId, resource.ShareName, drive,
+                drive is null && IsLegacyNeighbourActive(resource), IsLegacyShare(resource.ShareUnc),
+                resource.ShareUnc, resource.CanWrite));
         }
         if (IsAuthorizationAdmissionCurrent(admission))
             Volatile.Write(ref _folders, Array.AsReadOnly(folders.ToArray()));
@@ -743,11 +885,13 @@ public sealed class CommonSmbAccessService : IDisposable
             throw Error("smb_unc_invalid", "The SMB target must be a fixed UNC share root.");
         var parts = value[2..].Split('\\');
         if (parts.Length != 2 || !IPAddress.TryParse(parts[0], out var address) ||
-            address.AddressFamily != AddressFamily.InterNetwork || !IsPrivateOverlayIpv4(address) ||
+            address.AddressFamily != AddressFamily.InterNetwork || IPAddress.IsLoopback(address) ||
+            address.GetAddressBytes()[0] is 0 or >= 224 ||
+            address.GetAddressBytes()[0] == 169 && address.GetAddressBytes()[1] == 254 ||
             string.IsNullOrWhiteSpace(parts[1]) || parts[1].Length > 80 ||
             parts[1] is "." or ".." || parts[1].Any(char.IsControl) ||
             parts[1].IndexOfAny(['/', ':', '$']) >= 0 || ReservedShareNames.Contains(parts[1]))
-            throw Error("smb_unc_invalid", "The SMB target must use a literal private IPv4 address and one safe share name.");
+            throw Error("smb_unc_invalid", "The SMB target must use a literal unicast IPv4 address and one safe share name.");
         return (address, parts[1], $@"\\{address}\{parts[1]}");
     }
 
@@ -772,11 +916,50 @@ public sealed class CommonSmbAccessService : IDisposable
             throw Error("smb_cleanup_pending", "A previous SMB mapping cleanup is still unconfirmed.");
     }
 
-    private void ClearAuthorization()
+    private void ClearAuthorization(bool keepFolders = false)
     {
         _authorization = null;
-        Volatile.Write(ref _folders, Array.Empty<CommonSmbFolder>());
+        if (!keepFolders) Volatile.Write(ref _folders, Array.Empty<CommonSmbFolder>());
     }
+
+    /// <summary>
+    /// Neighbour mode (owner decision 25.10): while the previous Structura Connector is alive on
+    /// this PC it alone talks to the legacy server. Both use the same server name with different
+    /// accounts, so a second session would fail with 1219 and make the old client drop all of its
+    /// sessions to the host. Only the exact legacy share is affected; overlay shares are not.
+    /// </summary>
+    private bool IsLegacyNeighbourActive(ValidatedResource resource)
+    {
+        if (_legacyConnector is null ||
+            !string.Equals(resource.ShareUnc, LegacyEncryptedSmbPolicy.ShareUnc, StringComparison.OrdinalIgnoreCase))
+            return false;
+        // Evaluated once per serialized operation (cleared in ReleaseSerial), fresh on each action.
+        var snapshot = _operationLegacySnapshot;
+        if (snapshot is null)
+        {
+            try { snapshot = _legacyConnector.Detect(); }
+            catch (Exception exception) { snapshot = LegacyConnectorSnapshot.Failed(exception); }
+            _operationLegacySnapshot = snapshot;
+            Volatile.Write(ref _legacyConnectorSnapshot, snapshot);
+        }
+        return snapshot.NeighbourModeActive;
+    }
+
+    private void ReleaseSerial()
+    {
+        _operationLegacySnapshot = null;
+        _serial.Release();
+    }
+
+    private void EnsureNoLegacyNeighbour(ValidatedResource resource)
+    {
+        if (IsLegacyNeighbourActive(resource))
+            throw Error("smb_legacy_client_active",
+                "The legacy share is served by the previous connector on this computer.");
+    }
+
+    private static bool IsLegacyNeighbourRefusal(Exception exception) =>
+        exception is CommonSmbAccessException { Code: "smb_legacy_client_active" };
 
     private long RequireAuthorizationAdmission()
     {
@@ -845,7 +1028,8 @@ public sealed class CommonSmbAccessService : IDisposable
         string ResourceId,
         string ShareName,
         string ShareUnc,
-        IPAddress Destination);
+        IPAddress Destination,
+        bool CanWrite = false);
 
     private sealed record OwnedMapping(
         string ResourceId,

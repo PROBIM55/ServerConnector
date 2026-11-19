@@ -458,6 +458,7 @@ internal sealed class AccessFixture : IAsyncDisposable
     }
 
     public FakeTimeProvider Clock { get; }
+    public IServiceProvider Services => _services;
     public TestPlatformDirectory Directory { get; }
     public DeviceEnrollmentService Enrollment { get; }
     public DeviceCertificateAuthenticator Authenticator { get; }
@@ -470,7 +471,8 @@ internal sealed class AccessFixture : IAsyncDisposable
 
     public static async ValueTask<AccessFixture> CreateAsync(
         IEnumerable<IDeviceAccessGrantProvider>? providers = null,
-        Action<DeviceAccessOptions>? configure = null)
+        Action<DeviceAccessOptions>? configure = null,
+        Action<IServiceCollection>? configureServices = null)
     {
         var databasePath = Path.Combine(Path.GetTempPath(), $"connector-access-{Guid.NewGuid():N}.db");
         var connectionString = new SqliteConnectionStringBuilder
@@ -516,6 +518,8 @@ internal sealed class AccessFixture : IAsyncDisposable
         {
             collection.AddConnectorAccessCore(configure);
         }
+
+        configureServices?.Invoke(collection);
 
         var services = collection.BuildServiceProvider(validateScopes: false);
         return new AccessFixture(services, databasePath, issuer, clock, directory);
@@ -587,6 +591,21 @@ internal sealed class AccessFixture : IAsyncDisposable
         await using var reader = await command.ExecuteReaderAsync();
         Assert.True(await reader.ReadAsync());
         return (reader.GetInt64(0), reader.GetInt64(1));
+    }
+
+    public async ValueTask<int> ExecuteSqlAsync(string sql, params (string Name, object Value)[] parameters)
+    {
+        await using var connection = new SqliteConnection(new SqliteConnectionStringBuilder
+        {
+            DataSource = _databasePath,
+            Mode = SqliteOpenMode.ReadWrite,
+            Pooling = false,
+        }.ToString());
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = sql;
+        foreach (var (name, value) in parameters) command.Parameters.AddWithValue(name, value);
+        return await command.ExecuteNonQueryAsync();
     }
 
     public async ValueTask<(string Status, string? Error, long AttemptCount)> ReadOutboxAsync(string commandId)

@@ -3,6 +3,7 @@ using System.IO;
 using System.IO.Compression;
 using System.Net.Http;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace Connector.Desktop.Services;
 
@@ -11,6 +12,14 @@ public sealed class TeklaStandardService
     private const int FileCopyBufferBytes = 1024 * 1024;
     private const int FileCopyMaxAttempts = 3;
     private const string GitBundleFileName = "git-bundle.zip";
+    // Sync is anonymous: the fixed public manifests and one public git repository only.
+    public const string FirmManifestUrl = "https://server.structura-most.ru/updates/tekla/firm/latest.json";
+    public const string ExtensionsManifestUrl = "https://server.structura-most.ru/updates/tekla/extensions/latest.json";
+    public const string LibrariesManifestUrl = "https://server.structura-most.ru/updates/tekla/libraries/latest.json";
+    private const string ManifestHost = "server.structura-most.ru";
+    private const string PinnedRepoUrl = "https://github.com/PROBIM55/tekla-firm-standard.git";
+    private static readonly string[] AllowedManifestUrls = { FirmManifestUrl, ExtensionsManifestUrl, LibrariesManifestUrl };
+    private static readonly Regex RepoRefPattern = new("^[A-Za-z0-9._/-]{1,100}$", RegexOptions.CultureInvariant);
     private static readonly object GitBootstrapGate = new();
     private readonly HttpClient _http;
     private readonly string _bundledGitRoot;
@@ -66,7 +75,7 @@ public sealed class TeklaStandardService
         }
 
         var probeWorkDir = Path.GetTempPath();
-        var ok = TryRunGit(gitPath, "--version", probeWorkDir, out var stdout, out var stderr);
+        var ok = TryRunGit(gitPath, new[] { "--version" }, probeWorkDir, out var stdout, out var stderr);
         if (ok)
         {
             details = string.IsNullOrWhiteSpace(stdout) ? "git доступен" : stdout.Trim();
@@ -106,14 +115,14 @@ public sealed class TeklaStandardService
 
     public async Task<TeklaStandardManifest?> TryGetManifestAsync(string manifestUrl, CancellationToken ct)
     {
-        if (!Uri.TryCreate(manifestUrl, UriKind.Absolute, out _))
+        if (!IsAllowedManifestUrl(manifestUrl))
         {
             return null;
         }
 
         using var req = new HttpRequestMessage(HttpMethod.Get, manifestUrl);
         using var res = await _http.SendAsync(req, ct);
-        if (!res.IsSuccessStatusCode)
+        if (!res.IsSuccessStatusCode || !IsManifestHostUri(res.RequestMessage?.RequestUri))
         {
             return null;
         }
@@ -148,6 +157,59 @@ public sealed class TeklaStandardService
             RepoSubdir = GetString(root, "repo_subdir") ?? string.Empty,
             TargetPath = GetString(root, "target_path") ?? string.Empty
         };
+    }
+
+    public static bool IsAllowedManifestUrl(string? url) =>
+        TryParsePlainHttpsUrl(url, out var uri) &&
+        AllowedManifestUrls.Contains(uri.AbsoluteUri, StringComparer.OrdinalIgnoreCase);
+
+    public static bool IsAllowedRepoUrl(string? url) => NormalizeAllowedRepoUrl(url) is not null;
+
+    // Returns the normalized pinned repository URL that is handed to git, or null.
+    public static string? NormalizeAllowedRepoUrl(string? url) =>
+        TryParsePlainHttpsUrl(url, out var uri) &&
+        string.Equals(uri.AbsoluteUri, PinnedRepoUrl, StringComparison.OrdinalIgnoreCase)
+            ? uri.AbsoluteUri
+            : null;
+
+    public static bool IsAllowedRepoRef(string? value) =>
+        value is not null &&
+        RepoRefPattern.IsMatch(value) &&
+        value[0] is not '-' and not '/' &&
+        !value.Contains("..", StringComparison.Ordinal);
+
+    // Empty means the repository root. Otherwise a relative path without "..", ".git" or drive/stream syntax.
+    public static bool IsSafeRepoSubdir(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return true;
+        }
+
+        var invalid = Path.GetInvalidFileNameChars().Where(ch => ch is not '/' and not '\\').ToArray();
+        return !Path.IsPathRooted(value) &&
+               value.IndexOfAny(invalid) < 0 &&
+               value.Split('/', '\\').All(segment =>
+                   segment != ".." && !string.Equals(segment, ".git", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static bool IsManifestHostUri(Uri? uri) =>
+        uri is not null &&
+        TryParsePlainHttpsUrl(uri.OriginalString, out var parsed) &&
+        string.Equals(parsed.Host, ManifestHost, StringComparison.OrdinalIgnoreCase);
+
+    // HTTPS on the default port, ASCII only (no IDN/full-width hosts), no credentials, query or fragment.
+    private static bool TryParsePlainHttpsUrl(string? url, out Uri uri)
+    {
+        uri = null!;
+        return !string.IsNullOrEmpty(url) &&
+               url.All(ch => ch > ' ' && ch < '\u007f') &&
+               Uri.TryCreate(url, UriKind.Absolute, out uri!) &&
+               uri.Scheme == Uri.UriSchemeHttps &&
+               uri.IsDefaultPort &&
+               string.IsNullOrEmpty(uri.UserInfo) &&
+               string.IsNullOrEmpty(uri.Query) &&
+               string.IsNullOrEmpty(uri.Fragment);
     }
 
     public bool IsUpdateAvailable(string installedRevision, string targetRevision)
@@ -185,9 +247,25 @@ public sealed class TeklaStandardService
             return TeklaApplyResult.Fail("В manifest отсутствует repo_url для обновления через git.");
         }
 
+        var repoUrl = NormalizeAllowedRepoUrl(request.RepoUrl);
+        if (repoUrl is null)
+        {
+            return TeklaApplyResult.Fail("Адрес репозитория в manifest не разрешён: ожидается " + PinnedRepoUrl + ".");
+        }
+
         if (string.IsNullOrWhiteSpace(request.RepoRef))
         {
             return TeklaApplyResult.Fail("В manifest отсутствует repo_ref для обновления через git.");
+        }
+
+        if (!IsAllowedRepoRef(request.RepoRef))
+        {
+            return TeklaApplyResult.Fail("Значение repo_ref в manifest не разрешено.");
+        }
+
+        if (!IsSafeRepoSubdir(request.RepoSubdir))
+        {
+            return TeklaApplyResult.Fail("Значение repo_subdir в manifest не разрешено.");
         }
 
         if (!CheckGitAvailability(out var gitExe, out var gitDetails))
@@ -197,7 +275,7 @@ public sealed class TeklaStandardService
                 gitDetails);
         }
 
-        if (!TryRunGit(gitExe, "--version", Path.GetTempPath(), out var versionOut, out var versionErr))
+        if (!TryRunGit(gitExe, new[] { "--version" }, Path.GetTempPath(), out var versionOut, out var versionErr))
         {
             var reason = string.IsNullOrWhiteSpace(versionErr) ? versionOut : versionErr;
             return TeklaApplyResult.Fail("Git недоступен: " + reason);
@@ -225,7 +303,7 @@ public sealed class TeklaStandardService
         string worktreePath;
         try
         {
-            worktreePath = EnsureManagedWorktree(gitExe, request);
+            worktreePath = EnsureManagedWorktree(gitExe, request, repoUrl);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -280,7 +358,7 @@ public sealed class TeklaStandardService
         File.AppendAllText(LogFilePath, line);
     }
 
-    private string EnsureManagedWorktree(string gitExe, TeklaManagedSyncRequest request)
+    private string EnsureManagedWorktree(string gitExe, TeklaManagedSyncRequest request, string repoUrl)
     {
         var normalizedKey = NormalizeTargetKey(request.TargetKey);
         var worktreePath = Path.Combine(_managedSyncRoot, normalizedKey);
@@ -299,7 +377,7 @@ public sealed class TeklaStandardService
             worktreeExists = false;
         }
 
-        if (worktreeExists && !RepositoryOriginMatches(gitExe, worktreePath, request.RepoUrl))
+        if (worktreeExists && !RepositoryOriginMatches(gitExe, worktreePath, repoUrl))
         {
             DeleteDirectorySafely(worktreePath);
             worktreeExists = false;
@@ -314,7 +392,7 @@ public sealed class TeklaStandardService
             }
 
             Directory.CreateDirectory(parent);
-            if (!TryRunGit(gitExe, $"clone {QuoteArgument(request.RepoUrl)} {QuoteArgument(worktreePath)}", parent, out var cloneOut, out var cloneErr))
+            if (!TryRunGit(gitExe, new[] { "clone", "--end-of-options", repoUrl, worktreePath }, parent, out var cloneOut, out var cloneErr))
             {
                 if (Directory.Exists(worktreePath))
                 {
@@ -325,19 +403,19 @@ public sealed class TeklaStandardService
             }
         }
 
-        if (!TryRunGit(gitExe, $"fetch origin {QuoteArgument(request.RepoRef)} --depth 1", worktreePath, out var fetchOut, out var fetchErr))
+        if (!TryRunGit(gitExe, new[] { "fetch", "--depth", "1", "--end-of-options", "origin", request.RepoRef }, worktreePath, out var fetchOut, out var fetchErr))
         {
             var reason = string.IsNullOrWhiteSpace(fetchErr) ? fetchOut : fetchErr;
             throw new InvalidOperationException("Не удалось получить обновление: " + reason);
         }
 
-        if (!TryRunGit(gitExe, "checkout -f FETCH_HEAD", worktreePath, out var checkoutOut, out var checkoutErr))
+        if (!TryRunGit(gitExe, new[] { "checkout", "-f", "FETCH_HEAD" }, worktreePath, out var checkoutOut, out var checkoutErr))
         {
             var reason = string.IsNullOrWhiteSpace(checkoutErr) ? checkoutOut : checkoutErr;
             throw new InvalidOperationException("Не удалось применить checkout: " + reason);
         }
 
-        if (!TryRunGit(gitExe, "clean -fd", worktreePath, out var cleanOut, out var cleanErr))
+        if (!TryRunGit(gitExe, new[] { "clean", "-fd" }, worktreePath, out var cleanOut, out var cleanErr))
         {
             var reason = string.IsNullOrWhiteSpace(cleanErr) ? cleanOut : cleanErr;
             throw new InvalidOperationException("Не удалось очистить staging-репозиторий: " + reason);
@@ -346,11 +424,20 @@ public sealed class TeklaStandardService
         return worktreePath;
     }
 
-    private static string ResolveManagedSourcePath(string worktreePath, string repoSubdir)
+    internal static string ResolveManagedSourcePath(string worktreePath, string repoSubdir)
     {
+        // Strict mode deletes target files missing from the source, so the source
+        // must be the clone itself or a directory strictly inside it.
+        var root = Path.GetFullPath(worktreePath).TrimEnd(Path.DirectorySeparatorChar);
         var sourcePath = string.IsNullOrWhiteSpace(repoSubdir)
-            ? worktreePath
-            : Path.Combine(worktreePath, repoSubdir.Replace('/', Path.DirectorySeparatorChar));
+            ? root
+            : Path.GetFullPath(Path.Combine(root, repoSubdir.Replace('/', Path.DirectorySeparatorChar)));
+        if (!IsSafeRepoSubdir(repoSubdir) ||
+            !(string.Equals(sourcePath, root, StringComparison.OrdinalIgnoreCase) ||
+              sourcePath.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)))
+        {
+            throw new InvalidOperationException("Подпуть repo_subdir выходит за пределы репозитория.");
+        }
 
         if (!Directory.Exists(sourcePath))
         {
@@ -738,7 +825,7 @@ public sealed class TeklaStandardService
 
     private static bool RepositoryOriginMatches(string gitExe, string worktreePath, string repoUrl)
     {
-        if (!TryRunGit(gitExe, "remote get-url origin", worktreePath, out var stdout, out _))
+        if (!TryRunGit(gitExe, new[] { "remote", "get-url", "origin" }, worktreePath, out var stdout, out _))
         {
             return false;
         }
@@ -751,7 +838,7 @@ public sealed class TeklaStandardService
 
     private static bool RepositoryLooksHealthy(string gitExe, string worktreePath)
     {
-        if (!TryRunGit(gitExe, "rev-parse --is-inside-work-tree", worktreePath, out var stdout, out _))
+        if (!TryRunGit(gitExe, new[] { "rev-parse", "--is-inside-work-tree" }, worktreePath, out var stdout, out _))
         {
             return false;
         }
@@ -770,11 +857,6 @@ public sealed class TeklaStandardService
             .Where(ch => char.IsLetterOrDigit(ch) || ch == '-' || ch == '_')
             .ToArray();
         return chars.Length == 0 ? "firm" : new string(chars);
-    }
-
-    private static string QuoteArgument(string value)
-    {
-        return "\"" + (value ?? string.Empty).Replace("\"", "\\\"") + "\"";
     }
 
     private static string? GetString(JsonElement root, string propertyName)
@@ -800,23 +882,37 @@ public sealed class TeklaStandardService
         return null;
     }
 
-    private static bool TryRunGit(string gitExe, string arguments, string workDir, out string stdout, out string stderr)
+    // The sync is anonymous: never consult stored credentials (bundled GCM) and never prompt.
+    // System config stays enabled: it carries core.autocrlf and the LFS filter for checkouts.
+    internal static ProcessStartInfo CreateGitStartInfo(string gitExe, IEnumerable<string> arguments, string workDir)
+    {
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = gitExe,
+            WorkingDirectory = workDir,
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            CreateNoWindow = true
+        };
+        foreach (var argument in new[] { "-c", "credential.helper=", "-c", "credential.interactive=never" }.Concat(arguments))
+        {
+            startInfo.ArgumentList.Add(argument);
+        }
+
+        startInfo.Environment["GIT_TERMINAL_PROMPT"] = "0";
+        startInfo.Environment["GCM_INTERACTIVE"] = "never";
+        return startInfo;
+    }
+
+    private static bool TryRunGit(string gitExe, IEnumerable<string> arguments, string workDir, out string stdout, out string stderr)
     {
         stdout = string.Empty;
         stderr = string.Empty;
 
         try
         {
-            var startInfo = new ProcessStartInfo
-            {
-                FileName = gitExe,
-                Arguments = arguments,
-                WorkingDirectory = workDir,
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                CreateNoWindow = true
-            };
+            var startInfo = CreateGitStartInfo(gitExe, arguments, workDir);
 
             using var process = Process.Start(startInfo);
             if (process is null)

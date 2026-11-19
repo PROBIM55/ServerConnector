@@ -127,8 +127,6 @@
                 <Separator Margin="0,8,0,10" Background="#2A3E5C" />
 
                 <TextBlock Text="Обновления" FontSize="17" FontWeight="SemiBold" />
-                <Label Content="URL manifest" Visibility="Collapsed" />
-                <TextBox x:Name="UpdateManifestUrlTextBox" Margin="0,0,0,8" Visibility="Collapsed" />
                 <TextBlock x:Name="UpdateStateTextBlock" Text="Обновление: не проверялось" Foreground="#A9BBD3" Margin="0,0,0,12" TextWrapping="Wrap" />
                 <TextBlock x:Name="ConnectorTeklaSyncStatusTextBlock"
                            Text="Tekla Sync: проверка еще не выполнялась"

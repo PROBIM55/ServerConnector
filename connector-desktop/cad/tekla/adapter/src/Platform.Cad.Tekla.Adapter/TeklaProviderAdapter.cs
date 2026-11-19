@@ -8,14 +8,21 @@
 //                 | "/component/read" | "/health" | "/capabilities" | "/pick/...",
 //     "body":     <raw JSON object — шлётся as-is в Bridge.Desktop>,
 //     "interactive": true|false,        // optional, default false; ↑ timeout cascade
-//     "bridgeBaseUrl": "http://...",    // optional override (default 127.0.0.1:39421)
-//     "tokenPath": "...",               // optional override (default DPAPI store)
+//     "bridgeBaseUrl": "http://127.0.0.1:39420", // optional: только известный профиль Bridge.Desktop
+//                                               // (39421 default, 39420 Tekla 2020); localhost → 127.0.0.1
 //     "operationTimeoutSeconds": 120,   // optional override
 //     "interactiveTimeoutSeconds": 210
 //   }
 //
 // Старый file-based / probe-exe / commandText / pendingInsertPayload удалён
 // полностью — никаких fallback'ов на legacy (deliberate per plan §9.1).
+//
+// Аудит ИБ А2: bridgeBaseUrl вне http://127.0.0.1|localhost:{39421|39420}
+// отклоняется (TEKLA_BRIDGE_URL_REJECTED) — токен не уходит на чужой адрес/порт;
+// endpoint — только маршруты Bridge.Desktop, которые реально вызывает Платформа
+// (TEKLA_BRIDGE_ENDPOINT_REJECTED); tokenPath из payload не принимается
+// (TEKLA_TOKEN_PATH_REJECTED) — токен читается только из локального DPAPI-хранилища.
+// HttpClient по умолчанию без прокси: адрес Bridge всегда loopback.
 
 using System.Net;
 using System.Net.Http;
@@ -33,6 +40,12 @@ public sealed class TeklaProviderAdapter : IProviderAdapter
 {
     public const string DefaultBridgeBaseUrl = "http://127.0.0.1:39421";
 
+    /// <summary>Порт Bridge.Desktop по умолчанию (scheduled task PlatformBridgeDesktop).</summary>
+    public const int DefaultBridgePort = 39421;
+
+    /// <summary>Порт именованного профиля Bridge.Desktop для Tekla 2020 (PlatformBridgeDesktop2020).</summary>
+    public const int Tekla2020BridgePort = 39420;
+
     /// <summary>Plan §9.2.1 — regular ops. Connector slot = 120s (Bridge=90, Server=150, Web=180).</summary>
     public const int DefaultOperationTimeoutSeconds = 120;
 
@@ -46,12 +59,50 @@ public sealed class TeklaProviderAdapter : IProviderAdapter
 
     private const string StaleErrorCode = "BRIDGE_STALE_TEKLA";
 
+    /// <summary>payload.bridgeBaseUrl не loopback http с явным портом.</summary>
+    public const string BridgeUrlRejectedErrorCode = "TEKLA_BRIDGE_URL_REJECTED";
+
+    /// <summary>payload.tokenPath больше не поддерживается.</summary>
+    public const string TokenPathRejectedErrorCode = "TEKLA_TOKEN_PATH_REJECTED";
+
+    /// <summary>payload.endpoint не входит в allowlist маршрутов Bridge.Desktop.</summary>
+    public const string BridgeEndpointRejectedErrorCode = "TEKLA_BRIDGE_ENDPOINT_REJECTED";
+
+    /// <summary>
+    /// Маршруты Bridge.Desktop (Program.cs router), которые вызывают производители заданий:
+    /// Platform.Server TeklaRuntimeProxy (component/selection/model/constructive/pick/uda/
+    /// expert-attributes, /capabilities как статус) и Connector.Platform PlatformToolsService (/health).
+    /// /plugins/fachwerk/* производителей не имеют и через задания не доступны.
+    /// </summary>
+    public static readonly IReadOnlySet<string> AllowedBridgeEndpoints = new HashSet<string>(StringComparer.Ordinal)
+    {
+        "/health",
+        "/capabilities",
+        "/component/upsert",
+        "/component/modify",
+        "/component/delete",
+        "/component/read",
+        "/selection",
+        "/model/selection",
+        "/model/select",
+        "/model/changes/apply",
+        "/constructive/tekla-plan/prepare",
+        "/constructive/tekla-plan/apply",
+        "/pick/axis",
+        "/uda/files/apply",
+        "/expert-attributes/ifc-attribution/scan",
+        "/expert-attributes/ifc-attribution/apply",
+    };
+
     private readonly Func<string?, string?> _tokenLoader;
     private readonly Func<string, HttpClient> _httpClientFactory;
     private readonly IBridgeDesktopRestarter _restarter;
 
     public TeklaProviderAdapter()
-        : this(BridgeTokenReader.TryLoad, _ => new HttpClient(), new WindowsBridgeDesktopRestarter())
+        : this(
+            BridgeTokenReader.TryLoad,
+            _ => new HttpClient(new HttpClientHandler { UseProxy = false }),
+            new WindowsBridgeDesktopRestarter())
     {
     }
 
@@ -83,16 +134,32 @@ public sealed class TeklaProviderAdapter : IProviderAdapter
             return BuildFailure(job, startedAtUtc, "BRIDGE_PAYLOAD_INVALID",
                 $"payload.endpoint must start with '/'; got '{endpoint}'.", diagnosticsEnabled);
         }
+        if (!AllowedBridgeEndpoints.Contains(endpoint))
+        {
+            return BuildFailure(job, startedAtUtc, BridgeEndpointRejectedErrorCode,
+                "payload.endpoint is not an allowed Bridge.Desktop route.", diagnosticsEnabled);
+        }
 
-        var baseUrl = TryGetString(job.Payload, "bridgeBaseUrl", out var customBase)
-            ? customBase.TrimEnd('/')
-            : DefaultBridgeBaseUrl;
+        var baseUrl = DefaultBridgeBaseUrl;
+        if (TryGetString(job.Payload, "bridgeBaseUrl", out var customBase) &&
+            !TryNormalizeLoopbackBridgeUrl(customBase, out baseUrl))
+        {
+            return BuildFailure(job, startedAtUtc, BridgeUrlRejectedErrorCode,
+                "payload.bridgeBaseUrl must be a known local Bridge.Desktop address (http://127.0.0.1:39421 or http://127.0.0.1:39420).",
+                diagnosticsEnabled);
+        }
+
+        if (TryGetString(job.Payload, "tokenPath", out _))
+        {
+            return BuildFailure(job, startedAtUtc, TokenPathRejectedErrorCode,
+                "payload.tokenPath is not accepted: the Bridge token is read only from the local DPAPI store.",
+                diagnosticsEnabled);
+        }
 
         var interactive = TryGetBoolean(job.Payload, "interactive", out var i) && i;
         var timeoutSec = ResolveTimeoutSeconds(job.Payload, interactive);
 
-        var tokenPathOverride = TryGetString(job.Payload, "tokenPath", out var tp) ? tp : null;
-        var token = _tokenLoader(tokenPathOverride);
+        var token = _tokenLoader(null);
         if (string.IsNullOrEmpty(token))
         {
             return BuildFailure(job, startedAtUtc, "BRIDGE_TOKEN_UNAVAILABLE",
@@ -221,6 +288,37 @@ public sealed class TeklaProviderAdapter : IProviderAdapter
         return Uri.TryCreate(baseUrl, UriKind.Absolute, out var uri) &&
                uri.IsLoopback &&
                !IsDefaultBridgeBaseUrl(baseUrl);
+    }
+
+    /// <summary>
+    /// Принимает только <c>http://127.0.0.1</c> или <c>http://localhost</c> с явным портом известного
+    /// профиля Bridge.Desktop (<see cref="DefaultBridgePort"/>, <see cref="Tekla2020BridgePort"/>),
+    /// без userinfo, пути, query и fragment; возвращает канонический <c>http://127.0.0.1:&lt;port&gt;</c>
+    /// (Bridge.Desktop слушает префикс 127.0.0.1).
+    /// </summary>
+    internal static bool TryNormalizeLoopbackBridgeUrl(string value, out string normalized)
+    {
+        normalized = DefaultBridgeBaseUrl;
+        if (!Uri.TryCreate(value.Trim(), UriKind.Absolute, out var uri) ||
+            !string.Equals(uri.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase) ||
+            !string.IsNullOrEmpty(uri.UserInfo) ||
+            !string.IsNullOrEmpty(uri.Query) ||
+            !string.IsNullOrEmpty(uri.Fragment) ||
+            uri.AbsolutePath != "/" ||
+            uri.IsDefaultPort)
+        {
+            return false;
+        }
+
+        var host = uri.Host.ToLowerInvariant();
+        if ((host != "127.0.0.1" && host != "localhost") ||
+            (uri.Port != DefaultBridgePort && uri.Port != Tekla2020BridgePort))
+        {
+            return false;
+        }
+
+        normalized = $"http://127.0.0.1:{uri.Port.ToString(CultureInfo.InvariantCulture)}";
+        return true;
     }
 
     private static bool IsDefaultBridgeBaseUrl(string baseUrl)

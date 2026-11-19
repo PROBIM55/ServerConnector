@@ -1,6 +1,9 @@
 using System.Diagnostics;
+using System.Runtime.Versioning;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
+using Microsoft.Win32;
 using Platform.Cad.AutoCad.Adapter.Sessions;
 using Platform.Connector.Core;
 
@@ -10,10 +13,42 @@ public sealed class AutoCadProviderAdapter : IProviderAdapter
 {
     private const string LegacyBuildCommand = "_BRIDGE_BUILD_LAST_V2";
 
+    /// <summary>Путь из payload отклонён: exe, скрипт и плагин определяет только локальная установка (аудит ИБ А1).</summary>
+    public const string PayloadPathRejectedErrorCode = "AUTOCAD_PAYLOAD_PATH_REJECTED";
+
+    /// <summary>payload.commandName не прошёл строгий фильтр имени команды AutoCAD.</summary>
+    public const string CommandNameRejectedErrorCode = "AUTOCAD_COMMAND_NAME_REJECTED";
+
+    /// <summary>Локальный каталог состояния legacy batch содержит точку повторной обработки (junction/symlink).</summary>
+    public const string LocalStateUnsafeErrorCode = "AUTOCAD_LOCAL_STATE_UNSAFE";
+
     /// <summary>Дефолтный лимит session-операций (COM-вызовы быстрые; legacy batch — 600 c).</summary>
     private const int DefaultSessionTimeoutSeconds = 120;
 
+    // \A…\z, а не ^…$: '$' в .NET совпадает и перед завершающим '\n'.
+    private static readonly Regex CommandNamePattern = new(
+        @"\A[A-Za-z_][A-Za-z0-9_\-]{0,63}\z",
+        RegexOptions.CultureInvariant);
+
     private readonly Func<IAutoCadSessionExecutor> _sessionExecutorFactory;
+    private readonly Func<string?> _autoCadExeResolver;
+    private readonly string _pluginDirectory;
+    private readonly string _localStateRoot;
+
+    /// <summary>
+    /// Единственный каталог, из которого legacy batch загружает плагин AutoCAD:
+    /// подкаталог установки коннектора (perMachine, Program Files — запись только у администратора;
+    /// AutoCAD считает Program Files доверенным, поэтому SECURELOAD понижать не нужно).
+    /// </summary>
+    public static string DefaultPluginDirectory => Path.Combine(AppContext.BaseDirectory, "plugins", "autocad");
+
+    /// <summary>
+    /// Собственный локальный каталог legacy batch: здесь лежат job-pointer.json и build-status.json,
+    /// которые читает плагин, и run.scr каждого запуска (runs\&lt;guid&gt;). Payload эти пути не задаёт.
+    /// </summary>
+    public static string DefaultLocalStateRoot => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "BridgeBuilder");
 
     public AutoCadProviderAdapter()
         : this(sessionExecutorFactory: null)
@@ -26,11 +61,27 @@ public sealed class AutoCadProviderAdapter : IProviderAdapter
     /// не трогало COM/STA вообще (ленивая инициализация на первом session-job'е).
     /// </summary>
     public AutoCadProviderAdapter(Func<IAutoCadSessionExecutor>? sessionExecutorFactory)
+        : this(sessionExecutorFactory, ResolveInstalledAutoCadExe, DefaultPluginDirectory, DefaultLocalStateRoot)
+    {
+    }
+
+    /// <summary>
+    /// Constructor для тестов legacy batch: локальный поиск acad.exe, каталог плагинов
+    /// и локальный каталог состояния подменяемы.
+    /// </summary>
+    public AutoCadProviderAdapter(
+        Func<IAutoCadSessionExecutor>? sessionExecutorFactory,
+        Func<string?> autoCadExeResolver,
+        string pluginDirectory,
+        string localStateRoot)
     {
         _sessionExecutorFactory = sessionExecutorFactory
             ?? (() => OperatingSystem.IsWindows()
                 ? AutoCadSessionService.Shared
                 : throw new PlatformNotSupportedException("AutoCAD COM sessions are Windows-only."));
+        _autoCadExeResolver = autoCadExeResolver;
+        _pluginDirectory = pluginDirectory;
+        _localStateRoot = localStateRoot;
     }
 
     public CadProvider Provider => CadProvider.AutoCad;
@@ -38,7 +89,7 @@ public sealed class AutoCadProviderAdapter : IProviderAdapter
     public async Task<ProviderExecutionResult> ExecuteAsync(ConnectorJobEnvelope job, CancellationToken cancellationToken)
     {
         // mode=session → подключение к запущенному AutoCAD через COM/ROT;
-        // иначе — прежний batch-путь (acad.exe /b + file-based IPC) без изменений.
+        // иначе — batch-путь (acad.exe /b + file-based IPC) с локальным разрешением exe/плагина (аудит ИБ А1).
         if (AutoCadSessionPayloadParser.IsSessionMode(job.Payload))
         {
             return await ExecuteSessionAsync(job, cancellationToken).ConfigureAwait(false);
@@ -174,28 +225,121 @@ public sealed class AutoCadProviderAdapter : IProviderAdapter
         _ => action.ToString()
     };
 
-    // ════════════════════════ Legacy batch path (unchanged) ════════════════════════
+    // ════════════════════════ Legacy batch path ════════════════════════
+    //
+    // Аудит ИБ А1: payload задания не может выбрать исполняемый файл, скрипт, DLL или
+    // файлы состояния. acad.exe — только из локальной установки AutoCAD (HKLM), плагин — только
+    // из каталога установки коннектора, run.scr генерируется локально в собственном каталоге
+    // состояния, job-pointer/build-status — фиксированные файлы там же, commandName — строгий фильтр.
+    // Проверки payload выполняются до любой записи на диск; сообщения отказов не раскрывают
+    // локальные пути.
 
-    private static async Task<ProviderExecutionResult> ExecuteLegacyBatchAsync(ConnectorJobEnvelope job, CancellationToken cancellationToken)
+    private async Task<ProviderExecutionResult> ExecuteLegacyBatchAsync(ConnectorJobEnvelope job, CancellationToken cancellationToken)
     {
         var startedAtUtc = DateTime.UtcNow;
         var diagnosticsEnabled = TryGetBoolean(job.Payload, "diagnostics", out var diagnostics) && diagnostics;
-        var workingDirectory = ResolveWorkingDirectory(job.Payload);
-        Directory.CreateDirectory(workingDirectory);
-
-        var usePluginTransport =
-            !TryGetString(job.Payload, "scriptPath", out _) &&
-            TryGetString(job.Payload, "bridgePluginDllPath", out _);
-
-        var pointerPath = TryGetString(job.Payload, "jobPointerPath", out var pointerOverride)
-            ? pointerOverride
-            : (usePluginTransport ? ResolvePluginPointerPath() : Path.Combine(workingDirectory, "job-pointer.json"));
-
-        var statusPath = TryGetString(job.Payload, "buildStatusPath", out var statusOverride)
-            ? statusOverride
-            : (usePluginTransport ? ResolvePluginStatusPath() : Path.Combine(workingDirectory, "build-status.json"));
+        var runsDirectory = Path.Combine(_localStateRoot, "runs");
+        var workingDirectory = Path.Combine(runsDirectory, Guid.NewGuid().ToString("N"));
+        var pointerPath = Path.Combine(_localStateRoot, "job-pointer.json");
+        var statusPath = Path.Combine(_localStateRoot, "build-status.json");
 
         var jobPath = TryGetString(job.Payload, "jobPath", out var resolvedJobPath) ? resolvedJobPath : null;
+
+        if (TryGetString(job.Payload, "scriptPath", out _))
+        {
+            return BuildFailure(job, startedAtUtc, PayloadPathRejectedErrorCode,
+                "payload.scriptPath is not accepted: the AutoCAD run script is generated locally by the connector.",
+                diagnosticsEnabled, workingDirectory, pointerPath, statusPath);
+        }
+
+        foreach (var field in new[] { "workingDirectory", "jobPointerPath", "buildStatusPath" })
+        {
+            if (TryGetString(job.Payload, field, out _))
+            {
+                return BuildFailure(job, startedAtUtc, PayloadPathRejectedErrorCode,
+                    $"payload.{field} is not accepted: connector state files live in the connector's own local folder.",
+                    diagnosticsEnabled, workingDirectory, pointerPath, statusPath);
+            }
+        }
+
+        if (jobPath is not null && !IsLocalAbsolutePath(jobPath))
+        {
+            return BuildFailure(job, startedAtUtc, PayloadPathRejectedErrorCode,
+                "payload.jobPath must be a local absolute path (UNC, device and relative paths are rejected).",
+                diagnosticsEnabled, workingDirectory, pointerPath, statusPath);
+        }
+
+        var requestedExePath = TryGetString(job.Payload, "autoCadExePath", out var exeOverride) ? exeOverride : null;
+        if (requestedExePath is not null && !IsLocalAbsolutePath(requestedExePath))
+        {
+            return BuildFailure(job, startedAtUtc, PayloadPathRejectedErrorCode,
+                "payload.autoCadExePath must be a local absolute path; the executable is resolved from the local AutoCAD installation.",
+                diagnosticsEnabled, workingDirectory, pointerPath, statusPath);
+        }
+
+        if (!TryGetString(job.Payload, "bridgePluginDllPath", out var requestedPluginPath))
+        {
+            return BuildFailure(
+                job,
+                startedAtUtc,
+                "PLUGIN_NOT_FOUND",
+                "payload.bridgePluginDllPath is required: legacy batch mode runs only an AutoCAD plugin installed with the connector.",
+                diagnosticsEnabled,
+                workingDirectory,
+                pointerPath,
+                statusPath);
+        }
+
+        if (!TryResolveInstalledPluginPath(requestedPluginPath, out var pluginPath))
+        {
+            return BuildFailure(job, startedAtUtc, PayloadPathRejectedErrorCode,
+                "payload.bridgePluginDllPath must be a .dll inside the connector's AutoCAD plugin directory.",
+                diagnosticsEnabled, workingDirectory, pointerPath, statusPath);
+        }
+
+        var commandName = TryGetString(job.Payload, "commandName", out var command) ? command : LegacyBuildCommand;
+        if (!CommandNamePattern.IsMatch(commandName))
+        {
+            return BuildFailure(job, startedAtUtc, CommandNameRejectedErrorCode,
+                "payload.commandName must match [A-Za-z_][A-Za-z0-9_-]{0,63}.",
+                diagnosticsEnabled, workingDirectory, pointerPath, statusPath);
+        }
+
+        var exePath = _autoCadExeResolver();
+        if (string.IsNullOrWhiteSpace(exePath) || !IsLocalAbsolutePath(exePath) || !File.Exists(exePath))
+        {
+            return BuildFailure(job, startedAtUtc, "AUTOCAD_EXE_NOT_FOUND",
+                "Local AutoCAD installation is not found.",
+                diagnosticsEnabled, workingDirectory, pointerPath, statusPath);
+        }
+
+        if (requestedExePath is not null && !PathsEqual(requestedExePath, exePath))
+        {
+            return BuildFailure(job, startedAtUtc, PayloadPathRejectedErrorCode,
+                "payload.autoCadExePath does not match the locally installed AutoCAD.",
+                diagnosticsEnabled, workingDirectory, pointerPath, statusPath);
+        }
+
+        if (!File.Exists(pluginPath))
+        {
+            return BuildFailure(
+                job,
+                startedAtUtc,
+                "PLUGIN_NOT_FOUND",
+                "The requested AutoCAD plugin is not installed with the connector.",
+                diagnosticsEnabled,
+                workingDirectory,
+                pointerPath,
+                statusPath);
+        }
+
+        if (!TryPrepareLocalState(runsDirectory, workingDirectory, pointerPath, statusPath))
+        {
+            return BuildFailure(job, startedAtUtc, LocalStateUnsafeErrorCode,
+                "The connector's local AutoCAD state folder is not a plain local directory.",
+                diagnosticsEnabled, workingDirectory, pointerPath, statusPath);
+        }
+
         if (!string.IsNullOrWhiteSpace(jobPath))
         {
             WriteJobPointer(pointerPath, job.RequestId, jobPath!);
@@ -206,36 +350,7 @@ public sealed class AutoCadProviderAdapter : IProviderAdapter
         using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         linkedCts.CancelAfter(TimeSpan.FromSeconds(timeoutSeconds));
 
-        if (!TryGetString(job.Payload, "autoCadExePath", out var exePath))
-        {
-            return BuildFailure(job, startedAtUtc, "AUTOCAD_EXE_REQUIRED", "payload.autoCadExePath is required.", diagnosticsEnabled, workingDirectory, pointerPath, statusPath);
-        }
-
-        if (!File.Exists(exePath))
-        {
-            return BuildFailure(job, startedAtUtc, "AUTOCAD_EXE_NOT_FOUND", $"AutoCAD executable is not found: {exePath}", diagnosticsEnabled, workingDirectory, pointerPath, statusPath);
-        }
-
-        var scriptPath = ResolveScriptPath(job.Payload, workingDirectory);
-        if (!File.Exists(scriptPath))
-        {
-            var pluginPath = TryGetString(job.Payload, "bridgePluginDllPath", out var pluginDllPath) ? pluginDllPath : null;
-            if (string.IsNullOrWhiteSpace(pluginPath) || !File.Exists(pluginPath))
-            {
-                return BuildFailure(
-                    job,
-                    startedAtUtc,
-                    "PLUGIN_NOT_FOUND",
-                    "Missing scriptPath and bridgePluginDllPath; cannot prepare AutoCAD run script.",
-                    diagnosticsEnabled,
-                    workingDirectory,
-                    pointerPath,
-                    statusPath);
-            }
-
-            var commandName = TryGetString(job.Payload, "commandName", out var command) ? command : LegacyBuildCommand;
-            scriptPath = GenerateRunScript(workingDirectory, pluginPath!, commandName);
-        }
+        var scriptPath = GenerateRunScript(workingDirectory, pluginPath, commandName);
 
         var arguments = $"/b \"{scriptPath}\"";
         var process = new Process
@@ -381,51 +496,196 @@ public sealed class AutoCadProviderAdapter : IProviderAdapter
         return Math.Clamp(timeout, 1, 86_400);
     }
 
-    private static string ResolveWorkingDirectory(JsonElement payload)
+    /// <summary>
+    /// Локальный абсолютный путь вида <c>X:\…</c> на не-сетевом диске. UNC (<c>\\host\share</c>),
+    /// пути устройств (<c>\\?\</c>, <c>\\.\</c>), относительные и drive-relative (<c>C:foo</c>) пути,
+    /// кавычки и управляющие символы отклоняются.
+    /// </summary>
+    internal static bool IsLocalAbsolutePath(string path)
     {
-        if (TryGetString(payload, "workingDirectory", out var workingDirectory))
+        if (string.IsNullOrWhiteSpace(path) || path.Any(ch => ch < ' ' || ch == '"'))
         {
-            return workingDirectory;
+            return false;
         }
 
-        return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "BridgeBuilder");
-    }
-
-    private static string ResolveScriptPath(JsonElement payload, string workingDirectory)
-    {
-        if (TryGetString(payload, "scriptPath", out var scriptPath))
+        if (path.Length < 3 ||
+            !char.IsAsciiLetter(path[0]) ||
+            path[1] != ':' ||
+            (path[2] != '\\' && path[2] != '/') ||
+            !Path.IsPathFullyQualified(path))
         {
-            return scriptPath;
+            return false;
         }
 
-        return Path.Combine(workingDirectory, "run.scr");
+        try
+        {
+            var root = Path.GetPathRoot(Path.GetFullPath(path));
+            return !string.IsNullOrEmpty(root) && new DriveInfo(root).DriveType != DriveType.Network;
+        }
+        catch
+        {
+            return false;
+        }
     }
 
-    private static string ResolvePluginPointerPath()
+    private static bool PathsEqual(string left, string right)
     {
-        return Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "BridgeBuilder",
-            "job-pointer.json");
+        try
+        {
+            return string.Equals(
+                Path.GetFullPath(left).TrimEnd('\\', '/'),
+                Path.GetFullPath(right).TrimEnd('\\', '/'),
+                StringComparison.OrdinalIgnoreCase);
+        }
+        catch
+        {
+            return false;
+        }
     }
 
-    private static string ResolvePluginStatusPath()
+    private bool TryResolveInstalledPluginPath(string requestedPath, out string pluginPath)
     {
-        return Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "BridgeBuilder",
-            "build-status.json");
+        pluginPath = string.Empty;
+        if (!IsLocalAbsolutePath(requestedPath) ||
+            !IsLocalAbsolutePath(_pluginDirectory) ||
+            !string.Equals(Path.GetExtension(requestedPath), ".dll", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var fullPath = Path.GetFullPath(requestedPath);
+        var root = Path.TrimEndingDirectorySeparator(Path.GetFullPath(_pluginDirectory)) + Path.DirectorySeparatorChar;
+        if (!fullPath.StartsWith(root, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        pluginPath = fullPath;
+        return true;
     }
+
+    /// <summary>acad.exe последней установленной версии AutoCAD по HKLM (запись — только у администратора).</summary>
+    private static string? ResolveInstalledAutoCadExe()
+        => OperatingSystem.IsWindows() ? ResolveInstalledAutoCadExeFromRegistry() : null;
+
+    [SupportedOSPlatform("windows")]
+    private static string? ResolveInstalledAutoCadExeFromRegistry()
+    {
+        try
+        {
+            using var localMachine = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64);
+            using var autoCadKey = localMachine.OpenSubKey(@"SOFTWARE\Autodesk\AutoCAD");
+            if (autoCadKey is null)
+            {
+                return null;
+            }
+
+            foreach (var release in PreferCurrent(autoCadKey, OrderReleasesDescending(autoCadKey.GetSubKeyNames())))
+            {
+                using var releaseKey = autoCadKey.OpenSubKey(release);
+                if (releaseKey is null)
+                {
+                    continue;
+                }
+
+                foreach (var product in PreferCurrent(releaseKey, releaseKey.GetSubKeyNames()))
+                {
+                    using var productKey = releaseKey.OpenSubKey(product);
+                    if (productKey?.GetValue("AcadLocation") is not string location || string.IsNullOrWhiteSpace(location))
+                    {
+                        continue;
+                    }
+
+                    var exePath = Path.Combine(location.Trim(), "acad.exe");
+                    if (IsLocalAbsolutePath(exePath) && File.Exists(exePath))
+                    {
+                        return exePath;
+                    }
+                }
+            }
+        }
+        catch
+        {
+            // Нет доступа к реестру — AutoCAD считается не найденным.
+        }
+
+        return null;
+    }
+
+    [SupportedOSPlatform("windows")]
+    private static IEnumerable<string> PreferCurrent(RegistryKey key, IEnumerable<string> subKeys)
+    {
+        var current = key.GetValue("CurVer") as string;
+        var ordered = subKeys.ToList();
+        if (!string.IsNullOrWhiteSpace(current) && ordered.Remove(current))
+        {
+            ordered.Insert(0, current);
+        }
+
+        return ordered;
+    }
+
+    private static IEnumerable<string> OrderReleasesDescending(IEnumerable<string> releases)
+        => releases.OrderByDescending(
+            release => Version.TryParse(release.TrimStart('R', 'r'), out var version) ? version : new Version(0, 0));
+
+    /// <summary>
+    /// Создаёт каталог состояния по уровням и проверяет, что ни корень, ни runs, ни каталог запуска,
+    /// ни существующие job-pointer/build-status не являются reparse point (junction/symlink),
+    /// — иначе запись/чтение ушли бы за пределы собственного каталога.
+    /// </summary>
+    private bool TryPrepareLocalState(string runsDirectory, string workingDirectory, string pointerPath, string statusPath)
+    {
+        try
+        {
+            if (!IsLocalAbsolutePath(_localStateRoot))
+            {
+                return false;
+            }
+
+            foreach (var directory in new[] { _localStateRoot, runsDirectory, workingDirectory })
+            {
+                if (Directory.Exists(directory) || File.Exists(directory))
+                {
+                    if (IsReparsePoint(directory) || !Directory.Exists(directory))
+                    {
+                        return false;
+                    }
+                }
+                else
+                {
+                    Directory.CreateDirectory(directory);
+                }
+            }
+
+            foreach (var file in new[] { pointerPath, statusPath })
+            {
+                if ((File.Exists(file) || Directory.Exists(file)) && (IsReparsePoint(file) || Directory.Exists(file)))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static bool IsReparsePoint(string path)
+        => (File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0;
 
     private static string GenerateRunScript(string workingDirectory, string pluginPath, string commandName)
     {
+        // SECURELOAD не понижается: плагин лежит в каталоге установки (Program Files),
+        // который AutoCAD считает доверенным.
         var scriptPath = Path.Combine(workingDirectory, "run.scr");
         var content = new StringBuilder()
             .AppendLine("FILEDIA")
             .AppendLine("0")
             .AppendLine("CMDDIA")
-            .AppendLine("0")
-            .AppendLine("SECURELOAD")
             .AppendLine("0")
             .AppendLine("_NETLOAD")
             .AppendLine($"\"{pluginPath}\"")

@@ -21,10 +21,12 @@ public sealed class ConnectorRuntimeServices : IAsyncDisposable
     private readonly object _commonInvalidationSync = new();
     private Task _commonInvalidationTask = Task.CompletedTask;
     private string _commonFolderStatus = "Папки не подключены";
+    private int _commonFolderCleanupPending;
     // A background invalidation belongs to the access session that observed
     // Ready.  This advances only after the lifecycle mutex has been acquired,
     // so a cancelled connect still leaves the active session intact.
-    private long _commonSessionGeneration;
+    private readonly CommonConnectionActivation _commonActivation = new();
+    private readonly CommonConnectionRecovery _commonRecovery = new();
     private int _disposed;
     public ConnectorRuntimeServices(string? runtimeRoot = null, string? ifcWorker = null, string? gltfpack = null)
     {
@@ -38,7 +40,8 @@ public sealed class ConnectorRuntimeServices : IAsyncDisposable
         CommonFolders = new CommonSmbAccessService(CommonAccess,
             () => CommonAccess.Current?.AccessProfile,
             CommonAccess.IsSmbDestinationAllowed,
-            new WindowsSmbMappingPort(ProbeCommonOverlayAsync));
+            new WindowsSmbMappingPort(ProbeCommonOverlayAsync, CommonAccess.LegacyEncryptedSmbShares),
+            legacyConnector: new WindowsLegacyConnectorDetector());
         Host = new ConnectorRuntimeHost(
             [new AutoCadProviderAdapter(), new TeklaProviderAdapter()],
             [AgrConnectorIntegration.CreateExecutor(materializer),
@@ -54,21 +57,7 @@ public sealed class ConnectorRuntimeServices : IAsyncDisposable
             ],
             controlPlaneClientFactory: _ => new HttpMtlsConnectorControlPlaneClient(CommonAccess,
                 CommonAccess.Current?.AccessProfile?.CompanyId ?? throw new InvalidOperationException("Нет подтверждённого профиля доступа.")));
-        var platformSettings = new PlatformSettingsPersistence(runtimeRoot is null
-            ? null
-            : Path.Combine(localRuntimeRoot, "Platform"));
-        if (runtimeRoot is null && !CommonAccess.IsSelected)
-        {
-            // Legacy credential import belongs only to an explicitly legacy session.
-            // The common-access desktop starts without reading old token locations
-            // (which may be unavailable network files), or creating a second credential.
-            PlatformLegacyImport = platformSettings.ImportLegacyIfFresh();
-            if (!PlatformLegacyImport.Imported)
-            {
-                Trace.TraceWarning("Platform legacy settings import did not complete: {0}",
-                    PlatformLegacyImport.Code);
-            }
-        }
+        var platformSettings = new PlatformSettingsPersistence(Path.Combine(localRuntimeRoot, "Platform"));
         Platform = new PlatformRuntimeFacade(Host, materializer, platformSettings);
         ConverterClient = new AgentConverterJobClient(Host);
         LegacyPartConverter = new AgentAgrPartConverter(ConverterClient);
@@ -80,11 +69,23 @@ public sealed class ConnectorRuntimeServices : IAsyncDisposable
     public PlatformRuntimeFacade Platform { get; }
     public AgentConverterJobClient ConverterClient { get; }
     public IAgrPartConverter LegacyPartConverter { get; }
-    /// <summary>First-run legacy import outcome; contains no credential data.</summary>
-    public PlatformLegacyImportResult? PlatformLegacyImport { get; }
     public CommonAccessRuntime CommonAccess { get; }
     public CommonSmbAccessService CommonFolders { get; }
+    /// <summary>K5 «перевод ПК» to this connector and its rollback; per-user, without elevation.</summary>
+    public LegacyConnectorTransferService LegacyTransfer { get; } = new();
+    public CommonConnectionOperations CommonOperations { get; } = new();
+    public string CommonRecoveryProgress => _commonRecovery.Progress;
+    public event Action? CommonRecoveryChanged { add => _commonRecovery.Changed += value; remove => _commonRecovery.Changed -= value; }
+    public void CancelCommonConnectionIntent() => _commonRecovery.Stop();
+
+    /// <summary>The user's cancel of a restore/sign-in still waiting for the server (foreground or background).</summary>
+    public void CancelCommonConnect()
+    {
+        CancelCommonConnectionIntent();
+        CommonOperations.CancelConnect();
+    }
     public string CommonFolderStatus => Volatile.Read(ref _commonFolderStatus);
+    public bool CommonFolderCleanupPending => Volatile.Read(ref _commonFolderCleanupPending) != 0;
 
     private async ValueTask<NetworkOverlaySnapshot> ProbeCommonOverlayAsync(CancellationToken cancellationToken)
     {
@@ -95,12 +96,28 @@ public sealed class ConnectorRuntimeServices : IAsyncDisposable
         return route.Overlay;
     }
 
-    public async Task ConnectCommonAsync(string? token, bool reconnect, CancellationToken cancellationToken)
+    public Task ConnectCommonAsync(string? token, bool reconnect, CancellationToken cancellationToken,
+        Action<string>? progress = null)
+    {
+        // Supersede automatic recovery synchronously, before waiting for its
+        // lifecycle lock or any old CAD drain.
+        var intentEpoch = _commonRecovery.BeginConnect();
+        return ConnectCommonCoreAsync(token, reconnect, cancellationToken, progress, manualIntentEpoch: intentEpoch);
+    }
+
+    private async Task ConnectCommonCoreAsync(string? token, bool reconnect, CancellationToken cancellationToken,
+        Action<string>? progress = null, CommonRecoveryAttempt? recovery = null, Action<string>? failure = null,
+        long? manualIntentEpoch = null)
     {
         await _commonLifecycle.WaitAsync(cancellationToken);
         try
         {
+            var intentEpoch = recovery?.Epoch ?? manualIntentEpoch ?? throw new InvalidOperationException("Connection intent missing.");
+            if (!_commonRecovery.IsCurrent(intentEpoch)) throw new OperationCanceledException(cancellationToken);
+            progress?.Invoke("Завершаем текущую работу…");
             await StopForConnectionChangeAsync(cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!_commonRecovery.IsCurrent(intentEpoch)) throw new OperationCanceledException(cancellationToken);
             // Do not advance the ownership epoch until the old worker is
             // actually drained.  A cancelled queued/takeover request must
             // leave the still-running session able to process its own revoke.
@@ -108,14 +125,37 @@ public sealed class ConnectorRuntimeServices : IAsyncDisposable
             try
             {
                 await CommonFolders.ClearAuthorizationAsync(cancellationToken);
+                // The old host is drained. A network change during the new
+                // handshake must not strand/reuse its old Windows SMB sessions.
+                // Exact non-force removal fails closed if files remain open.
+                await CommonFolders.CleanupOwnedMappingsAfterDrainAsync(cancellationToken);
+                Volatile.Write(ref _commonFolderCleanupPending, 0);
                 SetCommonFolderStatus("Папки не подключены");
-                var routeEpoch = CommonFolders.RouteEpoch;
-                await CommonAccess.ConnectAsync(token, reconnect, cancellationToken);
+                // The wait confirms the protected route before Ready: right after the server
+                // reports the peer, routes may still propagate; that keeps the wait pending.
+                await CommonAccess.ConnectAsync(token, reconnect, cancellationToken, progress,
+                    async ct => { await ProbeCommonOverlayAsync(ct); });
                 if (!CommonAccess.IsReady) return;
-                CommonFolders.EnableAuthorization(routeEpoch);
+                var identityProfile = CommonAccess.Current!.AccessProfile!;
+                CommonConnectionRecovery.RequireIdentity(recovery, new(
+                    identityProfile.DeviceId, identityProfile.UserId, identityProfile.CompanyId));
+                void ValidateCurrentIdentity()
+                {
+                    var current = CommonAccess.Current?.AccessProfile
+                        ?? throw new InvalidOperationException("The recovery profile is unavailable.");
+                    CommonConnectionRecovery.RequireIdentity(recovery, new(current.DeviceId, current.UserId, current.CompanyId));
+                }
+                progress?.Invoke("Проверяем защищённое соединение…");
+                if (!await _commonActivation.ActivateAsync(CommonFolders,
+                    async ct => { await ProbeCommonOverlayAsync(ct); },
+                    () => CommonAccess.IsReady, cancellationToken, ValidateCurrentIdentity)) return;
                 var profile = CommonAccess.Current!.AccessProfile!;
+                CommonConnectionRecovery.RequireIdentity(recovery, new(profile.DeviceId, profile.UserId, profile.CompanyId));
+                cancellationToken.ThrowIfCancellationRequested();
+                if (!_commonRecovery.IsCurrent(intentEpoch)) throw new OperationCanceledException(cancellationToken);
+                progress?.Invoke("Запускаем фоновую работу…");
                 Host.Resume();
-                await Host.StartAsync(new ConnectorRuntimeOptions
+                await _commonRecovery.StartOwnedAsync(intentEpoch, () => Host.StartAsync(new ConnectorRuntimeOptions
                 {
                     AuthenticationMode = ConnectorAuthenticationMode.IssuedCertificate,
                     DeviceId = profile.DeviceId,
@@ -124,25 +164,48 @@ public sealed class ConnectorRuntimeServices : IAsyncDisposable
                     RunDemoJobWhenIdle = false,
                     EnableStatusShell = false,
                     Capabilities = ["autocad.build", "tekla.apply", "agr.publication", "converters.export"]
-                });
+                }), cancellationToken);
+                ValidateCurrentIdentity();
+                _commonRecovery.MarkReady(intentEpoch, new(profile.DeviceId, profile.UserId, profile.CompanyId));
                 if (profile.Modules.Any(module => module.ModuleId == "folders" &&
                     module.Permissions.Contains(Connector.Access.Contracts.ConnectorPermission.Read)))
                 {
+                    if (profile.Resources.Count == 0)
+                    {
+                        // The applied profile grants no resources. There is
+                        // nothing to mount; do not repeat several live network
+                        // checks just to obtain an empty folder receipt.
+                        SetCommonFolderStatus("Папки не назначены");
+                        return;
+                    }
                     try
                     {
-                        await CommonFolders.RefreshAndMountAsync(cancellationToken);
+                        progress?.Invoke("Проверяем доступные папки…");
+                        await CommonFolders.RefreshAvailableAsync(cancellationToken);
                         SetCommonFolderStatus(CommonAccess.IsReady
-                            ? CommonFolders.Folders.Count == 0 ? "Папки не назначены" : "Папки подключены"
+                            ? CommonFolders.Folders.Count == 0 ? "Папки не назначены" : "Папки доступны"
                             : "Папки не подключены");
                     }
                     catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
                     catch (Exception)
                     {
                         SetCommonFolderStatus(CommonAccess.IsReady
-                            ? "Не удалось подключить папки. Попробуйте подключить диск вручную."
+                            ? "Не удалось получить список папок. Повторите проверку подключения."
                             : "Папки не подключены");
                     }
                 }
+            }
+            catch
+            {
+                failure?.Invoke(CommonAccess.Current?.DiagnosticCode ?? "connection_failed");
+                // A completed handshake is not a completed native connection.
+                // Close admission if host startup/folder setup is cancelled or
+                // fails after Ready. Existing invalidation owns safe CAD drain;
+                // never force-stop accepted work here or delete the credential.
+                CommonFolders.InvalidateAuthorization();
+                if (CommonAccess.IsReady)
+                    await CommonAccess.DisconnectAsync(CancellationToken.None);
+                throw;
             }
             finally
             {
@@ -157,6 +220,8 @@ public sealed class ConnectorRuntimeServices : IAsyncDisposable
 
     public async Task DisconnectCommonAsync(CancellationToken cancellationToken)
     {
+        // A connect waiting for the server holds the lifecycle; disconnect ends it first.
+        CancelCommonConnect();
         await _commonLifecycle.WaitAsync(cancellationToken);
         try
         {
@@ -165,12 +230,51 @@ public sealed class ConnectorRuntimeServices : IAsyncDisposable
             try
             {
                 await CommonAccess.DisconnectAsync(cancellationToken);
-                await CommonFolders.ClearAuthorizationAsync(cancellationToken);
-                SetCommonFolderStatus("Папки не подключены");
             }
-            finally { Host.Resume(); }
+            finally
+            {
+                await CleanupCommonFoldersAfterDrainAsync();
+                Host.Resume();
+            }
         }
         finally { _commonLifecycle.Release(); }
+    }
+
+    public async Task SignOutCommonAsync(CancellationToken cancellationToken, Action<string>? progress = null)
+    {
+        CancelCommonConnectionIntent();
+        await _commonLifecycle.WaitAsync(cancellationToken);
+        try
+        {
+            progress?.Invoke("Завершаем текущую работу…");
+            await StopForConnectionChangeAsync(cancellationToken);
+            BeginCommonSession();
+            await CommonFolders.ClearAuthorizationAsync(cancellationToken);
+            // A busy Windows handle must not prevent exact server revocation.
+            // Keep its mapping pending, report it, and block later reuse until
+            // the next drained exact cleanup can finish without force.
+            await CleanupCommonFoldersAfterDrainAsync();
+            // The server confirms only after every access provider (NetBird
+            // included) has applied the revocation; this can take a minute.
+            progress?.Invoke("Отзываем доступ на сервере…");
+            await CommonAccess.SignOutAsync(cancellationToken);
+        }
+        finally { Host.Resume(); _commonLifecycle.Release(); }
+    }
+
+    private async Task CleanupCommonFoldersAfterDrainAsync()
+    {
+        try
+        {
+            await CommonFolders.CleanupOwnedMappingsAfterDrainAsync(CancellationToken.None);
+            Volatile.Write(ref _commonFolderCleanupPending, 0);
+            SetCommonFolderStatus("Папки не подключены");
+        }
+        catch
+        {
+            Volatile.Write(ref _commonFolderCleanupPending, 1);
+            SetCommonFolderStatus("Некоторые папки заняты. Закройте открытые файлы и повторите отключение папок.");
+        }
     }
 
     private async Task StopForConnectionChangeAsync(CancellationToken cancellationToken)
@@ -199,27 +303,26 @@ public sealed class ConnectorRuntimeServices : IAsyncDisposable
     private void OnCommonAccessInvalidated(CommonAccessInvalidation invalidation)
     {
         if (Volatile.Read(ref _disposed) != 0) return;
-        var invalidatedGeneration = invalidation.SessionGeneration;
-        if (!IsCurrentCommonSession(invalidatedGeneration)) return;
-
-        BeginCommonInvalidation(invalidatedGeneration, CommonMappingCleanup.AllOwned, routeEpoch: null,
-            "Папки не подключены");
+        _commonActivation.InvalidateAccess(invalidation.SessionGeneration, generation =>
+            BeginCommonInvalidation(generation, CommonMappingCleanup.AllOwned, routeEpoch: null,
+                "Папки не подключены", invalidation.Snapshot));
     }
 
     private void OnCommonRouteInvalidated(CommonSmbRouteInvalidation invalidation)
     {
         if (Volatile.Read(ref _disposed) != 0) return;
-        var invalidatedGeneration = Volatile.Read(ref _commonSessionGeneration);
-        if (invalidatedGeneration <= 0) return;
-        BeginCommonInvalidation(invalidatedGeneration, CommonMappingCleanup.UnsafeRoute,
-            invalidation.RouteEpoch, "Доступ к папкам приостановлен после изменения сети");
+        _commonActivation.InvalidateRoute(invalidation.RouteEpoch, generation =>
+            BeginCommonInvalidation(generation, CommonMappingCleanup.UnsafeRoute,
+                invalidation.RouteEpoch, "Доступ к папкам приостановлен после изменения сети",
+                CommonAccess.Current is { } current ? current with { DiagnosticCode = "overlay_not_ready" } : null));
     }
 
     private void BeginCommonInvalidation(
         long invalidatedGeneration,
         CommonMappingCleanup mappingCleanup,
         long? routeEpoch,
-        string status)
+        string status,
+        CommonConnectorConnectionSnapshot? recoverySnapshot = null)
     {
         if (!IsCurrentCommonSession(invalidatedGeneration)) return;
 
@@ -244,7 +347,7 @@ public sealed class ConnectorRuntimeServices : IAsyncDisposable
         lock (_commonInvalidationSync)
         {
             var completion = CompleteCommonInvalidationAsync(
-                drain, protectedDrain, invalidatedGeneration, mappingCleanup, routeEpoch);
+                drain, protectedDrain, invalidatedGeneration, mappingCleanup, routeEpoch, recoverySnapshot);
             _commonInvalidationTask = Task.WhenAll(_commonInvalidationTask, completion);
         }
     }
@@ -254,7 +357,8 @@ public sealed class ConnectorRuntimeServices : IAsyncDisposable
         IDisposable? protectedDrain,
         long invalidatedGeneration,
         CommonMappingCleanup mappingCleanup,
-        long? routeEpoch)
+        long? routeEpoch,
+        CommonConnectorConnectionSnapshot? recoverySnapshot)
     {
         await _commonLifecycle.WaitAsync().ConfigureAwait(false);
         var stopped = false;
@@ -290,15 +394,34 @@ public sealed class ConnectorRuntimeServices : IAsyncDisposable
             if (stopped && IsCurrentCommonSession(invalidatedGeneration)) Host.Resume();
             _commonLifecycle.Release();
         }
+        if (stopped && IsCurrentCommonSession(invalidatedGeneration) && recoverySnapshot is not null)
+            _commonRecovery.Request(recoverySnapshot.DiagnosticCode, recoverySnapshot.DeviceId, ResumeCommonAfterLossAsync);
+    }
+
+    private async Task<CommonRecoveryResult> ResumeCommonAfterLossAsync(CommonRecoveryAttempt attempt)
+    {
+        while (CommonOperations.Progress.Operation is not null)
+            await Task.Delay(100, attempt.Token).ConfigureAwait(false);
+        var diagnostic = "connection_failed";
+        try
+        {
+            // Resume may renew an expiring certificate using the existing
+            // durable key. It cannot enroll or change device/user/company;
+            // the exact identity fence in the core runs before activation.
+            await ConnectCommonCoreAsync(null, true, attempt.Token, recovery: attempt,
+                failure: code => diagnostic = code).ConfigureAwait(false);
+            return new(CommonAccess.IsReady && Host.IsRunning, CommonAccess.Current?.DiagnosticCode ?? diagnostic);
+        }
+        catch (OperationCanceledException) when (attempt.Token.IsCancellationRequested) { throw; }
+        catch { return new(false, diagnostic); }
     }
 
     private bool IsCurrentCommonSession(long generation) =>
-        Volatile.Read(ref _commonSessionGeneration) == generation;
+        _commonActivation.IsCurrent(generation);
 
     private void BeginCommonSession()
     {
-        var generation = checked(Interlocked.Increment(ref _commonSessionGeneration));
-        CommonAccess.BeginSession(generation);
+        _commonActivation.BeginSession(CommonAccess.BeginSession);
     }
 
     private void SetCommonFolderStatus(string value) => Volatile.Write(ref _commonFolderStatus, value);
@@ -312,6 +435,9 @@ public sealed class ConnectorRuntimeServices : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+        CancelCommonConnectionIntent();
+        await _commonRecovery.DisposeAsync();
+        await CommonOperations.DisposeAsync();
         CommonAccess.ReadyInvalidated -= OnCommonAccessInvalidated;
         CommonFolders.RouteInvalidated -= OnCommonRouteInvalidated;
         CommonFolders.InvalidateAuthorization();

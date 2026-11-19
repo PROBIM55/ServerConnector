@@ -165,7 +165,9 @@ public static class WindowsUpgradeCompositionFactory
                     coordinator,
                     (HttpConnectorEnrollmentClient)bindings.CommonAccessClient),
                 new WindowsSmbAccessProbe(
-                    bindings.RequestTransport, bindings.SmbDestinations.Contains, bindings.Overlay));
+                    bindings.RequestTransport, bindings.SmbDestinations.Contains, bindings.Overlay,
+                    // Original-user session: neighbour mode keeps the probe off the old client's share.
+                    legacyConnector: new Connector.SmbAccess.WindowsLegacyConnectorDetector()));
             var environment = new WindowsHostEnvironmentPort(
                 currentSid, schema, new SystemLegacyProcessProbe(),
                 preserveLegacyApplications: options.Host.PreserveLegacyApplications);

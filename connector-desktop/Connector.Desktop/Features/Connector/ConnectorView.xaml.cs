@@ -9,7 +9,7 @@ namespace Connector.Desktop.Features.Connector;
 // ShowReleaseNotes_Click, TeklaUpdateAction_Click) are reproduced with their EXACT original control flow + try/catch.
 //
 // The COLLAPSED vestigial controls (ServerUrlTextBox, DeviceIdTextBox, IntervalTextBox, AutoStartCheckBox, the
-// Save/Test/SendNow/Start/Stop buttons, the SMB boxes/buttons, UpdateManifestUrlTextBox) moved with the view because
+// Save/Test/SendNow/Start/Stop buttons, the SMB boxes/buttons) moved with the view because
 // they are x:Named children of this tab. Their Click handlers below stay wired (the XAML references them) but the
 // shell no longer drives those buttons (they are Collapsed) — they remain for behavioural fidelity / future use and
 // route to the engine through the seam, identical to the originals.
@@ -62,16 +62,18 @@ public partial class ConnectorView : System.Windows.Controls.UserControl
         }
     }
 
-    // VERBATIM from MainWindow.UpdateAction_Click: no pending update -> check; else install (confirm-before-run).
+    // Updates are installed by the machine service; this collapsed legacy button only asks it to check now.
     private async void UpdateAction_Click(object sender, RoutedEventArgs e)
     {
-        if (!_host.HasPendingUpdate)
+        try
         {
-            await _host.CheckUpdatesAsync(showDialogs: true);
-            return;
+            await _host.RequestUpdateCheckAsync();
         }
-
-        await _host.InstallPendingUpdateAsync(confirmBeforeRun: true);
+        catch (Exception ex)
+        {
+            // The page is the update UI; this collapsed legacy button only records the refusal.
+            _host.Log("Обновление: " + ex.Message);
+        }
     }
 
     // VERBATIM from MainWindow.ShowReleaseNotes_Click: open ReleaseNotesWindow owned by the shell window. The
@@ -86,7 +88,7 @@ public partial class ConnectorView : System.Windows.Controls.UserControl
     }
 
     // VERBATIM from MainWindow.TeklaUpdateAction_Click: the Tekla-mirror sync button routes to the Стандарт module's
-    // interactive sync (OperationProgressWindow + "already running" notice). Fire-and-forget; status mirrors back via
+    // interactive sync (an entry of the page journal). Fire-and-forget; status mirrors back via
     // the shell's OnTeklaStatusChanged -> SetTeklaMirror push.
     private void TeklaUpdateAction_Click(object sender, RoutedEventArgs e)
     {
@@ -158,7 +160,6 @@ public partial class ConnectorView : System.Windows.Controls.UserControl
     {
         var s = _host.Settings;
         ServerUrlTextBox.Text = s.ServerUrl;
-        UpdateManifestUrlTextBox.Text = s.UpdateManifestUrl;
         DeviceIdTextBox.Text = s.DeviceId;
         SmbLoginTextBox.Text = string.Empty;
         SmbSharePathTextBox.Text = s.SmbSharePath;
@@ -170,11 +171,10 @@ public partial class ConnectorView : System.Windows.Controls.UserControl
 
     // Push the engine's post-token-connect control values (the SACRED ConnectByTokenInternalAsync used to set these
     // directly). Same six assignments, same order, now applied across the seam.
-    public void ApplyConnectResult(string deviceId, int heartbeatSeconds, string updateManifestUrl, string smbLogin, string smbSharePath)
+    public void ApplyConnectResult(string deviceId, int heartbeatSeconds, string smbLogin, string smbSharePath)
     {
         DeviceIdTextBox.Text = deviceId;
         IntervalTextBox.Text = heartbeatSeconds.ToString();
-        UpdateManifestUrlTextBox.Text = updateManifestUrl;
         SmbLoginTextBox.Text = smbLogin;
         SmbPasswordBox.Password = string.Empty;
         SmbSharePathTextBox.Text = smbSharePath;
@@ -184,9 +184,6 @@ public partial class ConnectorView : System.Windows.Controls.UserControl
     // the top of ApplyAndPersist (like StandardModule.FlushPathEdits) so ReadSettingsFromUi can source the token from
     // _settings instead of the moved PasswordBox. Returns the trimmed token text (PasswordBox is not bindable).
     public string GetTokenText() => TokenPasswordBox.Password.Trim();
-
-    // Mirror MainWindow.CheckUpdatesAsync's `UpdateManifestUrlTextBox.Text = manifestUrl` write (normalised URL echo).
-    public void SetUpdateManifestUrl(string url) => UpdateManifestUrlTextBox.Text = url;
 
     // Mirror the engine's `SmbLoginTextBox.Text = ...` write in ConnectSmbInternalAsync (the chosen login candidate).
     public void SetSmbLogin(string login) => SmbLoginTextBox.Text = login;

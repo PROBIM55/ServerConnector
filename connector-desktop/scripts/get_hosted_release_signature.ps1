@@ -26,7 +26,7 @@ $requestPath = Join-Path $temporary 'request.json'
 try {
     & $gh api --method POST "repos/$repository/actions/workflows/sign-unified-release-document.yml/dispatches" --input $requestPath
     if ($LASTEXITCODE -ne 0) { throw 'Hosted signing dispatch failed' }
-    $deadline = [DateTime]::UtcNow.AddMinutes(15); $run = $null
+    $deadline = [DateTime]::UtcNow.AddMinutes(30); $run = $null
     while ([DateTime]::UtcNow -lt $deadline) {
         $runs = (& $gh run list --repo $repository --workflow sign-unified-release-document.yml --limit 30 --json databaseId,displayTitle,headSha,status,conclusion | ConvertFrom-Json)
         if ($LASTEXITCODE -ne 0) { throw 'Hosted signing status could not be read' }

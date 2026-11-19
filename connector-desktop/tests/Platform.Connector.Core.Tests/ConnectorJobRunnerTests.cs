@@ -20,6 +20,22 @@ public sealed class ConnectorJobRunnerTests
     }
 
     [Fact]
+    public async Task RunOnceAsync_ReportsTheLeasedJobBeforeItsFirstStatus_AndAnObserverCannotBreakIt()
+    {
+        var publisher = new InMemoryStatusPublisher();
+        var runner = new ConnectorJobRunner(new[] { new FakeProvider(CadProvider.AutoCad, success: true) }, publisher);
+        var seen = new List<(string RequestId, int StatusesBefore)>();
+        runner.JobPicked += job => seen.Add((job.RequestId, publisher.Messages.Count));
+        runner.JobPicked += _ => throw new InvalidOperationException("observer failure");
+        var job = BuildJob(CadProvider.AutoCad);
+
+        await runner.RunOnceAsync("device-1", job);
+
+        Assert.Equal([(job.RequestId, 0)], seen);
+        Assert.Equal(JobStatus.Success, publisher.Messages[^1].Status);
+    }
+
+    [Fact]
     public async Task RunOnceAsync_WithoutProvider_PublishesProviderMissingError()
     {
         var publisher = new InMemoryStatusPublisher();

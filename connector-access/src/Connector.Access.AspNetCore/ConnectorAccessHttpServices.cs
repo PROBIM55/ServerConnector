@@ -11,12 +11,15 @@ public static class ConnectorAccessHttpServices
     public static IServiceCollection AddConnectorAccessProviderDispatch(this IServiceCollection services)
     {
         services.TryAddSingleton(TimeProvider.System);
+        services.AddOptions<DeviceAccessOptions>();
+        services.TryAddSingleton<ConnectorAccessDispatchSignal>();
         services.AddHostedService<ConnectorAccessProviderDispatchWorker>();
         return services;
     }
 
     public static IServiceCollection AddConnectorAccessHttp(this IServiceCollection services)
     {
+        services.TryAddSingleton(new ConnectorVpnStateCache());
         services.AddRateLimiter(options =>
         {
             options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;

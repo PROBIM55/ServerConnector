@@ -195,6 +195,23 @@ public sealed class PlatformAccessPortsTests
         Assert.True(result.SmbRequired);
         Assert.False(result.IsSuccessful);
         Assert.Equal(7, smb.LastRequest?.Revision);
+        Assert.Null(result.SmbFailureCode);
+    }
+
+    [Theory]
+    [InlineData("smb_credential_conflict")]
+    [InlineData("smb_legacy_client_active")]
+    public async Task Verify_FailedSmbProbeReason_ReachesTheVerificationResult(string code)
+    {
+        var client = ReadyClient();
+        var session = new FakeSession { CurrentValue = ReadySnapshot(), ProtectedServiceAvailable = true };
+        var port = CreateVerificationPort(client, session, new FakeSmbProbe { Result = false, FailureCode = code });
+
+        var result = await port.VerifyAsync(new PlatformEnrollmentReceipt(DeviceId), default);
+
+        Assert.False(result.Smb);
+        Assert.False(result.IsSuccessful);
+        Assert.Equal(code, result.SmbFailureCode);
     }
 
     [Fact]
@@ -543,6 +560,7 @@ public sealed class PlatformAccessPortsTests
     private sealed class FakeSmbProbe : IExactSmbAccessProbe
     {
         public bool Result { get; init; }
+        public string? FailureCode { get; init; }
         public ExactSmbAccessProbeRequest? LastRequest { get; private set; }
         public ValueTask<bool> VerifyAuthenticatedReadAsync(ExactSmbAccessProbeRequest request, CancellationToken cancellationToken)
         {
@@ -550,6 +568,10 @@ public sealed class PlatformAccessPortsTests
             LastRequest = request;
             return ValueTask.FromResult(Result);
         }
+
+        public async ValueTask<ExactSmbAccessProbeResult> VerifyAuthenticatedReadDetailedAsync(
+            ExactSmbAccessProbeRequest request, CancellationToken cancellationToken) =>
+            new(await VerifyAuthenticatedReadAsync(request, cancellationToken), FailureCode);
     }
 
     private sealed class FakePeerBindingProbe : IExactVpnPeerBindingProbe

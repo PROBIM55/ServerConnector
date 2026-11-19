@@ -9,8 +9,10 @@ namespace Connector.Access.NetBird;
 public sealed class NetBirdDeviceAccessGrantProvider : IDeviceAccessGrantProvider, IConnectorVpnBootstrapReader
 {
     public const string Name = "vpn";
+    private static readonly TimeSpan PeerConnectPollInterval = TimeSpan.FromMilliseconds(500);
     private readonly NetBirdManagementClient _management;
     private readonly FileNetBirdProviderStateStore _states;
+    internal int LocalLockCount => _states.LocalLockCount;
     private readonly ValidatedNetBirdOptions _options;
     private readonly TimeProvider _timeProvider;
 
@@ -24,9 +26,9 @@ public sealed class NetBirdDeviceAccessGrantProvider : IDeviceAccessGrantProvide
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(protectionProvider);
         _options = options.Validate();
-        _management = new NetBirdManagementClient(managementHttpClient, _options);
-        _states = new FileNetBirdProviderStateStore(_options, protectionProvider);
         _timeProvider = timeProvider ?? TimeProvider.System;
+        _management = new NetBirdManagementClient(managementHttpClient, _options);
+        _states = new FileNetBirdProviderStateStore(_options, protectionProvider, _timeProvider);
     }
 
     public string ProviderName => Name;
@@ -43,8 +45,9 @@ public sealed class NetBirdDeviceAccessGrantProvider : IDeviceAccessGrantProvide
         AuthenticatedDevice device,
         CancellationToken cancellationToken)
     {
-        await using var locked = await _states.LockAsync(device.DeviceId, cancellationToken);
-        var state = locked.State;
+        // Readers never take the reconciler lock: a committed snapshot is enough
+        // and a reconciler may hold the lock across several NetBird calls.
+        var state = await _states.ReadSnapshotAsync(device.DeviceId, cancellationToken);
         if (state is null || state.HighestKind != DeviceAccessProviderCommandKind.Apply ||
             state.HighestRevision != device.AccessRevision ||
             !string.Equals(state.UserId, device.UserId, StringComparison.Ordinal) ||
@@ -78,8 +81,7 @@ public sealed class NetBirdDeviceAccessGrantProvider : IDeviceAccessGrantProvide
         AuthenticatedDevice device,
         CancellationToken cancellationToken)
     {
-        await using var locked = await _states.LockAsync(device.DeviceId, cancellationToken);
-        var state = locked.State;
+        var state = await _states.ReadSnapshotAsync(device.DeviceId, cancellationToken);
         if (state is null || state.HighestRevision != device.AccessRevision ||
             !string.Equals(state.UserId, device.UserId, StringComparison.Ordinal) ||
             !string.Equals(state.CompanyId, device.CompanyId, StringComparison.Ordinal))
@@ -104,10 +106,16 @@ public sealed class NetBirdDeviceAccessGrantProvider : IDeviceAccessGrantProvide
             return State("unknown", null, [], now);
         }
 
-        await _management.AssertBootstrapIsolationAsync(cancellationToken);
-        var group = await _management.GetGroupAsync(state.BootstrapGroupId, cancellationToken);
-        var policy = await _management.GetPolicyAsync(state.PolicyId, cancellationToken);
-        var peer = await _management.GetPeerAsync(state.PeerId, cancellationToken);
+        // Independent reads run concurrently; isolation is still verified on
+        // every call before "ready" can be reported.
+        var isolationTask = _management.AssertIsolationAsync(null, cancellationToken).AsTask();
+        var groupTask = _management.GetGroupAsync(state.BootstrapGroupId, cancellationToken).AsTask();
+        var policyTask = _management.GetPolicyAsync(state.PolicyId, cancellationToken).AsTask();
+        var peerTask = _management.GetPeerAsync(state.PeerId, cancellationToken).AsTask();
+        await NetBirdManagementClient.WhenAllAsync(isolationTask, groupTask, policyTask, peerTask);
+        var group = groupTask.Result;
+        var policy = policyTask.Result;
+        var peer = peerTask.Result;
         if (!IsOwnedReadyState(state, group, policy, peer))
             return State("unknown", null, [], now);
 
@@ -149,6 +157,8 @@ public sealed class NetBirdDeviceAccessGrantProvider : IDeviceAccessGrantProvide
         var group = state.BootstrapGroupId is null
             ? null
             : await _management.GetGroupAsync(state.BootstrapGroupId, cancellationToken);
+        // A group read by id in this attempt already carries its current peers.
+        var groupReadById = group is not null;
         if (group is null)
         {
             group = await _management.EnsureDeviceGroupAsync(groupName, cancellationToken);
@@ -158,15 +168,25 @@ public sealed class NetBirdDeviceAccessGrantProvider : IDeviceAccessGrantProvide
         }
 
 
+        NetBirdPolicyWrite policyWrite;
+        try { policyWrite = BuildPolicy(command, group.Id); }
+        catch (InvalidOperationException)
+        {
+            // A newer unsupported grant must not leave the previous revision's
+            // wire policy active, even though local admission is already closed.
+            await RevokeOwnedPolicyAsync(locked, state, cancellationToken);
+            throw;
+        }
+
+        IReadOnlyList<NetBirdPolicy> currentPolicies;
         try
         {
-            await _management.AssertBootstrapIsolationAsync(cancellationToken);
-            if (_options.DnsDistributionGroupId is { } dnsGroupId)
-            {
-                if (string.Equals(group.Id, dnsGroupId, StringComparison.Ordinal))
-                    throw new InvalidOperationException("The DNS distribution group must be separate from the per-device group.");
-                await _management.AssertDnsDistributionGroupIsolationAsync(dnsGroupId, cancellationToken);
-            }
+            if (_options.DnsDistributionGroupId is { } dnsGroupId &&
+                string.Equals(group.Id, dnsGroupId, StringComparison.Ordinal))
+                throw new InvalidOperationException("The DNS distribution group must be separate from the per-device group.");
+            // One policy listing per attempt serves the All-group and DNS-group
+            // isolation checks and the device policy lookup below.
+            currentPolicies = await _management.AssertIsolationAsync(_options.DnsDistributionGroupId, cancellationToken);
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
@@ -174,10 +194,14 @@ public sealed class NetBirdDeviceAccessGrantProvider : IDeviceAccessGrantProvide
             throw;
         }
 
+        var peerDiscoveredNow = false;
         if (state.PeerId is null)
         {
-            group = await _management.GetGroupAsync(group.Id, cancellationToken)
-                ?? throw new InvalidOperationException("The device-owned NetBird group disappeared.");
+            if (!groupReadById)
+            {
+                group = await _management.GetGroupAsync(group.Id, cancellationToken)
+                    ?? throw new InvalidOperationException("The device-owned NetBird group disappeared.");
+            }
             var peers = group.Peers ?? [];
             if (peers.Count > 1)
                 throw new InvalidOperationException("A device-owned NetBird bootstrap group contains more than one peer.");
@@ -188,11 +212,13 @@ public sealed class NetBirdDeviceAccessGrantProvider : IDeviceAccessGrantProvide
             }
             state.PeerId = peers[0].Id;
             await locked.SaveAsync(cancellationToken);
+            peerDiscoveredNow = true;
         }
 
-        var peer = await RequireReadyPeerAsync(state.PeerId, cancellationToken);
-        var policyWrite = BuildPolicy(command, group.Id);
-        var policy = await _management.UpsertPolicyAsync(state.PolicyId, policyWrite, cancellationToken);
+        var peer = peerDiscoveredNow
+            ? await WaitForNewPeerAsync(state.PeerId, cancellationToken)
+            : await RequireReadyPeerAsync(state.PeerId, cancellationToken);
+        var policy = await _management.UpsertPolicyAsync(state.PolicyId, policyWrite, currentPolicies, cancellationToken);
         state.PolicyId = policy.Id;
         await locked.SaveAsync(cancellationToken);
 
@@ -308,15 +334,36 @@ public sealed class NetBirdDeviceAccessGrantProvider : IDeviceAccessGrantProvide
         actual.Distinct(StringComparer.Ordinal).Count() == expected.Count &&
         expected.All(groupId => actual.Contains(groupId, StringComparer.Ordinal));
 
+    // A peer that registered moments ago usually reports Connected within a
+    // second or two. Re-check it briefly inside this attempt instead of handing
+    // the whole reconcile back to the outbox; every readiness condition of
+    // RequireReadyPeerAsync still applies to the final observation.
+    private async ValueTask<NetBirdPeer> WaitForNewPeerAsync(string peerId, CancellationToken cancellationToken)
+    {
+        var started = _timeProvider.GetTimestamp();
+        while (true)
+        {
+            var peer = await _management.GetPeerAsync(peerId, cancellationToken)
+                ?? throw new NetBirdPeerNotReadyException("The expected NetBird peer does not exist.");
+            if (IsReadyPeer(peer)) return peer;
+            if (peer.Connected || _timeProvider.GetElapsedTime(started) + PeerConnectPollInterval > _options.PeerConnectWait)
+                throw new NetBirdPeerNotReadyException("The expected NetBird peer is not connected with a fresh assigned overlay address.");
+            await Task.Delay(PeerConnectPollInterval, _timeProvider, cancellationToken);
+        }
+    }
+
     private async ValueTask<NetBirdPeer> RequireReadyPeerAsync(string peerId, CancellationToken cancellationToken)
     {
         var peer = await _management.GetPeerAsync(peerId, cancellationToken)
             ?? throw new NetBirdPeerNotReadyException("The expected NetBird peer does not exist.");
-        if (!IsConnectedPeer(peer) ||
-            NormalizeAssignedAddress(peer.Ip) is null && NormalizeAssignedAddress(peer.Ipv6) is null)
+        if (!IsReadyPeer(peer))
             throw new NetBirdPeerNotReadyException("The expected NetBird peer is not connected with a fresh assigned overlay address.");
         return peer;
     }
+
+    private static bool IsReadyPeer(NetBirdPeer peer) =>
+        IsConnectedPeer(peer) &&
+        (NormalizeAssignedAddress(peer.Ip) is not null || NormalizeAssignedAddress(peer.Ipv6) is not null);
 
     private NetBirdPolicyWrite BuildPolicy(DeviceAccessProviderCommand command, string sourceGroupId)
     {
@@ -329,16 +376,32 @@ public sealed class NetBirdDeviceAccessGrantProvider : IDeviceAccessGrantProvide
         if (matched.Length == 0)
             throw new InvalidOperationException("No NetBird access binding matches the current device grants.");
 
-        var rules = matched.Select((binding, index) => new NetBirdPolicyRuleWrite(
-            "grant-" + (index + 1),
+        // NetBird 0.79 persists only the first rule of a policy. Combining
+        // authorized ports is equivalent only for the same destination,
+        // protocol and direction; never form a cross-product of destinations
+        // and ports or silently discard another matched binding.
+        var binding = matched[0];
+        if (matched.Any(candidate =>
+                !string.Equals(candidate.DestinationGroupId, binding.DestinationGroupId, StringComparison.Ordinal) ||
+                !string.Equals(candidate.Protocol, binding.Protocol, StringComparison.Ordinal) ||
+                candidate.Bidirectional != binding.Bidirectional))
+            throw new InvalidOperationException("NetBird requires separate policies for different destinations, protocols or directions.");
+        // An empty port set means every port for this protocol. Preserve that
+        // existing grant if present, otherwise union only the matched ports.
+        var ports = matched.Any(candidate => candidate.Ports.Count == 0)
+            ? Array.Empty<string>()
+            : matched.SelectMany(candidate => candidate.Ports).Distinct().Order()
+                .Select(port => port.ToString(System.Globalization.CultureInfo.InvariantCulture)).ToArray();
+        var rules = new[] { new NetBirdPolicyRuleWrite(
+            "grant-1",
             "Connector-managed least-privilege destination.",
             true,
             "accept",
             binding.Bidirectional,
             binding.Protocol,
-            binding.Ports.Select(port => port.ToString(System.Globalization.CultureInfo.InvariantCulture)).ToArray(),
+            ports,
             [sourceGroupId],
-            [binding.DestinationGroupId])).ToArray();
+            [binding.DestinationGroupId]) };
         var name = ResourceName("connector-policy", command.DeviceId);
         return new NetBirdPolicyWrite(name, "Connector-managed device access; revision " + command.DesiredRevision, true, [], rules);
     }
@@ -428,7 +491,7 @@ public sealed class NetBirdDeviceAccessGrantProvider : IDeviceAccessGrantProvide
         return true;
     }
 
-    private async ValueTask ReconcileRevokeAsync(
+    private async ValueTask RevokeOwnedPolicyAsync(
         LockedNetBirdState locked,
         NetBirdProviderState state,
         CancellationToken cancellationToken)
@@ -436,11 +499,31 @@ public sealed class NetBirdDeviceAccessGrantProvider : IDeviceAccessGrantProvide
         var policy = state.PolicyId is null
             ? await _management.FindPolicyByNameAsync(ResourceName("connector-policy", state.DeviceId), cancellationToken)
             : await _management.GetPolicyAsync(state.PolicyId, cancellationToken);
-        if (policy is not null) await _management.DeletePolicyAsync(policy.Id, cancellationToken);
+        if (policy is not null)
+        {
+            await _management.DeletePolicyAsync(policy.Id, cancellationToken);
+            if (await _management.GetPolicyAsync(policy.Id, cancellationToken) is not null)
+                throw new InvalidOperationException("NetBird policy revoke was not confirmed.");
+        }
+        state.PolicyId = null;
+        state.AppliedPolicy = null;
+        await locked.SaveAsync(cancellationToken);
+    }
 
-        if (state.SetupKeyId is not null)
-            await _management.RevokeSetupKeyAsync(state.SetupKeyId, cancellationToken);
-        await _management.RevokeSetupKeysNamedAsync(ResourceName("connector-key", state.DeviceId), cancellationToken);
+    private async ValueTask ReconcileRevokeAsync(
+        LockedNetBirdState locked,
+        NetBirdProviderState state,
+        CancellationToken cancellationToken)
+    {
+        // The traffic policy and the setup keys are independent and are removed
+        // concurrently. The group (and with it the peer list) is read only after
+        // the keys are revoked, so no peer can register unseen; the group is
+        // deleted only after its peers. Confirmations are read concurrently and
+        // all of them must pass.
+        var policyTask = DeleteOwnedPolicyAsync(state, cancellationToken);
+        var keysTask = RevokeOwnedSetupKeysAsync(state, cancellationToken);
+        await NetBirdManagementClient.WhenAllAsync(policyTask, keysTask);
+        var policy = policyTask.Result;
 
         var group = state.BootstrapGroupId is null
             ? await _management.FindGroupByNameAsync(ResourceName("connector-device", state.DeviceId), cancellationToken)
@@ -448,17 +531,24 @@ public sealed class NetBirdDeviceAccessGrantProvider : IDeviceAccessGrantProvide
         var peerIds = new HashSet<string>(StringComparer.Ordinal);
         if (state.PeerId is not null) peerIds.Add(state.PeerId);
         foreach (var peer in group?.Peers ?? []) peerIds.Add(peer.Id);
-        foreach (var peerId in peerIds) await _management.DeletePeerAsync(peerId, cancellationToken);
+        await NetBirdManagementClient.WhenAllAsync(peerIds
+            .Select(peerId => _management.DeletePeerAsync(peerId, cancellationToken).AsTask())
+            .ToArray());
         if (group is not null) await _management.DeleteGroupAsync(group.Id, cancellationToken);
 
-        if (policy is not null && await _management.GetPolicyAsync(policy.Id, cancellationToken) is not null)
+        var policyGone = policy is null
+            ? Task.FromResult<NetBirdPolicy?>(null)
+            : _management.GetPolicyAsync(policy.Id, cancellationToken).AsTask();
+        var peersGone = peerIds.Select(peerId => _management.GetPeerAsync(peerId, cancellationToken).AsTask()).ToArray();
+        var groupGone = group is null
+            ? Task.FromResult<NetBirdGroup?>(null)
+            : _management.GetGroupAsync(group.Id, cancellationToken).AsTask();
+        await NetBirdManagementClient.WhenAllAsync([policyGone, groupGone, .. peersGone]);
+        if (policyGone.Result is not null)
             throw new InvalidOperationException("NetBird policy revoke was not confirmed.");
-        foreach (var peerId in peerIds)
-        {
-            if (await _management.GetPeerAsync(peerId, cancellationToken) is not null)
-                throw new InvalidOperationException("NetBird peer revoke was not confirmed.");
-        }
-        if (group is not null && await _management.GetGroupAsync(group.Id, cancellationToken) is not null)
+        if (peersGone.Any(peer => peer.Result is not null))
+            throw new InvalidOperationException("NetBird peer revoke was not confirmed.");
+        if (groupGone.Result is not null)
             throw new InvalidOperationException("NetBird device group deletion was not confirmed.");
 
         state.PolicyId = null;
@@ -471,6 +561,22 @@ public sealed class NetBirdDeviceAccessGrantProvider : IDeviceAccessGrantProvide
         state.ProtectedSetupKey = null;
         state.SetupKeyExpiresAtUtc = null;
         await locked.SaveAsync(cancellationToken);
+    }
+
+    private async Task<NetBirdPolicy?> DeleteOwnedPolicyAsync(NetBirdProviderState state, CancellationToken cancellationToken)
+    {
+        var policy = state.PolicyId is null
+            ? await _management.FindPolicyByNameAsync(ResourceName("connector-policy", state.DeviceId), cancellationToken)
+            : await _management.GetPolicyAsync(state.PolicyId, cancellationToken);
+        if (policy is not null) await _management.DeletePolicyAsync(policy.Id, cancellationToken);
+        return policy;
+    }
+
+    private async Task RevokeOwnedSetupKeysAsync(NetBirdProviderState state, CancellationToken cancellationToken)
+    {
+        if (state.SetupKeyId is not null)
+            await _management.RevokeSetupKeyAsync(state.SetupKeyId, cancellationToken);
+        await _management.RevokeSetupKeysNamedAsync(ResourceName("connector-key", state.DeviceId), cancellationToken);
     }
 
     private async ValueTask RevokeSetupKeyAndForgetSecretAsync(

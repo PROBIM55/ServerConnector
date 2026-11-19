@@ -38,6 +38,39 @@ public static class ConnectorAccessEndpoints
     public const string EnrollmentRateLimitPolicy = "connector-device-enrollment";
     private const long MaximumRequestBytes = 32768;
 
+    // Clients up to 1.1.14 keep waiting only on the exact legacy 403 codes
+    // access_pending_or_denied, vpn_bootstrap_unavailable and
+    // vpn_state_unavailable and treat any other 403 as final. Distinct codes
+    // are therefore returned only to a client that sends
+    // "X-Connector-Protocol: 2" (or higher); everyone else gets the legacy
+    // code for every failure of that endpoint.
+    public const string ProtocolHeader = "X-Connector-Protocol";
+    public const int DistinctFailureCodesProtocol = 2;
+
+    // Distinct /profile codes (HTTP 403). Transient: access_pending (providers
+    // are still applying the current grants). Definitive until an
+    // administrator acts: access_denied, device_not_active,
+    // provider_configuration, access_revision_regressed. Any other service
+    // code keeps access_pending_or_denied.
+    private static readonly HashSet<string> ProfileFailureCodes = new(StringComparer.Ordinal)
+    {
+        "access_pending", "access_denied", "device_not_active", "provider_configuration", "access_revision_regressed",
+    };
+
+    // Distinct provider codes on /vpn/bootstrap and /vpn/state (HTTP 403). Transient: vpn_bootstrap_unavailable, vpn_state_unavailable
+    // (no bootstrap/state for the current revision yet). Definitive:
+    // vpn_bootstrap_consumed (peer already registered; use /vpn/state),
+    // vpn_bootstrap_protection (server cannot recover the protected key),
+    // vpn_state_not_supported (provider reports no transport state).
+    // 503 vpn_not_configured is returned to every client; "provider busy" is
+    // 503 vpn_provider_busy with Retry-After for protocol 2 and the legacy
+    // waiting 403 code otherwise.
+    private static readonly HashSet<string> VpnFailureCodes = new(StringComparer.Ordinal)
+    {
+        "vpn_bootstrap_unavailable", "vpn_bootstrap_consumed", "vpn_bootstrap_protection",
+        "vpn_state_unavailable", "vpn_state_not_supported",
+    };
+
     public static IEndpointRouteBuilder MapConnectorAccess(this IEndpointRouteBuilder endpoints)
     {
         var device = endpoints.MapGroup("/api/platform/connector/access/v1");
@@ -76,8 +109,39 @@ public static class ConnectorAccessEndpoints
     {
         var identity = await AuthenticateAsync(context, authenticator);
         if (identity is null) return Failure("device_unauthorized", StatusCodes.Status401Unauthorized);
-        var result = await service.GetProfileAsync(identity, context.RequestAborted);
-        return result.IsSuccess ? Results.Json(result.Value) : Failure("access_pending_or_denied", StatusCodes.Status403Forbidden);
+        return ProfileResult(context, await service.GetProfileAsync(identity, context.RequestAborted));
+    }
+
+    internal static bool UsesDistinctFailureCodes(HttpContext context) =>
+        context.Request.Headers.TryGetValue(ProtocolHeader, out var values) &&
+        values.Count == 1 &&
+        int.TryParse(values[0], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var version) &&
+        version >= DistinctFailureCodesProtocol;
+
+    internal static IResult ProfileResult(HttpContext context, DeviceAccessResult<DeviceAccessProfile> result)
+    {
+        if (result.IsSuccess) return Results.Json(result.Value);
+        var code = UsesDistinctFailureCodes(context) &&
+                   result.Failure?.Code is { } failure && ProfileFailureCodes.Contains(failure)
+            ? failure
+            : "access_pending_or_denied";
+        return Failure(code, StatusCodes.Status403Forbidden);
+    }
+
+    // A device polling its VPN endpoints is alive; let its pending grant be
+    // retried now. Never fails the read itself.
+    private static async ValueTask ResumePendingAccessAsync(HttpContext context, AuthenticatedDevice identity)
+    {
+        var profiles = context.RequestServices.GetService<DeviceAccessProfileService>();
+        if (profiles is null) return;
+        try
+        {
+            await profiles.ResumePendingAccessAsync(identity, context.RequestAborted);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException || !context.RequestAborted.IsCancellationRequested)
+        {
+            // The durable retry schedule still applies.
+        }
     }
 
     private static async Task<IResult> VpnBootstrapAsync(HttpContext context,
@@ -88,10 +152,8 @@ public static class ConnectorAccessEndpoints
         if (identity is null) return Failure("device_unauthorized", StatusCodes.Status401Unauthorized);
         var reader = context.RequestServices.GetService<IConnectorVpnBootstrapReader>();
         if (reader is null) return Failure("vpn_not_configured", StatusCodes.Status503ServiceUnavailable);
-        var result = await reader.GetAsync(identity, context.RequestAborted);
-        return result.IsSuccess
-            ? Results.Json(result.Value)
-            : Failure("vpn_bootstrap_unavailable", StatusCodes.Status403Forbidden);
+        await ResumePendingAccessAsync(context, identity);
+        return await ReadVpnAsync(context, () => reader.GetAsync(identity, context.RequestAborted), "vpn_bootstrap_unavailable");
     }
 
     private static async Task<IResult> VpnStateAsync(HttpContext context,
@@ -102,10 +164,32 @@ public static class ConnectorAccessEndpoints
         if (identity is null) return Failure("device_unauthorized", StatusCodes.Status401Unauthorized);
         var reader = context.RequestServices.GetService<IConnectorVpnBootstrapReader>();
         if (reader is null) return Failure("vpn_not_configured", StatusCodes.Status503ServiceUnavailable);
-        var result = await reader.GetStateAsync(identity, context.RequestAborted);
-        return result.IsSuccess
-            ? Results.Json(result.Value)
-            : Failure("vpn_state_unavailable", StatusCodes.Status403Forbidden);
+        await ResumePendingAccessAsync(context, identity);
+        return await ReadVpnAsync(context, () => reader.GetStateAsync(identity, context.RequestAborted), "vpn_state_unavailable");
+    }
+
+    // A provider whose per-device state is momentarily held by a reconciler
+    // answers 503 with Retry-After instead of an unhandled 500.
+    internal static async Task<IResult> ReadVpnAsync<T>(
+        HttpContext context,
+        Func<ValueTask<DeviceAccessResult<T>>> read,
+        string legacyCode)
+    {
+        var distinct = UsesDistinctFailureCodes(context);
+        DeviceAccessResult<T> result;
+        try { result = await read(); }
+        catch (DeviceAccessProviderBusyException busy)
+        {
+            return distinct
+                ? ConnectorAccessHttpResults.Busy(context, busy, "vpn_provider_busy")
+                : Failure(legacyCode, StatusCodes.Status403Forbidden);
+        }
+
+        if (result.IsSuccess) return Results.Json(result.Value);
+        var code = distinct && result.Failure?.Code is { } failure && VpnFailureCodes.Contains(failure)
+            ? failure
+            : legacyCode;
+        return Failure(code, StatusCodes.Status403Forbidden);
     }
 
     private static async Task<IResult> RecoverAsync(Guid requestId, HttpContext context,

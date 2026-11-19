@@ -13,6 +13,12 @@ public sealed class ConnectorJobRunner
     private readonly IRequestIdempotencyStore _idempotencyStore;
     private readonly IConnectorLogger _logger;
 
+    /// <summary>
+    /// Raised once per execution with the leased job, before its first status. Lets a UI classify the job by
+    /// its envelope (operation, executor, payload endpoint) without keeping or forwarding the payload.
+    /// </summary>
+    public event Action<ConnectorJobEnvelope>? JobPicked;
+
     public ConnectorJobRunner(
         IEnumerable<IProviderAdapter> providers,
         IJobStatusPublisher publisher,
@@ -45,6 +51,13 @@ public sealed class ConnectorJobRunner
         string? remoteAuthority = null,
         Func<bool>? interruptionRequested = null)
     {
+        var picked = JobPicked;
+        if (picked is not null)
+            foreach (Action<ConnectorJobEnvelope> handler in picked.GetInvocationList())
+            {
+                try { handler(job); }
+                catch { /* An observer never affects execution. */ }
+            }
         await PublishAsync(publisher, deviceId, job, JobStatus.Picked, "Job picked by connector.", cancellationToken: cancellationToken);
         _logger.Info("Job picked.", job);
 

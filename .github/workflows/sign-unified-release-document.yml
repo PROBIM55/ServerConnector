@@ -13,7 +13,7 @@ permissions:
 jobs:
   sign:
     runs-on: windows-latest
-    environment: production
+    environment: ${{ inputs.purpose == 'updates' && 'release-signing' || 'production' }}
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
@@ -27,7 +27,7 @@ jobs:
           SIGN_DOCUMENT_BASE64: ${{ inputs.document_base64 }}
           SIGN_DOCUMENT_SHA256: ${{ inputs.document_sha256 }}
           SIGN_SOURCE_SHA: ${{ inputs.source_sha }}
-          SIGN_KEY_PEM: ${{ inputs.purpose == 'updates' && secrets.UNIFIED_UPDATE_SIGNING_KEY_PEM || secrets.UNIFIED_HELPER_MANIFEST_SIGNING_KEY_PEM }}
+          SIGN_KEY_PEM: ${{ inputs.purpose == 'updates' && secrets.UPDATE_SIGNING_KEY_PEM || secrets.UNIFIED_HELPER_MANIFEST_SIGNING_KEY_PEM }}
         run: |
           & 'connector-desktop/scripts/sign_release_document_ci.ps1' -OutputDirectory "$env:RUNNER_TEMP/signature"
       - uses: actions/upload-artifact@v4

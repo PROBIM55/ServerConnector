@@ -38,6 +38,9 @@ public partial class GraphiteWebView : System.Windows.Controls.UserControl, IAsy
         InitializeComponent();
     }
 
+    /// <summary>True once WebView2 accepted CSS app-region; false before initialization or when unsupported.</summary>
+    public bool NonClientRegionEnabled { get; private set; }
+
     public void Configure(
         Func<GraphiteRpcRequest, CancellationToken, Task<object?>> commandHandler,
         Action<string>? log = null,
@@ -179,10 +182,10 @@ public partial class GraphiteWebView : System.Windows.Controls.UserControl, IAsy
 
         try
         {
-            Browser.DefaultBackgroundColor = System.Drawing.Color.FromArgb(255, 18, 23, 29);
+            Browser.DefaultBackgroundColor = System.Drawing.Color.FromArgb(255, 26, 28, 32);
             string userDataDirectory = _userDataDirectory ?? Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "Structura Unified Connector", "UI", "WebView2");
+                "Platform Connector", "UI", "WebView2");
             var environment = await CoreWebView2Environment.CreateAsync(userDataFolder: userDataDirectory);
             await Browser.EnsureCoreWebView2Async(environment);
             ThrowIfDisposed();
@@ -190,6 +193,10 @@ public partial class GraphiteWebView : System.Windows.Controls.UserControl, IAsy
             CoreWebView2 core = Browser.CoreWebView2 ??
                 throw new InvalidOperationException("WebView2 initialization did not produce a browser instance.");
             ApplyRestrictedSettings(core.Settings);
+            // The document's 40 px title bar (CSS app-region: drag) moves and maximizes the window. Older runtimes
+            // lack the setting; the host then falls back to the system caption (NonClientRegionEnabled stays false).
+            NonClientRegionEnabled = GraphiteWebSecurity.TryEnableOptional(
+                () => core.Settings.IsNonClientRegionSupportEnabled = true, LogFixed, "non-client region");
             AttachCoreEvents(core);
             core.SetVirtualHostNameToFolderMapping(
                 GraphiteWebSecurity.VirtualHostName,
@@ -336,6 +343,29 @@ public partial class GraphiteWebView : System.Windows.Controls.UserControl, IAsy
             "Content-Type: text/plain\r\nCache-Control: no-store");
     }
 
+    internal const string DropCommand = "drop-input";
+    private const int MaximumDroppedFiles = 128;
+
+    private static IReadOnlyList<string> ReadDroppedPaths(CoreWebView2WebMessageReceivedEventArgs eventArgs)
+    {
+        var paths = new List<string>();
+        try
+        {
+            var objects = eventArgs.AdditionalObjects;
+            if (objects is null) return paths;
+            foreach (var item in objects)
+            {
+                if (item is CoreWebView2File file && !string.IsNullOrWhiteSpace(file.Path)) paths.Add(file.Path);
+                if (paths.Count > MaximumDroppedFiles) break;
+            }
+        }
+        catch (Exception exception) when (exception is InvalidOperationException or System.Runtime.InteropServices.COMException or NotImplementedException)
+        {
+            // An old WebView2 runtime has no additional objects; the drop is then an empty selection.
+        }
+        return paths;
+    }
+
     private void OnWebMessageReceived(object? sender, CoreWebView2WebMessageReceivedEventArgs eventArgs)
     {
         if (_disposed ||
@@ -359,6 +389,10 @@ public partial class GraphiteWebView : System.Windows.Controls.UserControl, IAsy
             PostResponse(request.Id, false, null, InvalidRequestError());
             return;
         }
+
+        // Files dropped on the window arrive as WebView2 file objects of one command only; any other command
+        // ignores additional objects. The page cannot name a path: only files the user dropped carry one.
+        if (request.Command == DropCommand) request = request with { DroppedPaths = ReadDroppedPaths(eventArgs) };
 
         Func<GraphiteRpcRequest, CancellationToken, Task<object?>>? handler;
         lock (_stateLock)

@@ -13,12 +13,17 @@ public sealed class BridgeCadE2EStabilityTests
     [Fact]
     public async Task AutoCadAdapter_RuntimeFlow_IsStable_ForTenRuns()
     {
-        var adapter = new AutoCadProviderAdapter();
         var tempDir = Path.Combine(Path.GetTempPath(), "platform-autocad-soak", Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(tempDir);
-        var scriptPath = Path.Combine(tempDir, "run.cmd");
-        File.WriteAllText(scriptPath, "@echo off\r\nexit /b 0", System.Text.Encoding.ASCII);
-        var statusPath = Path.Combine(tempDir, "build-status.json");
+        var pluginDirectory = Path.Combine(tempDir, "plugins");
+        Directory.CreateDirectory(pluginDirectory);
+        var pluginPath = Path.Combine(pluginDirectory, "Bridge.AutoCadPlugin.dll");
+        File.WriteAllBytes(pluginPath, [0x4D, 0x5A]);
+        // «Локальный AutoCAD» — безвредный системный exe, который сразу завершается.
+        var exePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "whoami.exe");
+        var stateRoot = Path.Combine(tempDir, "state");
+        Directory.CreateDirectory(stateRoot);
+        var adapter = new AutoCadProviderAdapter(null, () => exePath, pluginDirectory, stateRoot);
+        var statusPath = Path.Combine(stateRoot, "build-status.json");
 
         for (var i = 0; i < 10; i++)
         {
@@ -32,10 +37,7 @@ public sealed class BridgeCadE2EStabilityTests
 
             var payloadJson = JsonSerializer.Serialize(new
             {
-                autoCadExePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "cmd.exe"),
-                scriptPath,
-                workingDirectory = tempDir,
-                buildStatusPath = statusPath,
+                bridgePluginDllPath = pluginPath,
                 jobTimeoutSeconds = 15,
                 diagnostics = true
             });

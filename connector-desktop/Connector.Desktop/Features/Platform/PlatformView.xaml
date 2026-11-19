@@ -14,7 +14,6 @@
                     <PasswordBox x:Name="PlatformTokenPasswordBox" Grid.Column="1" PasswordChanged="TokenChanged" />
                 </Grid>
                 <WrapPanel Margin="0,0,0,14">
-                    <Button Style="{StaticResource SecondaryButton}" Content="Импортировать прежние настройки" Command="{Binding ImportSettingsCommand}" />
                     <Button Style="{StaticResource PrimaryButton}" Command="{Binding ConnectCommand}">
                         <TextBlock Text="Подключить" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
                     </Button>

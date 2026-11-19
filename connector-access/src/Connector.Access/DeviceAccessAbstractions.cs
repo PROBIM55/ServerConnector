@@ -81,7 +81,8 @@ public interface IConnectorVpnBootstrapReader
     ValueTask<DeviceAccessResult<ConnectorVpnTransportState>> GetStateAsync(
         AuthenticatedDevice device,
         CancellationToken cancellationToken)
-        => ValueTask.FromResult(DeviceAccessResult<ConnectorVpnTransportState>.Fail("vpn_state_unavailable", "VPN state is not available."));
+        => ValueTask.FromResult(DeviceAccessResult<ConnectorVpnTransportState>.Fail(
+            "vpn_state_not_supported", "The configured VPN provider does not report transport state."));
 }
 
 public enum DeviceAccessProviderCommandKind { Apply, Revoke }
@@ -101,7 +102,13 @@ public sealed record ProviderDispatchResult(
     string CommandId,
     string ProviderName,
     bool Succeeded,
-    string? Error);
+    string? Error)
+{
+    // When the failed command becomes eligible again; null after success,
+    // fence rejection or dead-lettering.
+    public DateTimeOffset? RetryAtUtc { get; init; }
+    public bool DeadLettered { get; init; }
+}
 
 // Providers must durably fence by (DeviceId, DesiredRevision, Kind): reject any
 // lower revision and reject a different action at an already observed revision.
@@ -122,7 +129,23 @@ public sealed class DeviceAccessOptions
     public TimeSpan EnrollmentIssuanceLease { get; set; } = TimeSpan.FromMinutes(2);
     public TimeSpan EnrollmentProofMaximumLifetime { get; set; } = TimeSpan.FromMinutes(15);
     public TimeSpan ProviderDispatchLease { get; set; } = TimeSpan.FromMinutes(2);
-    public TimeSpan ProviderRetryBackoff { get; set; } = TimeSpan.FromSeconds(30);
+    // First retry delay of the capped exponential schedule used for generic
+    // provider failures and timeouts.
+    public TimeSpan ProviderRetryBackoff { get; set; } = TimeSpan.FromSeconds(5);
+    public TimeSpan ProviderRetryBackoffMaximum { get; set; } = TimeSpan.FromMinutes(5);
+    // An apply that fails generically this many times in a row (VPN "not
+    // ready"/"busy" waits do not count) is parked: status 'error' with
+    // last_error 'dead_letter:*', skipped by the dispatcher. Revoke commands
+    // are never parked. 0 disables parking.
+    public int ProviderDeadLetterAttempts { get; set; } = 60;
+    // The device's own authenticated profile, vpn/state or vpn/bootstrap
+    // request re-arms its current apply: a parked one once it has been parked
+    // this long, a waiting one at most once per interval.
+    public TimeSpan ProviderDeadLetterReviveInterval { get; set; } = TimeSpan.FromMinutes(1);
+    // Safety poll for leases expired by another process; new commands wake the
+    // dispatcher immediately through ConnectorAccessDispatchSignal.
+    public TimeSpan ProviderDispatchIdlePoll { get; set; } = TimeSpan.FromSeconds(5);
+    public int ProviderDispatchBatchSize { get; set; } = 32;
     public ISet<string> RequiredAccessProviders { get; } =
         new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "api", "vpn", "smb" };
 }

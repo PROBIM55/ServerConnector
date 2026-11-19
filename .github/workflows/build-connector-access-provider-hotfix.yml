@@ -1,10 +1,10 @@
-name: Build Connector access provider hotfix
+name: Build Connector Access server packages
 
 on:
   workflow_dispatch:
     inputs:
       source_sha:
-        description: Exact merged source commit to build
+        description: Exact public source commit
         required: true
         type: string
 
@@ -12,82 +12,70 @@ permissions:
   contents: read
 
 concurrency:
-  group: connector-access-provider-hotfix
+  group: connector-access-packages
   cancel-in-progress: false
 
 jobs:
-  build:
+  verify-package:
     runs-on: windows-latest
-    timeout-minutes: 45
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: 8.0.x
+          dotnet-version: '8.0.426'
       - name: Verify exact source
         shell: pwsh
         env:
           EXPECTED_SHA: ${{ inputs.source_sha }}
         run: |
-          $actual = (git rev-parse HEAD).Trim()
-          if ($actual -cne $env:EXPECTED_SHA -or $actual -notmatch '^[a-f0-9]{40}$') {
-            throw "Source commit does not match the requested SHA."
-          }
-      - name: Test changed providers sequentially
+          $actual=(git rev-parse HEAD).Trim()
+          if($actual -cne $env:EXPECTED_SHA -or $actual -cnotmatch '^[a-f0-9]{40}$'){throw 'Source commit differs'}
+      - name: Test the access SDK sequentially
         shell: pwsh
         run: |
-          $projects = @(
+          foreach($project in @(
+            'connector-access/tests/Connector.Access.Tests/Connector.Access.Tests.csproj',
+            'connector-access/tests/Connector.Access.Api.Tests/Connector.Access.Api.Tests.csproj',
             'connector-access/tests/Connector.Access.NetBird.Tests/Connector.Access.NetBird.Tests.csproj',
-            'connector-access/tests/Connector.Access.Smb.Tests/Connector.Access.Smb.Tests.csproj'
-          )
-          foreach ($project in $projects) {
-            dotnet test $project --configuration Release -p:UseSharedCompilation=false -p:BuildInParallel=false --verbosity minimal
-            if ($LASTEXITCODE -ne 0) { throw "Provider tests failed: $project" }
+            'connector-access/tests/Connector.Access.NetBird.AspNetCore.Tests/Connector.Access.NetBird.AspNetCore.Tests.csproj',
+            'connector-access/tests/Connector.Access.Smb.Tests/Connector.Access.Smb.Tests.csproj',
+            'connector-access/tests/Connector.Access.Client.Tests/Connector.Access.Client.Tests.csproj'
+          )) {
+            dotnet test $project --configuration Release -p:UseSharedCompilation=false -p:BuildInParallel=false --logger trx --results-directory access-packages/tests --verbosity minimal
+            if($LASTEXITCODE -ne 0){throw "Access SDK tests failed: $project"}
           }
-      - name: Build release packages and SMB helper
+      - name: Pack the changed server packages
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Path 'provider-hotfix/packages','provider-hotfix/helper' | Out-Null
-          $projects = @(
-            'connector-access/src/Connector.Access.NetBird/Connector.Access.NetBird.csproj',
-            'connector-access/src/Connector.Access.Smb/Connector.Access.Smb.csproj'
-          )
-          foreach ($project in $projects) {
-            dotnet pack $project --configuration Release --output provider-hotfix/packages -p:UseSharedCompilation=false -p:BuildInParallel=false --verbosity minimal
-            if ($LASTEXITCODE -ne 0) { throw "Provider package failed: $project" }
+          $expected=[ordered]@{
+            'Connector.Access'='0.2.8'
+            'Connector.Access.AspNetCore'='0.2.14'
+            'Connector.Access.NetBird'='0.2.12'
+            'Connector.Access.Smb'='0.2.13'
           }
-          dotnet publish connector-access/smb-helper/Connector.Access.Smb.Helper.csproj --configuration Release --runtime win-x64 --self-contained true --output provider-hotfix/helper -p:UseSharedCompilation=false -p:BuildInParallel=false --verbosity minimal
-          if ($LASTEXITCODE -ne 0) { throw 'SMB helper publish failed' }
-          $expected = @('Connector.Access.NetBird.0.2.10.nupkg','Connector.Access.Smb.0.2.9.nupkg')
-          foreach ($name in $expected) {
-            if (-not (Test-Path -LiteralPath (Join-Path 'provider-hotfix/packages' $name) -PathType Leaf)) {
-              throw "Missing expected package: $name"
-            }
+          foreach($id in $expected.Keys){
+            $project="connector-access/src/$id/$id.csproj"
+            dotnet build $project --configuration Release -p:UseSharedCompilation=false -p:BuildInParallel=false --verbosity minimal
+            if($LASTEXITCODE -ne 0){throw "Build failed: $id"}
+            dotnet pack $project --configuration Release --no-build --no-restore --output access-packages/packages --verbosity minimal
+            if($LASTEXITCODE -ne 0){throw "Pack failed: $id"}
+            $package="access-packages/packages/$id.$($expected[$id]).nupkg"
+            if(!(Test-Path -LiteralPath $package)){throw "Expected package is missing: $package"}
           }
-          if (-not (Test-Path -LiteralPath 'provider-hotfix/helper/Connector.Access.Smb.Helper.exe' -PathType Leaf)) {
-            throw 'Missing SMB helper executable'
-          }
-      - name: Write exact artifact manifest
+          $actual=@(Get-ChildItem -LiteralPath 'access-packages/packages' -Filter '*.nupkg' -File)
+          if($actual.Count -ne $expected.Count){throw "Unexpected package set: $($actual.Name -join ', ')"}
+      - name: Write source and output manifest
         shell: pwsh
         run: |
-          $root = (Resolve-Path 'provider-hotfix').Path
-          $files = @(Get-ChildItem -LiteralPath $root -File -Recurse | Sort-Object FullName | ForEach-Object {
-            [pscustomobject]@{
-              path = [IO.Path]::GetRelativePath($root, $_.FullName).Replace('\','/')
-              size = $_.Length
-              sha256 = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
-            }
+          $root=(Resolve-Path 'access-packages').Path
+          $files=@(Get-ChildItem -LiteralPath $root -File -Recurse|Sort-Object FullName|ForEach-Object{
+            @{path=[IO.Path]::GetRelativePath($root,$_.FullName).Replace('\','/');size=$_.Length;sha256=(Get-FileHash -LiteralPath $_.FullName).Hash.ToLowerInvariant()}
           })
-          [pscustomobject]@{
-            repository = $env:GITHUB_REPOSITORY
-            sourceSha = $env:GITHUB_SHA
-            workflowRunId = $env:GITHUB_RUN_ID
-            workflowRunAttempt = $env:GITHUB_RUN_ATTEMPT
-            files = $files
-          } | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath 'provider-hotfix/manifest.json' -Encoding utf8
+          @{repository=$env:GITHUB_REPOSITORY;sourceSha=$env:GITHUB_SHA;workflowRunId=$env:GITHUB_RUN_ID;workflowRunAttempt=$env:GITHUB_RUN_ATTEMPT;files=$files}|ConvertTo-Json -Depth 8|Set-Content -LiteralPath 'access-packages/manifest.json' -Encoding utf8
       - uses: actions/upload-artifact@v4
         with:
-          name: connector-access-provider-hotfix-${{ github.sha }}
-          path: provider-hotfix/
+          name: connector-access-packages-${{ github.sha }}
+          path: access-packages/
           if-no-files-found: error
           retention-days: 14

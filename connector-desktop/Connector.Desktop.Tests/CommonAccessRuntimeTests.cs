@@ -86,6 +86,7 @@ public sealed class CommonAccessRuntimeTests : IDisposable
               "serviceBaseUri": "https://enrollment.test/",
               "issuerCertificateSha256": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
               "smbOverlayDestinations": ["100.90.0.5"],
+              "smbLegacyEncryptedShareUncs": ["\\\\62.113.36.107\\BIM_Models"],
               "services": [{
                 "serviceId": "control-plane",
                 "baseUri": "https://control.test/api/platform/connector/access/v1/",
@@ -106,6 +107,8 @@ public sealed class CommonAccessRuntimeTests : IDisposable
         Assert.IsType<ProtectedServiceNetworkGate>(result.Ports.ProtectedNetworkGate);
         Assert.Same(runtime, result.Ports.Transport);
         Assert.True(result.Ports.SmbDestinations.Contains(IPAddress.Parse("100.90.0.5")));
+        Assert.True(result.Ports.SmbDestinations.Contains(IPAddress.Parse("62.113.36.107")));
+        Assert.Equal(new[] { LegacyEncryptedSmbPolicy.ShareUnc }, runtime.LegacyEncryptedSmbShares);
 
         var repeated = runtime.TryGetUpgradeRuntimePorts();
         Assert.Same(result.Ports.EnrollmentClient, repeated.Ports!.EnrollmentClient);
@@ -125,6 +128,44 @@ public sealed class CommonAccessRuntimeTests : IDisposable
         Assert.Null(result.Ports);
         Assert.Equal(CommonAccessUpgradePortsBlocker.DeploymentNotConfigured, result.Blocker);
         Assert.False(runtime.HasStoredCredential);
+    }
+
+    [Fact]
+    public async Task StartupRestore_HandsOffWhenTheWaitGoesToTheBackgroundAndClearsTheWaitAfterwards()
+    {
+        var runtime = CommonAccessRuntime.CreateForFixture(_root, _root);
+        var connect = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var changes = 0;
+        runtime.WaitChanged += () => changes++;
+
+        var settle = runtime.SettleOrBackgroundAsync(connect.Task);
+        runtime.PublishWait(new(CommonConnectorConnectionPhase.Network, TimeSpan.FromSeconds(30), false, "vpn_authorization_pending"));
+        Assert.False(settle.IsCompleted, "a foreground wait keeps startup waiting");
+        runtime.PublishWait(new(CommonConnectorConnectionPhase.Network, TimeSpan.FromMinutes(4), true, "vpn_authorization_pending"));
+
+        Assert.False(await settle.WaitAsync(TimeSpan.FromSeconds(10)), "startup continues while the connect waits in the background");
+        Assert.True(runtime.Wait!.Background);
+        runtime.PublishWait(null);
+        Assert.Null(runtime.Wait);
+        Assert.Equal(3, changes);
+
+        connect.SetResult();
+        Assert.True(await runtime.SettleOrBackgroundAsync(connect.Task).WaitAsync(TimeSpan.FromSeconds(10)));
+    }
+
+    [Theory]
+    [InlineData("access_denied", "Доступ не выдан. Обратитесь к администратору компании.")]
+    [InlineData("access_not_granted", "Доступ не выдан. Обратитесь к администратору компании.")]
+    [InlineData("device_not_active", "Этот компьютер отключён администратором. Обратитесь к администратору компании.")]
+    [InlineData("provider_configuration", "Защищённое подключение не настроено на сервере. Обратитесь к администратору компании.")]
+    [InlineData("vpn_not_configured", "Защищённое подключение не настроено на сервере. Обратитесь к администратору компании.")]
+    [InlineData("access_profile_pending", null)]
+    [InlineData("service_temporarily_unavailable", null)]
+    public void DefinitiveOutcomes_HaveTheirOwnRussianText(string code, string? expected)
+    {
+        Assert.Equal(expected, CommonAccessRuntime.ProblemTextFor(code));
+        Assert.StartsWith("Не удалось запустить NetBird на этом компьютере.",
+            CommonAccessRuntime.ProblemTextFor("netbird_up_failed_repeatedly"));
     }
 
     public void Dispose()

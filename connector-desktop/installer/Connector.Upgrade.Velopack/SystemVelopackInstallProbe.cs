@@ -86,11 +86,11 @@ public sealed class SystemVelopackInstallProbe : IVelopackInstallProbe
             return Conflict("sq.version does not match the pinned packId, version and main executable.");
 
         // Titles are an allowlist, never a metadata-derived launch path. Preserve
-        // exact old launchers so an installed 1.1.2/pilot remains upgradeable.
+        // exact old launchers so installed 1.1.2 through 1.1.6 layouts remain upgradeable.
         var parsedVersion = Version.TryParse(metadata.Version.Split('-')[0], out var previousVersion);
         var launcherName = metadata.Title == "Платформа Коннектор" ? UnifiedVelopackApplication.RootLauncher :
             metadata.Title == "Structura Connector" && parsedVersion &&
-            previousVersion! < new Version(1, 1, 3) ? UnifiedVelopackApplication.PreviousRootLauncher :
+            previousVersion! < new Version(1, 1, 7) ? UnifiedVelopackApplication.PreviousRootLauncher :
             metadata.Title == "Structura Connector (новый)" && parsedVersion &&
             previousVersion! < new Version(1, 1, 2) ? UnifiedVelopackApplication.LegacyRootLauncher : null;
         if (launcherName is null)

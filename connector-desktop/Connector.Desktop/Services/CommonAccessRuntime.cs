@@ -11,25 +11,30 @@ namespace Connector.Desktop.Services;
 
 // Deployment configuration belongs to the machine-protected admin bundle,
 // never the per-user app or WebView. Enrollment credentials remain separate.
-public sealed class CommonAccessRuntime : ICommonConnectorRequestTransport
+public sealed class CommonAccessRuntime : ICommonConnectorRequestTransport, IOverlayAwareConnectorRequestTransport
 {
     private readonly CommonConnectorConnectionCoordinator? _coordinator;
     private readonly IConnectorEnrollmentClient? _enrollmentClient;
     private readonly INetworkOverlayClient? _overlayClient;
     private readonly IProtectedServiceNetworkGate? _protectedNetworkGate;
-    private readonly ICommonConnectorRequestTransport _requestTransport;
+    private readonly ProtectedControlPlaneRequestTransport _requestTransport;
     private readonly string _statePath;
     private readonly Uri? _controlPlaneBaseUri;
     private readonly Uri? _netBirdManagementUri;
     private ManagedOverlayDestinationPolicy _smbDestinations = new([]);
+    public IReadOnlyList<string> LegacyEncryptedSmbShares { get; private set; } = Array.Empty<string>();
     private int _selected;
     private int _readyObserved;
     private int _vpnSetupRequired;
+    private int _clockSkewMinutes;
+    private CommonConnectorProvisioningProgress? _wait;
+    private string? _waitOutcome;
     // The runtime assigns this only after it owns the connection lifecycle
     // mutex.  A request that was in flight for the preceding session must not
     // be able to invalidate the replacement session.
     private long _accessSessionGeneration;
     private long _readyObservedGeneration;
+    private NetworkOverlaySnapshot? _lastOverlay;
 
     private CommonAccessRuntime(string statePath, CommonConnectorConnectionCoordinator? coordinator,
         Uri? controlPlaneBaseUri, Uri? netBirdManagementUri,
@@ -56,8 +61,16 @@ public sealed class CommonAccessRuntime : ICommonConnectorRequestTransport
     public Uri ControlPlaneBaseUri => _controlPlaneBaseUri ??
         throw new InvalidOperationException("Сервис заданий не настроен администратором.");
     public bool IsSmbDestinationAllowed(IPAddress address) => IsReady && _smbDestinations.Contains(address);
+    /// <summary>The latest overlay state observed by a protected request (or by the connection itself).</summary>
+    public NetworkOverlaySnapshot? LastOverlay => Volatile.Read(ref _lastOverlay) ?? Current?.Overlay;
+    /// <summary>Overlay address of the protected control plane: the gateway this computer reaches the server through.</summary>
+    public Uri? GatewayUri => _controlPlaneBaseUri;
     public string DisplayStatus => !IsConfigured ? "Подключение не настроено" :
-        Volatile.Read(ref _vpnSetupRequired) != 0 ? "Требуется установка защищённого подключения" : Current?.Status switch
+        Volatile.Read(ref _vpnSetupRequired) != 0 ? "Требуется установка защищённого подключения" :
+        Wait is not null ? "Подключение…" :
+        ProblemText is { } problem ? problem :
+        Volatile.Read(ref _clockSkewMinutes) is > 0 and var skewMinutes && Current?.DiagnosticCode == "clock_skew"
+            ? ClockSkewText(skewMinutes) : Current?.Status switch
     {
         CommonConnectorConnectionStatus.Ready => "Подключено",
         CommonConnectorConnectionStatus.EnrollmentRequired => "Требуется вход",
@@ -68,6 +81,68 @@ public sealed class CommonAccessRuntime : ICommonConnectorRequestTransport
         CommonConnectorConnectionStatus.Failed => "Не удалось подключиться",
         _ => "Не подключено"
     };
+
+    /// <summary>
+    /// The server-side provisioning wait of the running connect: phase, elapsed time and whether it
+    /// already continues in the background. Null when no connect waits for the server.
+    /// </summary>
+    public CommonConnectorProvisioningProgress? Wait => Volatile.Read(ref _wait);
+
+    /// <summary>Raised on every wait report and when the wait ends.</summary>
+    public event Action? WaitChanged;
+
+    /// <summary>
+    /// The user-facing text of a definitive outcome no retry resolves (denial, a disabled device,
+    /// server configuration, NetBird failing locally); null otherwise.
+    /// </summary>
+    public string? ProblemText => Wait is null
+        ? ProblemTextFor(Volatile.Read(ref _waitOutcome) ??
+            (Current is { Status: not CommonConnectorConnectionStatus.Ready } current ? current.DiagnosticCode : null))
+        : null;
+
+    public static string? ProblemTextFor(string? code) => code switch
+    {
+        "access_denied" or "access_not_granted" => "Доступ не выдан. Обратитесь к администратору компании.",
+        "device_not_active" => "Этот компьютер отключён администратором. Обратитесь к администратору компании.",
+        "provider_configuration" or "vpn_not_configured" =>
+            "Защищённое подключение не настроено на сервере. Обратитесь к администратору компании.",
+        "netbird_up_failed_repeatedly" =>
+            "Не удалось запустить NetBird на этом компьютере. Перезагрузите компьютер и повторите подключение; если не поможет — сохраните диагностику и обратитесь к администратору.",
+        _ => null,
+    };
+
+    /// <summary>
+    /// Completes when the connect finished (true) or its server wait went to the background
+    /// (false), so startup work does not wait for the server behind a background connect.
+    /// </summary>
+    public async Task<bool> SettleOrBackgroundAsync(Task completion)
+    {
+        ArgumentNullException.ThrowIfNull(completion);
+        var backgrounded = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        void OnWait()
+        {
+            if (Wait?.Background == true) backgrounded.TrySetResult();
+        }
+        WaitChanged += OnWait;
+        try
+        {
+            OnWait();
+            return await Task.WhenAny(completion, backgrounded.Task).ConfigureAwait(false) == completion;
+        }
+        finally { WaitChanged -= OnWait; }
+    }
+
+    internal void PublishWait(CommonConnectorProvisioningProgress? wait)
+    {
+        if (ReferenceEquals(Interlocked.Exchange(ref _wait, wait), wait)) return;
+        RaiseWaitChanged();
+    }
+
+    /// <summary>
+    /// Local diagnostic journal for pilots: phases and transient failure descriptors
+    /// (type, status, local code) only, never messages, bodies or credentials.
+    /// </summary>
+    public Action<string>? DiagnosticLog { get; set; }
 
     /// <summary>
     /// Raised once when a previously observed Ready connection becomes invalid.
@@ -117,7 +192,7 @@ public sealed class CommonAccessRuntime : ICommonConnectorRequestTransport
         return new CommonAccessRuntime(deployment.StateFilePath, deployment.Coordinator,
             deployment.ControlPlaneBaseUri, deployment.NetBirdManagementUri,
             deployment.EnrollmentClient, deployment.OverlayClient, deployment.ProtectedNetworkGate)
-            { _smbDestinations = deployment.SmbDestinations };
+            { _smbDestinations = deployment.SmbDestinations, LegacyEncryptedSmbShares = deployment.LegacyEncryptedSmbShares };
     }
 
     /// <summary>
@@ -134,10 +209,13 @@ public sealed class CommonAccessRuntime : ICommonConnectorRequestTransport
             _enrollmentClient, _overlayClient, _protectedNetworkGate, this, _smbDestinations));
     }
 
-    public async Task ConnectAsync(string? token, bool reconnect, CancellationToken cancellationToken)
+    public async Task ConnectAsync(string? token, bool reconnect, CancellationToken cancellationToken,
+        Action<string>? progress = null, Func<CancellationToken, ValueTask>? confirmReady = null)
     {
         Select();
         var coordinator = RequireCoordinator();
+        Volatile.Write(ref _clockSkewMinutes, 0);
+        Volatile.Write(ref _waitOutcome, null);
         try
         {
             try
@@ -145,6 +223,7 @@ public sealed class CommonAccessRuntime : ICommonConnectorRequestTransport
                 // Older machine deployments have no URI pin. They can resume the
                 // server-bound device identity, but a new one-time token is accepted
                 // only while the local daemon is known to be unregistered.
+                progress?.Invoke("Проверяем сетевые компоненты…");
                 await coordinator.EnsureOverlayAvailableAsync(_netBirdManagementUri,
                     allowUnpinnedRegistered: reconnect, cancellationToken: cancellationToken);
                 Volatile.Write(ref _vpnSetupRequired, 0);
@@ -154,16 +233,86 @@ public sealed class CommonAccessRuntime : ICommonConnectorRequestTransport
                 Volatile.Write(ref _vpnSetupRequired, 1);
                 throw;
             }
-            if (reconnect)
-                await coordinator.ResumeAndConnectAsync(cancellationToken);
-            else
+            progress?.Invoke(reconnect ? "Восстанавливаем вход и защищённое соединение…" :
+                "Вход подтверждён. Настраиваем защищённое соединение…");
+            if (!reconnect && (string.IsNullOrWhiteSpace(token) || token.Length > 4096))
+                throw new InvalidOperationException("Нужен токен подключения.");
+            // First sign-in schedules provider work asynchronously. The wait keeps the
+            // same durable device (the browser token is used once), retries transient
+            // server/network failures and continues in the background past its
+            // foreground budget; Ready still needs all providers and a reachable route.
+            string? reportedPhase = null;
+            string? reportedDiagnostic = null;
+            string? reportedFailure = null;
+            var wasBackground = false;
+            void Report(CommonConnectorProvisioningProgress wait)
             {
-                if (string.IsNullOrWhiteSpace(token) || token.Length > 4096)
-                    throw new InvalidOperationException("Нужен токен подключения.");
-                await coordinator.EnrollAndConnectAsync(token, Environment.MachineName, cancellationToken);
+                var phase = PhaseText(wait.Phase);
+                if (phase != reportedPhase) progress?.Invoke(phase);
+                if (phase != reportedPhase || wait.DiagnosticCode != reportedDiagnostic)
+                    Log($"Common connection wait phase {PhaseName(wait.Phase)} ({wait.DiagnosticCode}) at {wait.Elapsed.TotalSeconds:F1}s.");
+                // One line per distinct failure: a server busy for minutes is not a journal flood.
+                if (wait.TransientFailure is { } failure && failure != reportedFailure)
+                {
+                    Log($"Common connection wait transient {failure} in phase {PhaseName(wait.Phase)} at {wait.Elapsed.TotalSeconds:F1}s.");
+                    reportedFailure = failure;
+                }
+                if (wait.Background && !wasBackground)
+                    Log($"Common connection wait continues in background after {wait.Elapsed.TotalSeconds:F1}s.");
+                (reportedPhase, reportedDiagnostic, wasBackground) = (phase, wait.DiagnosticCode, wait.Background);
+                PublishWait(wait);
             }
+            await CommonConnectorProvisioningWaiter.WaitAsync(
+                reconnect
+                    ? ct => coordinator.ResumeAndConnectAsync(ct)
+                    : ct => coordinator.EnrollAndConnectAsync(token!, Environment.MachineName, ct),
+                ct => coordinator.ResumeAndConnectAsync(ct),
+                async ct => { await coordinator.DisconnectAsync(ct); }, cancellationToken,
+                confirmReady: confirmReady, progress: Report);
         }
-        finally { ObserveConnectionState(Volatile.Read(ref _accessSessionGeneration)); }
+        catch (ConnectorClockSkewException exception)
+        {
+            Volatile.Write(ref _clockSkewMinutes, ClockSkewMinutes(exception.Skew));
+            throw;
+        }
+        catch (CommonConnectorWaitEndedException exception)
+        {
+            Volatile.Write(ref _waitOutcome, exception.Code);
+            Log($"Common connection wait ended ({exception.Code}).");
+            throw;
+        }
+        finally
+        {
+            PublishWait(null);
+            ObserveConnectionState(Volatile.Read(ref _accessSessionGeneration));
+        }
+    }
+
+    /// <summary>The server phase as the window shows it.</summary>
+    public static string PhaseText(CommonConnectorConnectionPhase phase) => phase switch
+    {
+        CommonConnectorConnectionPhase.Access => "Выдаём доступ…",
+        CommonConnectorConnectionPhase.Network => "Подключаем защищённую сеть (NetBird)…",
+        _ => "Проверяем соединение…",
+    };
+
+    public static string PhaseName(CommonConnectorConnectionPhase phase) => phase switch
+    {
+        CommonConnectorConnectionPhase.Access => "access",
+        CommonConnectorConnectionPhase.Network => "network",
+        _ => "verify",
+    };
+
+    private void Log(string line)
+    {
+        try { DiagnosticLog?.Invoke(line); } catch { /* The journal cannot break a connection. */ }
+    }
+
+    private void RaiseWaitChanged()
+    {
+        if (WaitChanged is not { } handlers) return;
+        foreach (Action handler in handlers.GetInvocationList())
+            try { handler(); } catch { /* Observers cannot strand the wait. */ }
     }
 
     public async Task DisconnectAsync(CancellationToken cancellationToken)
@@ -171,6 +320,22 @@ public sealed class CommonAccessRuntime : ICommonConnectorRequestTransport
         try
         {
             if (_coordinator is not null) await _coordinator.DisconnectAsync(cancellationToken);
+        }
+        finally { ObserveConnectionState(Volatile.Read(ref _accessSessionGeneration)); }
+    }
+
+    public async Task SignOutAsync(CancellationToken cancellationToken)
+    {
+        Volatile.Write(ref _clockSkewMinutes, 0);
+        Volatile.Write(ref _waitOutcome, null);
+        try
+        {
+            await RequireCoordinator().SignOutAsync(cancellationToken);
+        }
+        catch (ConnectorClockSkewException exception)
+        {
+            Volatile.Write(ref _clockSkewMinutes, ClockSkewMinutes(exception.Skew));
+            throw;
         }
         finally { ObserveConnectionState(Volatile.Read(ref _accessSessionGeneration)); }
     }
@@ -184,8 +349,11 @@ public sealed class CommonAccessRuntime : ICommonConnectorRequestTransport
         ObserveConnectionState(requestGeneration);
         try
         {
-            return await RequireCoordinator().OpenProtectedServiceAsync(serviceId, relativeUri, cancellationToken)
+            var route = await RequireCoordinator().OpenProtectedServiceAsync(serviceId, relativeUri, cancellationToken)
                 .ConfigureAwait(false);
+            // Display facts only (address, NetBird version, direct/relayed route); the route itself stays private.
+            Volatile.Write(ref _lastOverlay, route.Overlay);
+            return route;
         }
         finally { ObserveConnectionState(requestGeneration); }
     }
@@ -193,6 +361,10 @@ public sealed class CommonAccessRuntime : ICommonConnectorRequestTransport
     public Task<HttpResponseMessage> SendAsync(HttpMethod method, string relativeUri, object? body,
         IReadOnlyDictionary<string, string> managedHeaders, CancellationToken cancellationToken)
         => _requestTransport.SendAsync(method, relativeUri, body, managedHeaders, cancellationToken);
+
+    public Task<ProtectedConnectorResponse> SendWithOverlayAsync(HttpMethod method, string relativeUri, object? body,
+        IReadOnlyDictionary<string, string> managedHeaders, CancellationToken cancellationToken)
+        => _requestTransport.SendWithOverlayAsync(method, relativeUri, body, managedHeaders, cancellationToken);
 
     private CommonConnectorConnectionCoordinator RequireCoordinator() => _coordinator ??
         throw new InvalidOperationException("Подключение нового типа ещё не настроено администратором.");
@@ -223,6 +395,15 @@ public sealed class CommonAccessRuntime : ICommonConnectorRequestTransport
             catch { }
         }
     }
+
+    /// <summary>A server rejection is not trusted while the clocks disagree; the user fixes the clock.</summary>
+    public static string ClockSkewText(TimeSpan skew) => ClockSkewText(ClockSkewMinutes(skew));
+
+    private static string ClockSkewText(int minutes) =>
+        $"Время на компьютере расходится с сервером на {minutes} мин. Исправьте время Windows и повторите.";
+
+    private static int ClockSkewMinutes(TimeSpan skew) =>
+        (int)Math.Clamp(Math.Ceiling(skew.Duration().TotalMinutes), 1, int.MaxValue);
 
     private static bool IsCurrentSnapshotReady(CommonConnectorConnectionSnapshot? snapshot) =>
         snapshot is { Status: CommonConnectorConnectionStatus.Ready, AccessProfile: { } profile } &&

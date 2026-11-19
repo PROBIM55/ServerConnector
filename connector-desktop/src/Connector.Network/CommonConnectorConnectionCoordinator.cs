@@ -1,4 +1,6 @@
 using System.Net;
+using System.Security.Cryptography;
+using System.Text;
 using Connector.Access.Client;
 using Connector.Access.Contracts;
 
@@ -54,6 +56,12 @@ public sealed class CommonConnectorConnectionCoordinator
     private CommonConnectorConnectionSnapshot _current =
         new(CommonConnectorConnectionStatus.Unknown, null, null, "not_started");
     private Authorization? _authorization;
+    // Process-local: the bootstrap this process already handed to 'netbird up'.
+    private AppliedBootstrap? _appliedBootstrap;
+    // Repeated 'up' failures with one issued setup key (hash only, never the key).
+    private const int MaximumUpFailuresPerKey = 3;
+    private string? _upFailureKey;
+    private int _upFailures;
 
     public CommonConnectorConnectionCoordinator(
         IConnectorEnrollmentClient commonAccessClient,
@@ -119,8 +127,38 @@ public sealed class CommonConnectorConnectionCoordinator
         RunSerializedAsync(async ct =>
         {
             Set(CommonConnectorConnectionStatus.Enrolling, null, null, "resuming_enrollment");
-            var receipt = await _enrollment.ResumeAsync(ct).ConfigureAwait(false);
-            return await EstablishAsync(receipt, ct).ConfigureAwait(false);
+            for (var attempt = 1; ; attempt++)
+            {
+                try
+                {
+                    var receipt = await _enrollment.ResumeAsync(ct).ConfigureAwait(false);
+                    return await EstablishAsync(receipt, ct).ConfigureAwait(false);
+                }
+                catch (ConnectorEnrollmentProtocolException exception) when (
+                    attempt == 1 && IsIssuedCredentialRejected(exception) &&
+                    _enrollment is IConnectorAccountSessionClient accounts)
+                {
+                    // A device revoked on the server (signed out elsewhere, by the
+                    // administrator, or a sign-out whose confirmation was lost) can
+                    // never be restored. It is set aside only after the server rejects
+                    // its key-bound proof twice with agreeing clocks. A clock mismatch
+                    // is reported as such; a transient failure of the re-proof (server busy,
+                    // network) is reported as itself so the wait retries; any other failure
+                    // keeps the credential and reports the original rejection.
+                    CloseAuthorizationForNewAdmissions();
+                    bool? forgotten;
+                    try { forgotten = await accounts.ForgetRejectedEnrollmentAsync(ct).ConfigureAwait(false); }
+                    catch (Exception other) when (other is not ConnectorClockSkewException && !ct.IsCancellationRequested)
+                    {
+                        if (CommonConnectorProvisioningWaiter.IsTransient(other, ct)) throw;
+                        forgotten = null;
+                    }
+                    if (forgotten is null) throw;
+                    if (forgotten.Value)
+                        return Set(CommonConnectorConnectionStatus.EnrollmentRequired, null, null, "device_revoked");
+                    // The server accepted the key and refreshed the receipt: retry once.
+                }
+            }
         }, cancellationToken);
 
     public ValueTask<CommonConnectorConnectionSnapshot> ReconnectAsync(
@@ -145,6 +183,26 @@ public sealed class CommonConnectorConnectionCoordinator
                 previous.DeviceId,
                 previous.Revision,
                 "disconnected_by_user"));
+        }, cancellationToken);
+
+    public ValueTask<CommonConnectorConnectionSnapshot> SignOutAsync(CancellationToken cancellationToken = default) =>
+        RunSerializedAsync(async ct =>
+        {
+            RevokeAuthorization();
+            _appliedBootstrap = null;
+            if (_enrollment is not IConnectorAccountSessionClient accounts ||
+                _enrollment is not IConnectorExactDeviceRevocationClient revocation)
+                throw new InvalidOperationException("Выход из учётной записи недоступен в этой версии.");
+            var identity = await accounts.GetSignOutIdentityAsync(ct).ConfigureAwait(false);
+            if (identity is not null)
+            {
+                if (identity.DeviceId is not null)
+                {
+                    await revocation.RevokeAndConfirmExactAsync(identity.DeviceId, ct).ConfigureAwait(false);
+                }
+                await accounts.ClearRevokedSessionAsync(identity, ct).ConfigureAwait(false);
+            }
+            return Set(CommonConnectorConnectionStatus.EnrollmentRequired, null, null, "signed_out");
         }, cancellationToken);
 
     public ValueTask<ProtectedServiceRoute> OpenProtectedServiceAsync(
@@ -178,8 +236,10 @@ public sealed class CommonConnectorConnectionCoordinator
 
             var profile = await _access.GetAccessProfileAsync(ct).ConfigureAwait(false);
             ValidateProfile(profile, state);
-            var route = await _networkGate.ResolveAndProbeAsync(
-                authorization.CreateTransportIdentity(state), serviceId, relativeUri, ct).ConfigureAwait(false);
+            var identity = authorization.CreateTransportIdentity(state);
+            var route = _networkGate is ProtectedServiceNetworkGate nativeGate
+                ? await nativeGate.ResolveAndProbeFromSnapshotAsync(identity, serviceId, relativeUri, overlay, ct).ConfigureAwait(false)
+                : await _networkGate.ResolveAndProbeAsync(identity, serviceId, relativeUri, ct).ConfigureAwait(false);
             Set(CommonConnectorConnectionStatus.Ready, state.DeviceId, state.Revision, "ready", route.Overlay, profile);
             return route;
         }, cancellationToken);
@@ -189,32 +249,119 @@ public sealed class CommonConnectorConnectionCoordinator
         CancellationToken cancellationToken)
     {
         RevokeAuthorization();
-        var state = await _access.GetVpnStateAsync(cancellationToken).ConfigureAwait(false);
+        ConnectorVpnTransportState state;
+        try
+        {
+            state = await _access.GetVpnStateAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (ConnectorEnrollmentProtocolException exception) when (
+            IsProvisioningFailure(exception, "vpn_state_unavailable") ||
+            IsProvisioningFailure(exception, "vpn_state_not_supported"))
+        {
+            // A fresh device has no provider state until its authenticated profile
+            // request durably schedules reconciliation. This request never admits
+            // work: Ready still requires the exact VPN peer and applied profile.
+            var ambiguous = false;
+            try { await _access.GetAccessProfileAsync(cancellationToken).ConfigureAwait(false); }
+            catch (ConnectorEnrollmentProtocolException pending) when (IsAccessPending(pending, out ambiguous)) { }
+            return Set(CommonConnectorConnectionStatus.AccessPending, receipt.DeviceId,
+                receipt.AccessRevision, ambiguous ? "access_providers_pending_or_denied" : "access_providers_initializing");
+        }
         ValidateStateEnvelope(state, receipt);
 
         if (IsStatus(state, "revoked"))
             return Set(CommonConnectorConnectionStatus.Revoked, state.DeviceId, state.Revision, "vpn_revoked");
         if (IsStatus(state, "denied"))
             return Set(CommonConnectorConnectionStatus.Denied, state.DeviceId, state.Revision, "vpn_denied");
-        if (IsStatus(state, "unknown") || IsStatus(state, "error"))
-            return Set(CommonConnectorConnectionStatus.Unknown, state.DeviceId, state.Revision, "vpn_state_unknown");
+        // The provider reports «unknown»/«degraded» while it reconciles the peer. Nothing is
+        // admitted; the same device is polled again.
+        if (IsStatus(state, "unknown") || IsStatus(state, "error") || IsStatus(state, "degraded"))
+            return Set(CommonConnectorConnectionStatus.AwaitingVpnAuthorization, state.DeviceId, state.Revision,
+                IsStatus(state, "degraded") ? "vpn_state_degraded" : "vpn_state_unknown");
+
+        DeviceAccessProfile? pendingProfile = null;
+        if (IsStatus(state, "ready"))
+        {
+            // Polling an unapplied profile does not require launching the CLI again.
+            // No work is admitted until the subsequent fresh overlay proof succeeds.
+            try { pendingProfile = await _access.GetAccessProfileAsync(cancellationToken).ConfigureAwait(false); }
+            catch (ConnectorEnrollmentProtocolException exception) when (IsAccessPending(exception, out var ambiguous))
+            {
+                return Set(CommonConnectorConnectionStatus.AccessPending, state.DeviceId, state.Revision,
+                    ambiguous ? "access_profile_pending_or_denied" : "access_profile_pending");
+            }
+            if (!IsProfileForRevision(pendingProfile, state))
+                return Set(CommonConnectorConnectionStatus.AccessPending, state.DeviceId, state.Revision,
+                    "access_profile_revision_pending");
+        }
 
         NetworkOverlaySnapshot overlay;
         if (IsStatus(state, "ready"))
         {
             overlay = await _overlay.GetStatusAsync(cancellationToken).ConfigureAwait(false);
             if (!TryValidateReadyState(state, receipt.DeviceId, state.Revision, overlay, out var mismatch))
-                return Set(CommonConnectorConnectionStatus.Unknown, state.DeviceId, state.Revision, mismatch, overlay);
+                return Set(StatusForMismatch(mismatch), state.DeviceId, state.Revision, mismatch, overlay);
         }
         else if (IsStatus(state, "connecting") || IsStatus(state, "pending"))
         {
             Set(CommonConnectorConnectionStatus.ConnectingOverlay, state.DeviceId, state.Revision, "vpn_bootstrap_required");
-            var bootstrap = await _access.GetVpnBootstrapAsync(cancellationToken).ConfigureAwait(false);
+            if (_appliedBootstrap is { } applied && applied.Matches(state))
+            {
+                // This process already ran 'up' with the setup key issued for this exact
+                // device revision. While the daemon stays registered with that management
+                // plane, the server only has to see the peer: never re-run the CLI per poll.
+                overlay = await _overlay.GetStatusAsync(cancellationToken).ConfigureAwait(false);
+                if (overlay.Status is NetworkServiceStatus.Ready or NetworkServiceStatus.Connecting or NetworkServiceStatus.Degraded &&
+                    overlay.ManagementUri is { } registered && SameManagementUri(applied.ManagementUri, registered))
+                    return Set(CommonConnectorConnectionStatus.AwaitingVpnAuthorization, state.DeviceId, state.Revision,
+                        "vpn_authorization_pending", overlay);
+                _appliedBootstrap = null; // The daemon lost the registration: bootstrap again.
+            }
+            ConnectorVpnBootstrap bootstrap;
+            try { bootstrap = await _access.GetVpnBootstrapAsync(cancellationToken).ConfigureAwait(false); }
+            catch (ConnectorEnrollmentProtocolException exception) when (IsProvisioningFailure(exception, "vpn_bootstrap_unavailable"))
+            {
+                return Set(CommonConnectorConnectionStatus.AwaitingVpnAuthorization, state.DeviceId,
+                    state.Revision, "vpn_bootstrap_pending");
+            }
+            catch (ConnectorEnrollmentProtocolException exception) when (IsProvisioningFailure(exception, "vpn_bootstrap_consumed"))
+            {
+                // The peer is already registered for this revision (a restarted client, an
+                // earlier attempt) while the state still reads connecting: the setup key is
+                // not issued again, so wait for the peer and re-read the state next poll.
+                return Set(CommonConnectorConnectionStatus.AwaitingVpnAuthorization, state.DeviceId,
+                    state.Revision, "vpn_bootstrap_consumed");
+            }
+            // The server advanced the revision between the two reads: re-read both next poll.
             if (bootstrap.Revision != state.Revision)
-                throw new ConnectorEnrollmentProtocolException("The VPN bootstrap revision does not match transport state.");
-            overlay = await _overlay.ConnectAsync(
-                new NetworkOverlayBootstrap(new Uri(bootstrap.ManagementUri, UriKind.Absolute), bootstrap.SetupKey),
-                cancellationToken).ConfigureAwait(false);
+                return Set(CommonConnectorConnectionStatus.AwaitingVpnAuthorization, state.DeviceId, state.Revision,
+                    bootstrap.Revision > state.Revision ? "vpn_revision_advanced" : "vpn_revision_regressed");
+            var managementUri = new Uri(bootstrap.ManagementUri, UriKind.Absolute);
+            var keyHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(bootstrap.SetupKey)));
+            try
+            {
+                overlay = await _overlay.ConnectAsync(
+                    new NetworkOverlayBootstrap(managementUri, bootstrap.SetupKey),
+                    cancellationToken).ConfigureAwait(false);
+            }
+            catch (NetworkGateException exception) when (exception.Code == "netbird_not_ready")
+            {
+                // An accepted 'up' can finish before the OS/daemon reports Ready.
+                // Re-read and classify; do not consume another enrollment token.
+                overlay = await _overlay.GetStatusAsync(cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception exception) when (exception is NetworkGateException { Code: "netbird_up_failed" } or TimeoutException)
+            {
+                // A failed or hung 'up' is retried with backoff, but not forever with one key.
+                var failures = _upFailureKey == keyHash ? _upFailures + 1 : 1;
+                (_upFailureKey, _upFailures) = failures >= MaximumUpFailuresPerKey ? (null, 0) : (keyHash, failures);
+                if (failures >= MaximumUpFailuresPerKey)
+                    throw new NetworkGateException("netbird_up_failed_repeatedly",
+                        "NetBird did not start with the issued setup key after repeated attempts.", exception);
+                throw;
+            }
+            (_upFailureKey, _upFailures) = (null, 0);
+            _appliedBootstrap = new AppliedBootstrap(state.DeviceId, state.Revision, managementUri);
 
             state = await _access.GetVpnStateAsync(cancellationToken).ConfigureAwait(false);
             ValidateStateEnvelope(state, receipt);
@@ -223,9 +370,10 @@ public sealed class CommonConnectorConnectionCoordinator
             if (IsStatus(state, "denied"))
                 return Set(CommonConnectorConnectionStatus.Denied, state.DeviceId, state.Revision, "vpn_denied", overlay);
             if (!IsStatus(state, "ready"))
-                return Set(StatusFor(state.Status), state.DeviceId, state.Revision, "vpn_authorization_pending", overlay);
+                return Set(CommonConnectorConnectionStatus.AwaitingVpnAuthorization, state.DeviceId, state.Revision,
+                    "vpn_authorization_pending", overlay);
             if (!TryValidateReadyState(state, receipt.DeviceId, state.Revision, overlay, out var mismatch))
-                return Set(CommonConnectorConnectionStatus.Unknown, state.DeviceId, state.Revision, mismatch, overlay);
+                return Set(StatusForMismatch(mismatch), state.DeviceId, state.Revision, mismatch, overlay);
         }
         else
         {
@@ -233,11 +381,56 @@ public sealed class CommonConnectorConnectionCoordinator
         }
 
         Set(CommonConnectorConnectionStatus.AccessPending, state.DeviceId, state.Revision, "access_profile_pending", overlay);
-        var profile = await _access.GetAccessProfileAsync(cancellationToken).ConfigureAwait(false);
-        ValidateProfile(profile, state);
+        DeviceAccessProfile profile;
+        try { profile = pendingProfile ?? await _access.GetAccessProfileAsync(cancellationToken).ConfigureAwait(false); }
+        catch (ConnectorEnrollmentProtocolException exception) when (IsAccessPending(exception, out var ambiguous))
+        {
+            return Set(CommonConnectorConnectionStatus.AccessPending, state.DeviceId, state.Revision,
+                ambiguous ? "access_profile_pending_or_denied" : "access_profile_pending", overlay);
+        }
+        if (!IsProfileForRevision(profile, state))
+            return Set(CommonConnectorConnectionStatus.AccessPending, state.DeviceId, state.Revision,
+                "access_profile_revision_pending", overlay);
         _authorization = new Authorization(state.DeviceId, state.Revision);
         return Set(CommonConnectorConnectionStatus.Ready, state.DeviceId, state.Revision, "ready", overlay, profile);
     }
+
+    /// <summary>
+    /// Mismatches that settle while the server and the local daemon converge keep the wait
+    /// pending; a foreign management plane, another device or an untrusted daemon do not.
+    /// </summary>
+    private static CommonConnectorConnectionStatus StatusForMismatch(string mismatch) =>
+        mismatch is "overlay_not_ready" or "overlay_status_unavailable" or "overlay_address_mismatch"
+            ? CommonConnectorConnectionStatus.AwaitingVpnAuthorization
+            : CommonConnectorConnectionStatus.Unknown;
+
+    /// <summary>
+    /// The profile must belong to this device; a revision that differs from the VPN state is
+    /// the server applying a newer grant between two reads, so the caller polls again.
+    /// </summary>
+    private bool IsProfileForRevision(DeviceAccessProfile profile, ConnectorVpnTransportState state)
+    {
+        if (profile.SchemaVersion != DeviceAccessProtocol.Version ||
+            !string.Equals(profile.DeviceId, state.DeviceId, StringComparison.Ordinal) ||
+            profile.ExpiresAtUtc <= _timeProvider.GetUtcNow())
+            throw new ConnectorEnrollmentProtocolException("The access profile does not match the authorized VPN transport revision.");
+        return profile.DesiredRevision == state.Revision && profile.AppliedRevision == state.Revision;
+    }
+
+    /// <summary>
+    /// «access_pending» is the server still applying grants. The older «access_pending_or_denied»
+    /// cannot tell pending from denied, so the wait caps it. «access_denied», «device_not_active» and
+    /// «provider_configuration» are definitive and propagate.
+    /// </summary>
+    private static bool IsAccessPending(ConnectorEnrollmentProtocolException exception, out bool ambiguous)
+    {
+        ambiguous = IsProvisioningFailure(exception, "access_pending_or_denied");
+        return ambiguous || IsProvisioningFailure(exception, "access_pending");
+    }
+
+    private static bool IsProvisioningFailure(ConnectorEnrollmentProtocolException exception, string code) =>
+        exception.StatusCode == (int)HttpStatusCode.Forbidden &&
+        string.Equals(exception.ErrorCode, code, StringComparison.Ordinal);
 
     private void ValidateStateEnvelope(ConnectorVpnTransportState state, DeviceEnrollmentResponse receipt)
     {
@@ -248,7 +441,8 @@ public sealed class CommonConnectorConnectionCoordinator
         var now = _timeProvider.GetUtcNow();
         if (state.ObservedAtUtc < now.Subtract(_options.MaximumServerStateAge) ||
             state.ObservedAtUtc > now.Add(_options.ClockSkew))
-            throw new ConnectorEnrollmentProtocolException("The VPN transport state observation is stale or future-dated.");
+            // The server's observation is outside the accepted window of the local clock.
+            throw new ConnectorClockSkewException(now - state.ObservedAtUtc);
         if (!TryParseManagementUri(state.ManagementUri, out _))
             throw new ConnectorEnrollmentProtocolException("The VPN transport state management URI is invalid.");
     }
@@ -260,16 +454,35 @@ public sealed class CommonConnectorConnectionCoordinator
         NetworkOverlaySnapshot overlay,
         out string diagnosticCode)
     {
-        diagnosticCode = "overlay_identity_mismatch";
-        if (!IsStatus(state, "ready") || !string.Equals(state.DeviceId, deviceId, StringComparison.Ordinal) ||
-            state.Revision != revision || string.IsNullOrWhiteSpace(state.PeerId) ||
+        diagnosticCode = "vpn_identity_changed";
+        if (!string.Equals(state.DeviceId, deviceId, StringComparison.Ordinal) ||
+            string.IsNullOrWhiteSpace(state.PeerId) && IsStatus(state, "ready")) return false;
+        diagnosticCode = state.Revision > revision ? "vpn_revision_advanced" : "vpn_revision_regressed";
+        if (state.Revision != revision) return false;
+        diagnosticCode = "vpn_state_not_ready";
+        if (!IsStatus(state, "ready")) return false;
+        diagnosticCode = "vpn_observation_invalid";
+        if (
             state.ObservedAtUtc < _timeProvider.GetUtcNow().Subtract(_options.MaximumServerStateAge) ||
-            state.ObservedAtUtc > _timeProvider.GetUtcNow().Add(_options.ClockSkew) ||
-            overlay.Status != NetworkServiceStatus.Ready || !overlay.StartupCheckPassed ||
-            !overlay.ManagementConnected || !overlay.SignalConnected || overlay.ManagementUri is null ||
-            !TryParseManagementUri(state.ManagementUri, out var expectedManagement) ||
-            !SameManagementUri(expectedManagement, overlay.ManagementUri))
+            state.ObservedAtUtc > _timeProvider.GetUtcNow().Add(_options.ClockSkew)) return false;
+        diagnosticCode = "overlay_identity_mismatch";
+        if (!TryParseManagementUri(state.ManagementUri, out var expectedManagement) ||
+            overlay.ManagementUri is not null && !SameManagementUri(expectedManagement, overlay.ManagementUri)) return false;
+        diagnosticCode = "overlay_not_ready";
+        if (overlay.Status is NetworkServiceStatus.NotInstalled or NetworkServiceStatus.Unknown or NetworkServiceStatus.Revoked)
+        {
+            // A trusted daemon whose status command failed (restarting after 'up') settles;
+            // a missing or untrusted installation does not.
+            diagnosticCode = overlay.Status == NetworkServiceStatus.Unknown &&
+                             overlay.DiagnosticCode is "netbird_status_unknown" or "netbird_status_invalid"
+                ? "overlay_status_unavailable"
+                : "overlay_trust_unavailable";
             return false;
+        }
+        if (overlay.Status != NetworkServiceStatus.Ready || !overlay.StartupCheckPassed ||
+            !overlay.ManagementConnected || !overlay.SignalConnected || overlay.ManagementUri is null) return false;
+        // The server's expected addresses follow the peer it last observed.
+        diagnosticCode = "overlay_address_mismatch";
 
         var expectedAddresses = state.ExpectedAssignedAddresses
             .Select(ParseAddress)
@@ -326,14 +539,19 @@ public sealed class CommonConnectorConnectionCoordinator
             throw;
         }
         catch (NetworkGateException exception) when (
-            (Current.Status is CommonConnectorConnectionStatus.EnrollmentRequired or
-                CommonConnectorConnectionStatus.Revoked or
-                CommonConnectorConnectionStatus.Denied or
-                CommonConnectorConnectionStatus.Disconnected) &&
+            Current.Status != CommonConnectorConnectionStatus.Ready &&
             string.Equals(exception.Code, "common_connection_not_ready", StringComparison.Ordinal))
         {
             // Admission is already closed by an actionable state. Repeated callers
             // must not erase it with a generic failure.
+            throw;
+        }
+        catch (ConnectorEnrollmentProtocolException exception) when (IsProviderBusy(exception))
+        {
+            // The provider is momentarily held by a reconciler: a wait, not a failure.
+            // The exception still carries Retry-After for the provisioning wait.
+            RevokeAuthorization();
+            Set(CommonConnectorConnectionStatus.AwaitingVpnAuthorization, Current.DeviceId, Current.Revision, "vpn_provider_busy");
             throw;
         }
         catch (Exception exception)
@@ -348,11 +566,18 @@ public sealed class CommonConnectorConnectionCoordinator
         }
     }
 
+    private static bool IsProviderBusy(ConnectorEnrollmentProtocolException exception) =>
+        exception.StatusCode == (int)HttpStatusCode.ServiceUnavailable &&
+        string.Equals(exception.ErrorCode, "vpn_provider_busy", StringComparison.Ordinal);
+
     private static bool RequiresBrowserSignIn(ConnectorEnrollmentProtocolException exception) =>
-        (exception.StatusCode == (int)HttpStatusCode.Unauthorized &&
-         string.Equals(exception.ErrorCode, "device_unauthorized", StringComparison.Ordinal)) ||
+        IsIssuedCredentialRejected(exception) ||
         (exception.StatusCode == (int)HttpStatusCode.NotFound &&
          string.Equals(exception.ErrorCode, "pending_enrollment_absent", StringComparison.Ordinal));
+
+    private static bool IsIssuedCredentialRejected(ConnectorEnrollmentProtocolException exception) =>
+        exception.StatusCode == (int)HttpStatusCode.Unauthorized &&
+        string.Equals(exception.ErrorCode, "device_unauthorized", StringComparison.Ordinal);
 
     private CommonConnectorConnectionSnapshot Set(
         CommonConnectorConnectionStatus status,
@@ -404,6 +629,10 @@ public sealed class CommonConnectorConnectionCoordinator
 
     private static string DiagnosticFor(Exception exception) => exception switch
     {
+        ConnectorClockSkewException => "clock_skew",
+        ConnectorEnrollmentProtocolException { ErrorCode: { } code } when CommonConnectorProvisioningWaiter.DefinitiveServerCodes.Contains(code) => code,
+        ConnectorEnrollmentProtocolException { StatusCode: 502 or 503 or 504 } => "service_temporarily_unavailable",
+        HttpRequestException { StatusCode: HttpStatusCode.BadGateway or HttpStatusCode.ServiceUnavailable or HttpStatusCode.GatewayTimeout } => "service_temporarily_unavailable",
         ConnectorEnrollmentProtocolException protocol when !string.IsNullOrWhiteSpace(protocol.ErrorCode) => protocol.ErrorCode,
         ConnectorEnrollmentProtocolException => "access_protocol_error",
         ConnectorEnrollmentStateException => "enrollment_state_error",
@@ -420,6 +649,13 @@ public sealed class CommonConnectorConnectionCoordinator
     }
 
     private void CloseAuthorizationForNewAdmissions() => _authorization = null;
+
+    private sealed record AppliedBootstrap(string DeviceId, long Revision, Uri ManagementUri)
+    {
+        public bool Matches(ConnectorVpnTransportState state) =>
+            string.Equals(state.DeviceId, DeviceId, StringComparison.Ordinal) && state.Revision == Revision &&
+            TryParseManagementUri(state.ManagementUri, out var management) && SameManagementUri(ManagementUri, management);
+    }
 
     private sealed class Authorization
     {

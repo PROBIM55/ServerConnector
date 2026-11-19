@@ -47,14 +47,17 @@ public sealed class DesktopBackgroundAgentTests
 
         agent.Start(heartbeatEnabled: true);
 
+        await clock.WaitForScheduledDelayAsync().WaitAsync(TimeSpan.FromSeconds(2));
         clock.Advance(TimeSpan.FromSeconds(1));
         await firstHeartbeat.Task.WaitAsync(TimeSpan.FromSeconds(2));
         Assert.Equal((1, 0, 0), (heartbeatCount, updateCount, teklaSyncCount));
 
+        await clock.WaitForScheduledDelayAsync().WaitAsync(TimeSpan.FromSeconds(2));
         clock.Advance(TimeSpan.FromSeconds(1));
         await Task.WhenAll(secondHeartbeat.Task, firstUpdate.Task).WaitAsync(TimeSpan.FromSeconds(2));
         Assert.Equal((2, 1, 0), (heartbeatCount, updateCount, teklaSyncCount));
 
+        await clock.WaitForScheduledDelayAsync().WaitAsync(TimeSpan.FromSeconds(2));
         clock.Advance(TimeSpan.FromSeconds(1));
         await Task.WhenAll(thirdHeartbeat.Task, firstTeklaSync.Task).WaitAsync(TimeSpan.FromSeconds(2));
         Assert.Equal((3, 1, 1), (heartbeatCount, updateCount, teklaSyncCount));
@@ -103,6 +106,7 @@ public sealed class DesktopBackgroundAgentTests
 
         agent.Start(heartbeatEnabled: true);
         agent.Start(heartbeatEnabled: true);
+        await clock.WaitForScheduledDelayAsync().WaitAsync(TimeSpan.FromSeconds(2));
         clock.Advance(TimeSpan.FromSeconds(1));
         await Task.WhenAll(firstEntered.Task, updateEntered.Task).WaitAsync(TimeSpan.FromSeconds(2));
 
@@ -152,6 +156,7 @@ public sealed class DesktopBackgroundAgentTests
             });
 
         agent.Start(heartbeatEnabled: true);
+        await clock.WaitForScheduledDelayAsync().WaitAsync(TimeSpan.FromSeconds(2));
         clock.Advance(TimeSpan.FromSeconds(1));
         await firstUpdate.Task.WaitAsync(TimeSpan.FromSeconds(2));
         // The callback signal can arrive before the scheduler finishes this
@@ -196,6 +201,7 @@ public sealed class DesktopBackgroundAgentTests
             });
 
         agent.Start(heartbeatEnabled: true);
+        await clock.WaitForScheduledDelayAsync().WaitAsync(TimeSpan.FromSeconds(2));
         clock.Advance(TimeSpan.FromSeconds(1));
         await entered.Task.WaitAsync(TimeSpan.FromSeconds(2));
 
@@ -235,6 +241,7 @@ public sealed class DesktopBackgroundAgentTests
         try
         {
             agent.Start(heartbeatEnabled: true);
+            await clock.WaitForScheduledDelayAsync().WaitAsync(TimeSpan.FromSeconds(2));
             clock.Advance(TimeSpan.FromSeconds(1));
             await entered.Task.WaitAsync(TimeSpan.FromSeconds(2));
 

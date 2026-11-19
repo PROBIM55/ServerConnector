@@ -10,6 +10,13 @@ public sealed class NetBirdOptions
     public TimeSpan SetupKeyLifetime { get; init; } = TimeSpan.FromDays(1);
     public TimeSpan MaximumPeerLastSeenAge { get; init; } = TimeSpan.FromMinutes(2);
     public TimeSpan ManagementRequestTimeout { get; init; } = TimeSpan.FromSeconds(15);
+    // How long a reconciler waits for the per-device state lock before the
+    // dispatch is retried as "busy".
+    public TimeSpan StateLockTimeout { get; init; } = TimeSpan.FromSeconds(10);
+    // When an apply discovers a freshly registered peer that is not connected
+    // yet, it re-checks the peer within the same attempt for at most this long
+    // before handing the command back for a short retry. Zero disables.
+    public TimeSpan PeerConnectWait { get; init; } = TimeSpan.FromSeconds(2);
     public IReadOnlyList<NetBirdAccessBinding> AccessBindings { get; init; } = [];
     public string? DnsDistributionGroupId { get; init; }
 
@@ -43,6 +50,14 @@ public sealed class NetBirdOptions
         {
             throw new ArgumentOutOfRangeException(nameof(ManagementRequestTimeout));
         }
+        if (StateLockTimeout <= TimeSpan.Zero || StateLockTimeout > TimeSpan.FromMinutes(1))
+        {
+            throw new ArgumentOutOfRangeException(nameof(StateLockTimeout));
+        }
+        if (PeerConnectWait < TimeSpan.Zero || PeerConnectWait > TimeSpan.FromSeconds(30))
+        {
+            throw new ArgumentOutOfRangeException(nameof(PeerConnectWait));
+        }
 
         var dnsDistributionGroupId = string.IsNullOrWhiteSpace(DnsDistributionGroupId) ? null : DnsDistributionGroupId.Trim();
         var bindings = AccessBindings.Select(binding => binding.Validate()).ToArray();
@@ -59,7 +74,9 @@ public sealed class NetBirdOptions
             MaximumPeerLastSeenAge,
             ManagementRequestTimeout,
             bindings,
-            dnsDistributionGroupId);
+            dnsDistributionGroupId,
+            StateLockTimeout,
+            PeerConnectWait);
     }
 }
 
@@ -120,7 +137,9 @@ internal sealed record ValidatedNetBirdOptions(
     TimeSpan MaximumPeerLastSeenAge,
     TimeSpan ManagementRequestTimeout,
     IReadOnlyList<ValidatedNetBirdAccessBinding> AccessBindings,
-    string? DnsDistributionGroupId);
+    string? DnsDistributionGroupId,
+    TimeSpan StateLockTimeout,
+    TimeSpan PeerConnectWait);
 
 internal sealed record ValidatedNetBirdAccessBinding(
     ConnectorProduct? Product,

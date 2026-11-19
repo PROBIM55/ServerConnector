@@ -47,16 +47,30 @@ internal sealed class NetBirdManagementClient
         return named.SingleOrDefault();
     }
 
-    public async ValueTask AssertBootstrapIsolationAsync(CancellationToken cancellationToken)
+    // Verifies that no enabled accept policy opens the built-in All group and,
+    // when configured, that the DNS distribution group exists exactly once and
+    // is referenced by no enabled accept policy. The listings are fetched
+    // concurrently and the single policy listing is returned so the caller can
+    // reuse it within the same reconcile attempt.
+    public async ValueTask<IReadOnlyList<NetBirdPolicy>> AssertIsolationAsync(
+        string? dnsDistributionGroupId,
+        CancellationToken cancellationToken)
     {
-        var allGroups = (await GetAsync<List<NetBirdGroup>>("api/groups?name=All", cancellationToken))
+        var allGroupsTask = GetAsync<List<NetBirdGroup>>("api/groups?name=All", cancellationToken).AsTask();
+        var policiesTask = GetAsync<List<NetBirdPolicy>>("api/policies", cancellationToken).AsTask();
+        var groupsTask = dnsDistributionGroupId is null
+            ? null
+            : GetAsync<List<NetBirdGroup>>("api/groups", cancellationToken).AsTask();
+        await WhenAllAsync(allGroupsTask, policiesTask, groupsTask);
+        var policies = policiesTask.Result;
+
+        var allGroups = allGroupsTask.Result
             .Where(group => string.Equals(group.Name, "All", StringComparison.Ordinal))
             .ToArray();
         if (allGroups.Length != 1)
             throw new InvalidOperationException("NetBird built-in All group could not be identified uniquely.");
 
         var allGroupId = allGroups[0].Id;
-        var policies = await GetAsync<List<NetBirdPolicy>>("api/policies", cancellationToken);
         foreach (var policy in policies.Where(policy => policy.Enabled))
         {
             foreach (var rule in policy.Rules.Where(rule => rule.Enabled && rule.Action == "accept"))
@@ -66,25 +80,43 @@ internal sealed class NetBirdManagementClient
                     throw new InvalidOperationException("NetBird has an enabled policy that grants the built-in All group traffic; bootstrap is denied.");
             }
         }
-    }
 
-    public async ValueTask AssertDnsDistributionGroupIsolationAsync(
-        string groupId,
-        CancellationToken cancellationToken)
-    {
-        var groups = await GetAsync<List<NetBirdGroup>>("api/groups", cancellationToken);
-        if (groups.Count(group => string.Equals(group.Id, groupId, StringComparison.Ordinal)) != 1)
+        if (dnsDistributionGroupId is null) return policies;
+
+        if (groupsTask!.Result.Count(group => string.Equals(group.Id, dnsDistributionGroupId, StringComparison.Ordinal)) != 1)
             throw new InvalidOperationException("The configured NetBird DNS distribution group must exist exactly once.");
 
-        var policies = await GetAsync<List<NetBirdPolicy>>("api/policies", cancellationToken);
         foreach (var policy in policies.Where(policy => policy.Enabled))
         {
             foreach (var rule in policy.Rules.Where(rule => rule.Enabled &&
                          string.Equals(rule.Action, "accept", StringComparison.OrdinalIgnoreCase)))
             {
-                if (ContainsReference(rule.Sources, groupId) || ContainsReference(rule.Destinations, groupId))
+                if (ContainsReference(rule.Sources, dnsDistributionGroupId) ||
+                    ContainsReference(rule.Destinations, dnsDistributionGroupId))
                     throw new InvalidOperationException("NetBird has an enabled accept policy that references the configured DNS distribution group; enrollment is denied.");
             }
+        }
+        return policies;
+    }
+
+    // Awaits every started request even when one fails, so no NetBird call
+    // outlives the reconcile step (and its device lock) that started it.
+    public static async Task WhenAllAsync(params Task?[] tasks)
+    {
+        var started = tasks.Where(task => task is not null).Cast<Task>().ToArray();
+        try
+        {
+            await Task.WhenAll(started);
+        }
+        catch
+        {
+            // Surface the first failure in request order, like sequential code.
+            foreach (var task in started)
+            {
+                if (task.IsFaulted) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(task.Exception!.InnerException!).Throw();
+                if (task.IsCanceled) await task;
+            }
+            throw;
         }
     }
 
@@ -102,7 +134,8 @@ internal sealed class NetBirdManagementClient
     public async ValueTask RevokeSetupKeysNamedAsync(string name, CancellationToken cancellationToken)
     {
         var keys = await GetAsync<List<NetBirdSetupKey>>("api/setup-keys", cancellationToken);
-        foreach (var key in keys.Where(key => string.Equals(key.Name, name, StringComparison.Ordinal) && !key.Revoked))
+        foreach (var key in keys.Where(key => string.Equals(key.Name, name, StringComparison.Ordinal) &&
+                     (!key.Revoked || key.AutoGroups.Count != 0)))
         {
             await RevokeSetupKeyAsync(key.Id, cancellationToken);
         }
@@ -111,28 +144,40 @@ internal sealed class NetBirdManagementClient
     public async ValueTask RevokeSetupKeyAsync(string id, CancellationToken cancellationToken)
     {
         var existing = await GetOptionalAsync<NetBirdSetupKey>("api/setup-keys/" + Uri.EscapeDataString(id), cancellationToken);
-        if (existing is null || existing.Revoked) return;
+        if (existing is null || existing.Revoked && existing.AutoGroups.Count == 0) return;
+        // Even revoked setup keys pin their auto-groups in NetBird. This key
+        // belongs to this device; clearing future enrollment assignments does
+        // not remove the already enrolled peer from its groups.
         var revoked = await SendJsonAsync<NetBirdSetupKey>(HttpMethod.Put, "api/setup-keys/" + Uri.EscapeDataString(id),
-            new NetBirdSetupKeyUpdate(true, existing.AutoGroups), cancellationToken);
-        if (!revoked.Revoked)
-            throw new InvalidOperationException("NetBird did not confirm setup-key revocation.");
+            new NetBirdSetupKeyUpdate(true, []), cancellationToken);
+        if (!revoked.Revoked || revoked.AutoGroups.Count != 0)
+            throw new InvalidOperationException("NetBird did not confirm setup-key revocation and group cleanup.");
+        var confirmed = await GetSetupKeyAsync(id, cancellationToken);
+        if (confirmed is null || !confirmed.Revoked || confirmed.AutoGroups.Count != 0)
+            throw new InvalidOperationException("NetBird did not retain setup-key revocation and group cleanup.");
     }
 
     public ValueTask<NetBirdPeer?> GetPeerAsync(string id, CancellationToken cancellationToken) =>
         GetOptionalAsync<NetBirdPeer>("api/peers/" + Uri.EscapeDataString(id), cancellationToken);
 
+    // knownPolicies is a listing taken earlier in the same reconcile attempt
+    // while holding the device lock; only that device's reconciler writes its
+    // own policy, so the listing is current for this lookup.
     public async ValueTask<NetBirdPolicy> UpsertPolicyAsync(
         string? policyId,
         NetBirdPolicyWrite policy,
+        IReadOnlyList<NetBirdPolicy>? knownPolicies,
         CancellationToken cancellationToken)
     {
         if (!string.IsNullOrWhiteSpace(policyId) &&
-            await GetOptionalAsync<NetBirdPolicy>("api/policies/" + Uri.EscapeDataString(policyId), cancellationToken) is not null)
+            (knownPolicies is null
+                ? await GetOptionalAsync<NetBirdPolicy>("api/policies/" + Uri.EscapeDataString(policyId), cancellationToken) is not null
+                : knownPolicies.Any(existing => string.Equals(existing.Id, policyId, StringComparison.Ordinal))))
         {
             return await SendJsonAsync<NetBirdPolicy>(HttpMethod.Put, "api/policies/" + Uri.EscapeDataString(policyId), policy, cancellationToken);
         }
 
-        var named = (await GetAsync<List<NetBirdPolicy>>("api/policies", cancellationToken))
+        var named = (knownPolicies ?? await GetAsync<List<NetBirdPolicy>>("api/policies", cancellationToken))
             .Where(existing => string.Equals(existing.Name, policy.Name, StringComparison.Ordinal))
             .ToArray();
         if (named.Length > 1) throw new InvalidOperationException("NetBird returned duplicate device-owned policies.");

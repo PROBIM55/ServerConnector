@@ -1,0 +1,4 @@
+<Project Sdk="WixToolset.Sdk/6.0.2">
+  <PropertyGroup><OutputType>Bundle</OutputType><OutputName>PlatformConnector</OutputName><InstallerPlatform>x64</InstallerPlatform><DefineConstants>ProductVersion=$(ProductVersion);SetupMsi=$(SetupMsi);NetBirdMsi=$(NetBirdMsi);NetBirdUpgradeCode=$(NetBirdUpgradeCode);WebView2Installer=$(WebView2Installer)</DefineConstants></PropertyGroup>
+  <ItemGroup><PackageReference Include="WixToolset.Bal.wixext" Version="6.0.2" /><PackageReference Include="WixToolset.Util.wixext" Version="6.0.2" /></ItemGroup>
+</Project>

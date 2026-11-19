@@ -17,6 +17,128 @@ public sealed class CommonSmbAccessServiceTests
     private static readonly DateTimeOffset Now = new(2026, 10, 2, 12, 0, 0, TimeSpan.Zero);
 
     [Fact]
+    public async Task Listing_ten_company_folders_never_mounts_drives_and_opening_one_reuses_only_that_mapping()
+    {
+        using var fixture = new Fixture();
+        fixture.Receipt = fixture.Receipt with
+        {
+            Resources = Enumerable.Range(0, 10).Select(index => fixture.Receipt.Resources[0] with
+            {
+                ResourceId = $"company-{index}", ShareUnc = $@"\\100.64.1.20\Company{index}"
+            }).ToArray()
+        };
+        fixture.Profile = fixture.Profile with
+        {
+            Resources = fixture.Receipt.Resources.Select(resource => new ResourceGrant(
+                resource.ResourceId, resource.ResourceKind, resource.ProjectId, resource.Permissions)).ToArray()
+        };
+
+        for (var attempt = 0; attempt < 2; attempt++)
+        {
+            var folders = await fixture.Service.RefreshAvailableAsync();
+            Assert.Equal(10, folders.Count);
+            Assert.All(folders, folder => Assert.Null(folder.Drive));
+            Assert.Empty(fixture.Port.Mounts);
+        }
+
+        Assert.Equal("Z:\\", await fixture.Service.GetFolderToOpenAsync("company-7"));
+        Assert.Equal(@"\\100.64.1.20\Company7", Assert.Single(fixture.Port.Mounts).ShareUnc);
+        Assert.Equal("Z:\\", await fixture.Service.GetFolderToOpenAsync("company-7"));
+        Assert.Single(fixture.Port.Mounts);
+        var refreshed = await fixture.Service.RefreshAvailableAsync();
+        Assert.Single(refreshed.Where(folder => folder.Drive is not null));
+        Assert.Equal("company-7", refreshed.Single(folder => folder.Drive is not null).ResourceId);
+    }
+
+    [Fact]
+    public async Task On_demand_open_never_duplicates_or_adopts_an_existing_foreign_target()
+    {
+        using var fixture = new Fixture();
+        fixture.Port.Targets["Q:"] = fixture.Receipt.Resources[0].ShareUnc;
+
+        var error = await Assert.ThrowsAsync<CommonSmbAccessException>(
+            () => fixture.Service.GetFolderToOpenAsync("docs"));
+
+        Assert.Equal("smb_mapping_not_owned", error.Code);
+        Assert.Empty(fixture.Port.Mounts);
+        Assert.Empty(fixture.Port.Unmounts);
+        Assert.Equal(fixture.Receipt.Resources[0].ShareUnc, fixture.Port.Targets["Q:"]);
+    }
+
+    [Fact]
+    public async Task On_demand_open_cannot_mount_a_folder_outside_the_current_grant()
+    {
+        using var fixture = new Fixture();
+        var error = await Assert.ThrowsAsync<CommonSmbAccessException>(
+            () => fixture.Service.GetFolderToOpenAsync("unassigned-company"));
+        Assert.Equal("smb_resource_not_granted", error.Code);
+        Assert.Empty(fixture.Port.Mounts);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Routed_compatibility_unc_still_requires_the_authorized_native_overlay_route(bool routeAllowed)
+    {
+        using var fixture = new Fixture(destinationAllowed: address => address.Equals(IPAddress.Parse("62.113.36.107")));
+        fixture.Receipt = fixture.Receipt with
+        {
+            Resources = [fixture.Receipt.Resources[0] with { ShareUnc = @"\\62.113.36.107\BIM_Models" }]
+        };
+        fixture.Port.RouteAllowed = routeAllowed;
+        if (routeAllowed)
+        {
+            await fixture.Service.RefreshAndMountAsync();
+            Assert.Equal(@"\\62.113.36.107\BIM_Models", Assert.Single(fixture.Port.Mounts).ShareUnc);
+        }
+        else
+        {
+            await Assert.ThrowsAsync<CommonSmbAccessException>(() => fixture.Service.RefreshAndMountAsync());
+            Assert.Empty(fixture.Port.Mounts);
+        }
+    }
+
+    [Fact]
+    public async Task Public_unc_outside_the_fixed_administrator_policy_is_rejected()
+    {
+        using var fixture = new Fixture();
+        fixture.Receipt = fixture.Receipt with
+        {
+            Resources = [fixture.Receipt.Resources[0] with { ShareUnc = @"\\8.8.8.8\Projects" }]
+        };
+        var error = await Assert.ThrowsAsync<CommonSmbAccessException>(() => fixture.Service.RefreshAndMountAsync());
+        Assert.Equal("smb_destination_denied", error.Code);
+        Assert.Empty(fixture.Port.Mounts);
+    }
+
+    [Fact]
+    public async Task Refresh_uses_local_overlay_evidence_from_the_same_smb_request()
+    {
+        using var fixture = new Fixture(overlayAwareTransport: true);
+        fixture.Port.LiveOverlay = () => throw new InvalidOperationException("No separate health route is permitted.");
+
+        var folders = await fixture.Service.RefreshAndMountAsync();
+
+        Assert.Single(folders);
+        Assert.Equal(1, fixture.Transport.Calls);
+        Assert.Equal(0, fixture.Port.LiveOverlayReads);
+        Assert.Single(fixture.Port.Mounts);
+    }
+
+    [Fact]
+    public async Task Refresh_rejects_nonready_local_evidence_without_mounting()
+    {
+        using var fixture = new Fixture(overlayAwareTransport: true);
+        fixture.Overlay = fixture.Overlay! with { SignalConnected = false };
+
+        var error = await Assert.ThrowsAsync<CommonSmbAccessException>(() => fixture.Service.RefreshAndMountAsync());
+
+        Assert.Equal("smb_overlay_not_ready", error.Code);
+        Assert.Empty(fixture.Port.Mounts);
+        Assert.False(fixture.Service.IsAuthorizationAdmissionOpen);
+    }
+
+    [Fact]
     public async Task Refresh_rejects_unapplied_profile_before_http_or_mapping()
     {
         var fixture = new Fixture();
@@ -88,11 +210,10 @@ public sealed class CommonSmbAccessServiceTests
 
     [Theory]
     [InlineData("\\\\files.internal\\Projects")]
-    [InlineData("\\\\8.8.8.8\\Projects")]
     [InlineData("\\\\100.64.1.20\\Projects\\Child")]
     [InlineData("\\\\100.64.1.20\\admin$")]
     [InlineData("\\\\127.0.0.1\\Projects")]
-    public async Task Refresh_rejects_nonliteral_public_nested_or_reserved_unc(string unc)
+    public async Task Refresh_rejects_nonliteral_nested_or_reserved_unc(string unc)
     {
         var fixture = new Fixture();
         fixture.Receipt = fixture.Receipt with
@@ -162,6 +283,203 @@ public sealed class CommonSmbAccessServiceTests
     }
 
     [Fact]
+    public async Task Credential_conflict_with_foreign_session_is_typed_and_leaves_foreign_mapping_untouched()
+    {
+        using var fixture = new Fixture();
+        fixture.Port.Targets["P:"] = @"\\100.64.1.20\BIM_Models";
+        fixture.Port.RejectedMount = new SmbCredentialConflictException();
+
+        var open = await Assert.ThrowsAsync<CommonSmbAccessException>(
+            () => fixture.Service.GetFolderToOpenAsync("docs"));
+        var mount = await Assert.ThrowsAsync<CommonSmbAccessException>(
+            () => fixture.Service.MountAsync("docs", "Y:"));
+
+        foreach (var error in new[] { open, mount })
+        {
+            Assert.Equal("smb_credential_conflict", error.Code);
+            Assert.Equal(1219, Assert.IsAssignableFrom<Win32Exception>(error.InnerException).NativeErrorCode);
+            Assert.DoesNotContain("top-secret-password", error.ToString(), StringComparison.Ordinal);
+        }
+        Assert.Equal(2, fixture.Port.Mounts.Count);
+        Assert.Empty(fixture.Port.Unmounts);
+        Assert.Equal(@"\\100.64.1.20\BIM_Models", fixture.Port.Targets["P:"]);
+        Assert.Null(fixture.Port.Targets.GetValueOrDefault("Z:"));
+        Assert.Null(fixture.Port.Targets.GetValueOrDefault("Y:"));
+    }
+
+    [Fact]
+    public async Task Other_native_mount_failure_keeps_untyped_win32_failure()
+    {
+        using var fixture = new Fixture();
+        fixture.Port.RejectedMount = new Win32Exception(1326);
+
+        var error = await Assert.ThrowsAsync<Win32Exception>(
+            () => fixture.Service.GetFolderToOpenAsync("docs"));
+
+        Assert.Equal(1326, error.NativeErrorCode);
+        Assert.Empty(fixture.Port.Unmounts);
+    }
+
+    [Fact]
+    public async Task Neighbour_mode_refuses_only_the_legacy_share_without_any_native_call()
+    {
+        var detector = new FakeLegacyConnector { NeighbourMode = true };
+        using var fixture = LegacyFixture(detector);
+
+        var open = await Assert.ThrowsAsync<CommonSmbAccessException>(
+            () => fixture.Service.GetFolderToOpenAsync("bim"));
+        var mount = await Assert.ThrowsAsync<CommonSmbAccessException>(
+            () => fixture.Service.MountAsync("bim", "Y:"));
+
+        Assert.All(new[] { open, mount }, error => Assert.Equal("smb_legacy_client_active", error.Code));
+        Assert.Empty(fixture.Port.Mounts);
+        Assert.Empty(fixture.Port.Unmounts);
+        // The folder list stays available and marks the legacy share as served by the old client.
+        Assert.Contains(fixture.Service.Folders, folder => folder is { ResourceId: "bim", ViaLegacyConnector: true });
+        Assert.Contains(fixture.Service.Folders, folder => folder is { ResourceId: "docs", ViaLegacyConnector: false });
+        Assert.True(fixture.Service.LegacyConnectorSnapshot!.NeighbourModeActive);
+
+        // Company overlay folders keep working in neighbour mode.
+        Assert.Equal("Z:\\", await fixture.Service.GetFolderToOpenAsync("docs"));
+        Assert.Equal(@"\\100.64.1.20\Projects", Assert.Single(fixture.Port.Mounts).ShareUnc);
+    }
+
+    [Fact]
+    public async Task Neighbour_mode_bulk_mount_skips_legacy_share_and_mounts_overlay_shares()
+    {
+        using var fixture = LegacyFixture(new FakeLegacyConnector { NeighbourMode = true });
+
+        var folders = await fixture.Service.RefreshAndMountAsync();
+
+        Assert.Equal(@"\\100.64.1.20\Projects", Assert.Single(fixture.Port.Mounts).ShareUnc);
+        Assert.Null(folders.Single(folder => folder.ResourceId == "bim").Drive);
+        Assert.True(folders.Single(folder => folder.ResourceId == "bim").ViaLegacyConnector);
+    }
+
+    [Fact]
+    public async Task Neighbour_mode_is_reevaluated_on_each_action_and_transfer_allows_legacy_mount()
+    {
+        var detector = new FakeLegacyConnector { NeighbourMode = true };
+        using var fixture = LegacyFixture(detector);
+        await Assert.ThrowsAsync<CommonSmbAccessException>(() => fixture.Service.GetFolderToOpenAsync("bim"));
+        // One detection per locked operation, although listing and mounting both consult it.
+        Assert.Equal(1, detector.Calls);
+        Assert.Equal("Z:\\", await fixture.Service.GetFolderToOpenAsync("docs"));
+        Assert.Equal(2, detector.Calls);
+
+        detector.Transferred = true; // K5 transfer marker: neighbour mode is off even if the old process runs.
+        Assert.Equal("Y:\\", await fixture.Service.GetFolderToOpenAsync("bim"));
+
+        Assert.Equal(3, detector.Calls);
+        Assert.Equal(LegacyEncryptedSmbPolicy.ShareUnc, fixture.Port.Mounts.Single(call => call.Drive == "Y:").ShareUnc);
+        Assert.False(fixture.Service.Folders.Single(folder => folder.ResourceId == "bim").ViaLegacyConnector);
+    }
+
+    [Fact]
+    public async Task Leftover_drive_mapping_outside_neighbour_mode_is_refused_as_not_owned()
+    {
+        using var fixture = LegacyFixture(new FakeLegacyConnector { NeighbourMode = false });
+        fixture.Port.Targets["Q:"] = LegacyEncryptedSmbPolicy.ShareUnc; // e.g. left by a killed earlier process
+
+        var error = await Assert.ThrowsAsync<CommonSmbAccessException>(
+            () => fixture.Service.GetFolderToOpenAsync("bim"));
+
+        Assert.Equal("smb_mapping_not_owned", error.Code);
+        Assert.Empty(fixture.Port.Mounts);
+        Assert.Empty(fixture.Port.Unmounts);
+        Assert.Equal(LegacyEncryptedSmbPolicy.ShareUnc, fixture.Port.Targets["Q:"]);
+    }
+
+    [Fact]
+    public async Task Failing_detector_fails_closed_for_legacy_share()
+    {
+        using var fixture = LegacyFixture(new FakeLegacyConnector { Failure = new InvalidOperationException("boom") });
+
+        var error = await Assert.ThrowsAsync<CommonSmbAccessException>(
+            () => fixture.Service.GetFolderToOpenAsync("bim"));
+
+        Assert.Equal("smb_legacy_client_active", error.Code);
+        Assert.Empty(fixture.Port.Mounts);
+        Assert.Contains("detector:InvalidOperationException",
+            fixture.Service.LegacyConnectorSnapshot!.ToSafeDiagnostic(), StringComparison.Ordinal);
+        Assert.DoesNotContain("boom", fixture.Service.LegacyConnectorSnapshot.ToSafeDiagnostic(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Legacy_rollback_releases_only_this_process_mapping_of_the_legacy_share()
+    {
+        using var fixture = LegacyFixture(new FakeLegacyConnector { Transferred = true });
+        Assert.Equal("Z:\\", await fixture.Service.GetFolderToOpenAsync("docs"));
+        Assert.Equal("Y:\\", await fixture.Service.GetFolderToOpenAsync("bim"));
+        fixture.Port.Targets["Q:"] = LegacyEncryptedSmbPolicy.ShareUnc; // earlier-process or foreign mapping
+        Assert.True(fixture.Service.Folders.Single(folder => folder.ResourceId == "bim").LegacyShare);
+        Assert.False(fixture.Service.Folders.Single(folder => folder.ResourceId == "docs").LegacyShare);
+
+        Assert.Equal(1, await fixture.Service.ReleaseOwnedLegacyShareAsync());
+
+        Assert.Equal("Y:", Assert.Single(fixture.Port.Unmounts));
+        Assert.Equal(@"\\100.64.1.20\Projects", fixture.Port.Targets["Z:"]);
+        Assert.Equal(LegacyEncryptedSmbPolicy.ShareUnc, fixture.Port.Targets["Q:"]);
+        Assert.Null(fixture.Service.Folders.Single(folder => folder.ResourceId == "bim").Drive);
+        Assert.Equal(0, await fixture.Service.ReleaseOwnedLegacyShareAsync());
+        Assert.Single(fixture.Port.Unmounts);
+    }
+
+    [Fact]
+    public async Task Legacy_rollback_keeps_a_busy_legacy_mapping_owned_for_a_retry()
+    {
+        using var fixture = LegacyFixture(new FakeLegacyConnector { Transferred = true });
+        Assert.Equal("Z:\\", await fixture.Service.GetFolderToOpenAsync("bim"));
+        fixture.Port.ExactUnmountFailure = new Win32Exception(2401); // ERROR_OPEN_FILES with force=false
+
+        var busy = await Assert.ThrowsAsync<CommonSmbAccessException>(
+            () => fixture.Service.ReleaseOwnedLegacyShareAsync());
+
+        Assert.Equal("smb_mapping_busy", busy.Code);
+        Assert.Equal(LegacyEncryptedSmbPolicy.ShareUnc, fixture.Port.Targets["Z:"]);
+        fixture.Port.ExactUnmountFailure = null;
+        Assert.Equal(1, await fixture.Service.ReleaseOwnedLegacyShareAsync());
+        Assert.Equal("Z:", Assert.Single(fixture.Port.Unmounts));
+    }
+
+    private static Fixture LegacyFixture(FakeLegacyConnector detector)
+    {
+        var fixture = new Fixture(
+            address => address.Equals(IPAddress.Parse("100.64.1.20")) ||
+                address.Equals(IPAddress.Parse(LegacyEncryptedSmbPolicy.Destination)),
+            legacyConnector: detector);
+        fixture.Receipt = fixture.Receipt with
+        {
+            Resources = [.. fixture.Receipt.Resources, fixture.Receipt.Resources[0] with
+            {
+                ResourceId = "bim", ShareUnc = LegacyEncryptedSmbPolicy.ShareUnc
+            }]
+        };
+        fixture.Profile = fixture.Profile with
+        {
+            Resources = [.. fixture.Profile.Resources, fixture.Profile.Resources[0] with { ResourceId = "bim" }]
+        };
+        return fixture;
+    }
+
+    private sealed class FakeLegacyConnector : ILegacyConnectorDetector
+    {
+        public bool NeighbourMode { get; set; }
+        public bool Transferred { get; set; }
+        public Exception? Failure { get; set; }
+        public int Calls { get; private set; }
+
+        public LegacyConnectorSnapshot Detect()
+        {
+            Calls++;
+            if (Failure is not null) throw Failure;
+            var process = NeighbourMode ? LegacySignal.Present : LegacySignal.Absent;
+            return new LegacyConnectorSnapshot(process, LegacySignal.Absent, LegacySignal.Absent, LegacySignal.Absent,
+                Transferred ? LegacySignal.Present : LegacySignal.Absent, []);
+        }
+    }
+
+    [Fact]
     public async Task Explicit_mount_reuse_rechecks_live_route_when_network_notification_was_missed()
     {
         using var fixture = new Fixture();
@@ -210,9 +528,10 @@ public sealed class CommonSmbAccessServiceTests
         var json = JsonSerializer.Serialize(folders);
         Assert.DoesNotContain("top-secret-password", json, StringComparison.Ordinal);
         Assert.DoesNotContain("SMBHOST", json, StringComparison.Ordinal);
-        Assert.DoesNotContain("100.64.1.20", json, StringComparison.Ordinal);
+        Assert.DoesNotContain("cnb_device", json, StringComparison.Ordinal);
         var folder = Assert.Single(folders);
-        Assert.Equal(new CommonSmbFolder("docs", "Projects", "Z:"), folder);
+        // The share address and the read-only grant are display facts of the folder card; credentials never are.
+        Assert.Equal(new CommonSmbFolder("docs", "Projects", "Z:", ShareUnc: @"\\100.64.1.20\Projects", CanWrite: false), folder);
         Assert.Equal("Z:" + Path.DirectorySeparatorChar, await fixture.Service.GetFolderToOpenAsync("docs"));
         Assert.All(fixture.Transport.Requests, request =>
         {
@@ -577,6 +896,181 @@ public sealed class CommonSmbAccessServiceTests
         Assert.False(fixture.Service.IsAuthorizationAdmissionOpen);
     }
 
+    [Fact]
+    public async Task Cold_vpn_changes_are_revalidated_and_do_not_stop_the_new_connection()
+    {
+        using var fixture = new Fixture();
+        var session = new CommonConnectionActivation();
+        var invalidations = new List<long>();
+        fixture.Service.RouteInvalidated += value => session.InvalidateRoute(value.RouteEpoch, invalidations.Add);
+        session.BeginSession(_ => { });
+        fixture.Service.InvalidateAuthorization();
+
+        // VPN establishment changes Windows addresses while no host is admitted.
+        fixture.Port.RaiseNetworkChanged();
+        Assert.False(fixture.Service.IsAuthorizationAdmissionOpen);
+        var proofCalls = 0;
+        var ready = await session.ActivateAsync(fixture.Service, _ =>
+        {
+            proofCalls++;
+            return Task.CompletedTask;
+        }, () => true, default);
+
+        Assert.True(ready);
+        Assert.Equal(1, proofCalls);
+        Assert.True(fixture.Service.IsAuthorizationAdmissionOpen);
+        Assert.Empty(invalidations);
+        // A delayed callback for the establishment epoch cannot stop the host.
+        session.InvalidateRoute(fixture.Service.RouteEpoch, invalidations.Add);
+        Assert.Empty(invalidations);
+
+        await fixture.Service.RefreshAndMountAsync();
+        fixture.Port.RaiseNetworkChanged();
+        Assert.False(fixture.Service.IsAuthorizationAdmissionOpen);
+        Assert.Single(invalidations);
+        await fixture.Service.CleanupUnsafeMappingsAfterDrainAsync(fixture.Service.RouteEpoch);
+        Assert.Null(fixture.Port.Targets["Z:"]);
+    }
+
+    [Fact]
+    public async Task Recovery_profile_identity_changed_by_final_probe_cannot_open_admission()
+    {
+        using var fixture = new Fixture();
+        var session = new CommonConnectionActivation();
+        session.BeginSession(_ => { });
+        fixture.Service.InvalidateAuthorization();
+        var original = new CommonRecoveryIdentity("device-a", "user-a", "company-a");
+        var attempt = new CommonRecoveryAttempt(1, original, default);
+        foreach (var replacement in new[] { original with { UserId = "user-b" }, original with { CompanyId = "company-b" } })
+        {
+            var current = original;
+            await Assert.ThrowsAsync<InvalidOperationException>(() => session.ActivateAsync(fixture.Service,
+                _ => { current = replacement; return Task.CompletedTask; }, () => true, default,
+                () => CommonConnectionRecovery.RequireIdentity(attempt, current)));
+            Assert.False(fixture.Service.IsAuthorizationAdmissionOpen);
+        }
+    }
+
+    [Fact]
+    public async Task Route_change_during_final_proof_requires_a_second_fresh_proof()
+    {
+        using var fixture = new Fixture();
+        var session = new CommonConnectionActivation();
+        session.BeginSession(_ => { });
+        fixture.Service.InvalidateAuthorization();
+        var calls = 0;
+
+        Assert.True(await session.ActivateAsync(fixture.Service, _ =>
+        {
+            if (++calls == 1) fixture.Port.RaiseNetworkChanged();
+            return Task.CompletedTask;
+        }, () => true, default));
+
+        Assert.Equal(2, calls);
+        Assert.True(fixture.Service.IsAuthorizationAdmissionOpen);
+    }
+
+    [Fact]
+    public async Task Unstable_route_cannot_be_admitted_by_repeated_retries()
+    {
+        using var fixture = new Fixture();
+        var session = new CommonConnectionActivation();
+        session.BeginSession(_ => { });
+        var calls = 0;
+        var error = await Assert.ThrowsAsync<CommonSmbAccessException>(() =>
+            session.ActivateAsync(fixture.Service, _ =>
+            {
+                calls++;
+                fixture.Port.RaiseNetworkChanged();
+                return Task.CompletedTask;
+            }, () => true, default));
+
+        Assert.Equal("smb_route_changed", error.Code);
+        Assert.Equal(2, calls);
+        Assert.False(fixture.Service.IsAuthorizationAdmissionOpen);
+    }
+
+    [Fact]
+    public async Task Replaced_or_cancelled_session_cannot_reopen_admission()
+    {
+        using var fixture = new Fixture();
+        var session = new CommonConnectionActivation();
+        session.BeginSession(_ => { });
+        fixture.Service.InvalidateAuthorization();
+        Assert.False(await session.ActivateAsync(fixture.Service, _ =>
+        {
+            session.BeginSession(value => { });
+            return Task.CompletedTask;
+        }, () => true, default));
+        Assert.False(fixture.Service.IsAuthorizationAdmissionOpen);
+
+        using var cancellation = new CancellationTokenSource();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            session.ActivateAsync(fixture.Service, _ =>
+            {
+                cancellation.Cancel();
+                return Task.CompletedTask;
+            }, () => true, cancellation.Token));
+        Assert.False(fixture.Service.IsAuthorizationAdmissionOpen);
+    }
+
+    [Fact]
+    public async Task Revocation_before_admission_and_old_session_events_cannot_activate_a_new_host()
+    {
+        using var fixture = new Fixture();
+        var session = new CommonConnectionActivation();
+        long first = 0;
+        long second = 0;
+        var invalidations = new List<long>();
+        session.BeginSession(value => first = value);
+        fixture.Service.InvalidateAuthorization();
+        Assert.False(await session.ActivateAsync(fixture.Service, _ => Task.CompletedTask, () => false, default));
+        Assert.False(fixture.Service.IsAuthorizationAdmissionOpen);
+        session.BeginSession(value => second = value);
+        Assert.True(await session.ActivateAsync(fixture.Service, _ => Task.CompletedTask, () => true, default));
+        session.InvalidateAccess(first, invalidations.Add);
+        Assert.Empty(invalidations);
+        session.InvalidateAccess(second, invalidations.Add);
+        Assert.Equal(second, Assert.Single(invalidations));
+    }
+
+    [Fact]
+    public async Task Account_change_cleanup_removes_only_owned_targets_without_a_network_event()
+    {
+        using var fixture = new Fixture();
+        await fixture.Service.RefreshAndMountAsync();
+        fixture.Port.Targets["Y:"] = @"\\100.64.1.99\Foreign";
+
+        await fixture.Service.CleanupOwnedMappingsAfterDrainAsync();
+
+        Assert.False(fixture.Service.IsAuthorizationAdmissionOpen);
+        Assert.Null(fixture.Port.Targets["Z:"]);
+        Assert.Equal(@"\\100.64.1.99\Foreign", fixture.Port.Targets["Y:"]);
+        Assert.Equal("Z:", Assert.Single(fixture.Port.Unmounts));
+    }
+
+    [Fact]
+    public async Task Busy_account_cleanup_stays_closed_until_an_exact_nonforce_retry_finishes()
+    {
+        using var fixture = new Fixture();
+        await fixture.Service.RefreshAndMountAsync();
+        fixture.Port.ExactUnmountFailure = new Win32Exception(2404);
+
+        await Assert.ThrowsAsync<CommonSmbAccessException>(() => fixture.Service.CleanupOwnedMappingsAfterDrainAsync());
+        Assert.False(fixture.Service.IsAuthorizationAdmissionOpen);
+        fixture.Service.EnableAuthorization(fixture.Service.RouteEpoch);
+        var calls = fixture.Transport.Calls;
+        var denied = await Assert.ThrowsAsync<CommonSmbAccessException>(() => fixture.Service.RefreshAndMountAsync());
+        Assert.Equal("smb_cleanup_pending", denied.Code);
+        Assert.Equal(calls, fixture.Transport.Calls);
+
+        fixture.Port.ExactUnmountFailure = null;
+        await fixture.Service.CleanupOwnedMappingsAfterDrainAsync();
+        fixture.Service.EnableAuthorization(fixture.Service.RouteEpoch);
+        Assert.Single(await fixture.Service.RefreshAndMountAsync());
+        Assert.Equal(2, fixture.Port.Mounts.Count);
+    }
+
     private sealed class Fixture : IDisposable
     {
         private readonly FixedTimeProvider _time = new(Now);
@@ -584,13 +1078,17 @@ public sealed class CommonSmbAccessServiceTests
 
         public Fixture(
             Func<IPAddress, bool>? destinationAllowed = null,
-            Func<TimeSpan, CancellationToken, Task>? delay = null)
+            Func<TimeSpan, CancellationToken, Task>? delay = null,
+            bool overlayAwareTransport = false,
+            ILegacyConnectorDetector? legacyConnector = null)
         {
             _destinationAllowed = destinationAllowed ?? (address => address.Equals(IPAddress.Parse("100.64.1.20")));
             Profile = CreateProfile();
             Overlay = CreateOverlay();
             Receipt = CreateReceipt();
-            Transport = new FakeTransport(() => Receipt);
+            Transport = overlayAwareTransport
+                ? new OverlayTransport(() => Receipt, () => Overlay!)
+                : new FakeTransport(() => Receipt);
             Port = new FakePort();
             Port.LiveOverlay = () => Overlay;
             Service = new CommonSmbAccessService(
@@ -600,7 +1098,8 @@ public sealed class CommonSmbAccessServiceTests
                 Port,
                 _time,
                 mappingLivenessInterval: TimeSpan.FromSeconds(15),
-                delay);
+                delay,
+                legacyConnector: legacyConnector);
         }
 
         public DeviceAccessProfile Profile { get; set; }
@@ -649,7 +1148,7 @@ public sealed class CommonSmbAccessServiceTests
         public override DateTimeOffset GetUtcNow() => now;
     }
 
-    private sealed class FakeTransport(Func<ConnectorSmbAccess> receipt) : ICommonConnectorRequestTransport
+    private class FakeTransport(Func<ConnectorSmbAccess> receipt) : ICommonConnectorRequestTransport
     {
         public int Calls => Requests.Count;
         public List<Request> Requests { get; } = [];
@@ -678,6 +1177,14 @@ public sealed class CommonSmbAccessServiceTests
             IReadOnlyDictionary<string, string> Headers);
     }
 
+    private sealed class OverlayTransport(Func<ConnectorSmbAccess> receipt, Func<NetworkOverlaySnapshot> overlay)
+        : FakeTransport(receipt), IOverlayAwareConnectorRequestTransport
+    {
+        public async Task<ProtectedConnectorResponse> SendWithOverlayAsync(HttpMethod method, string relativeUri,
+            object? body, IReadOnlyDictionary<string, string> managedHeaders, CancellationToken cancellationToken)
+            => new(await SendAsync(method, relativeUri, body, managedHeaders, cancellationToken), overlay());
+    }
+
     private sealed class FakePort : IWindowsSmbMappingPort
     {
         public event Action? NetworkChanged;
@@ -690,6 +1197,7 @@ public sealed class CommonSmbAccessServiceTests
         public bool RouteAllowed { get; set; } = true;
         public Func<NetworkOverlaySnapshot?> LiveOverlay { get; set; } = () => null;
         public Exception? MountFailure { get; set; }
+        public Exception? RejectedMount { get; set; } // Native refusal before any mapping exists.
         public Exception? ExactUnmountFailure { get; set; }
         public bool BlockMount { get; set; }
         public bool BlockExactUnmount { get; set; }
@@ -740,6 +1248,7 @@ public sealed class CommonSmbAccessServiceTests
             cancellationToken.ThrowIfCancellationRequested();
             Mounts.Add(new MountCall(drive, shareUnc, userName, password, destination,
                 expectedOverlayAddresses.ToArray()));
+            if (RejectedMount is not null) throw RejectedMount;
             Targets[drive] = shareUnc;
             MountStarted.TrySetResult();
             if (BlockMount) await ReleaseMount.Task.WaitAsync(cancellationToken);
@@ -854,6 +1363,34 @@ public sealed class WindowsSmbMappingPortTests
         Assert.Equal(Share, native.Target);
     }
 
+    [Theory]
+    [InlineData(1219, true, false)]
+    [InlineData(1219, true, true)]
+    [InlineData(1326, false, false)]
+    [InlineData(1326, false, true)]
+    [InlineData(53, false, false)]
+    public async Task Native_refusal_is_typed_only_for_credential_conflict_and_never_cancels_anything(
+        int nativeError, bool credentialConflict, bool legacyEncrypted)
+    {
+        var native = new FakeNativeApi(OverlaySource) { AddResult = nativeError };
+        using var port = legacyEncrypted
+            ? new WindowsSmbMappingPort(native, legacyEncryptedShares: [LegacyEncryptedSmbPolicy.ShareUnc])
+            : new WindowsSmbMappingPort(native);
+        var share = legacyEncrypted ? LegacyEncryptedSmbPolicy.ShareUnc : Share;
+        var destination = legacyEncrypted ? IPAddress.Parse(LegacyEncryptedSmbPolicy.Destination) : Destination;
+
+        var error = await Assert.ThrowsAnyAsync<Win32Exception>(
+            async () => await port.MountAsync("Z:", share, @"SMBHOST\cnb", "secret",
+                destination, [OverlaySource], CancellationToken.None));
+
+        Assert.Equal(nativeError, error.NativeErrorCode);
+        Assert.Equal(credentialConflict, error is SmbCredentialConflictException);
+        if (!credentialConflict) Assert.IsType<Win32Exception>(error);
+        Assert.Equal(legacyEncrypted ? 1 : 0, native.EncryptedAdds);
+        Assert.Equal(0, native.CancelCalls);
+        Assert.Null(native.Target);
+    }
+
     [Fact]
     public async Task Route_recheck_reads_current_os_route_each_time()
     {
@@ -916,6 +1453,8 @@ public sealed class WindowsSmbMappingPortTests
         public string? Target { get; private set; }
         public int CancelCalls { get; private set; }
         public int CancelResult { get; init; }
+        public int AddResult { get; init; }
+        public int EncryptedAdds { get; private set; }
         public int? ReplaceWithForeignOnTargetRead { get; init; }
 
         public string? GetTarget(string drive)
@@ -930,8 +1469,15 @@ public sealed class WindowsSmbMappingPortTests
 
         public int AddConnection(string drive, string shareUnc, string userName, string password)
         {
+            if (AddResult != 0) return AddResult;
             Target = shareUnc;
             return 0;
+        }
+
+        public int AddEncryptedConnection(string drive, string shareUnc, string userName, string password)
+        {
+            EncryptedAdds++;
+            return AddConnection(drive, shareUnc, userName, password);
         }
 
         public int CancelConnection(string drive)

@@ -19,12 +19,14 @@ public sealed class WindowsSmbAccessProbe : IExactSmbAccessProbe
     private readonly Func<CancellationToken, ValueTask<NetworkOverlaySnapshot>> _liveOverlay;
     private readonly Func<Func<CancellationToken, ValueTask<NetworkOverlaySnapshot>>, IWindowsSmbMappingPort> _mappingFactory;
     private readonly Func<string, CancellationToken, ValueTask<bool>> _authenticatedRead;
+    private readonly ILegacyConnectorDetector? _legacyConnector;
 
     public WindowsSmbAccessProbe(
         ICommonConnectorRequestTransport transport,
         Func<IPAddress, bool> destinationAllowed,
         INetworkOverlayClient overlay,
-        TimeProvider? timeProvider = null)
+        TimeProvider? timeProvider = null,
+        ILegacyConnectorDetector? legacyConnector = null)
         : this(
             transport,
             destinationAllowed,
@@ -33,7 +35,8 @@ public sealed class WindowsSmbAccessProbe : IExactSmbAccessProbe
                 ? throw new ArgumentNullException(nameof(overlay))
                 : overlay.GetStatusAsync,
             liveness => new WindowsSmbMappingPort(liveness),
-            ReadDirectoryMetadataAsync)
+            ReadDirectoryMetadataAsync,
+            legacyConnector)
     {
     }
 
@@ -43,7 +46,8 @@ public sealed class WindowsSmbAccessProbe : IExactSmbAccessProbe
         TimeProvider timeProvider,
         Func<CancellationToken, ValueTask<NetworkOverlaySnapshot>> liveOverlay,
         Func<Func<CancellationToken, ValueTask<NetworkOverlaySnapshot>>, IWindowsSmbMappingPort> mappingFactory,
-        Func<string, CancellationToken, ValueTask<bool>> authenticatedRead)
+        Func<string, CancellationToken, ValueTask<bool>> authenticatedRead,
+        ILegacyConnectorDetector? legacyConnector = null)
     {
         _transport = transport ?? throw new ArgumentNullException(nameof(transport));
         _destinationAllowed = destinationAllowed ?? throw new ArgumentNullException(nameof(destinationAllowed));
@@ -51,15 +55,21 @@ public sealed class WindowsSmbAccessProbe : IExactSmbAccessProbe
         _liveOverlay = liveOverlay ?? throw new ArgumentNullException(nameof(liveOverlay));
         _mappingFactory = mappingFactory ?? throw new ArgumentNullException(nameof(mappingFactory));
         _authenticatedRead = authenticatedRead ?? throw new ArgumentNullException(nameof(authenticatedRead));
+        _legacyConnector = legacyConnector;
     }
 
     public async ValueTask<bool> VerifyAuthenticatedReadAsync(
+        ExactSmbAccessProbeRequest request,
+        CancellationToken cancellationToken) =>
+        (await VerifyAuthenticatedReadDetailedAsync(request, cancellationToken).ConfigureAwait(false)).Verified;
+
+    public async ValueTask<ExactSmbAccessProbeResult> VerifyAuthenticatedReadDetailedAsync(
         ExactSmbAccessProbeRequest request,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
         cancellationToken.ThrowIfCancellationRequested();
-        if (!ExactRequest(request)) return false;
+        if (!ExactRequest(request)) return new(false);
 
         async ValueTask<NetworkOverlaySnapshot> ReadExactLiveOverlayAsync(CancellationToken token)
         {
@@ -85,11 +95,12 @@ public sealed class WindowsSmbAccessProbe : IExactSmbAccessProbe
             _destinationAllowed,
             port,
             _time,
-            authenticatedRead: ReadWithLiveOverlayFenceAsync);
+            authenticatedRead: ReadWithLiveOverlayFenceAsync,
+            legacyConnector: _legacyConnector);
 
         try
         {
-            return await service.ProbeAuthenticatedReadAsync(cancellationToken).ConfigureAwait(false);
+            return new(await service.ProbeAuthenticatedReadAsync(cancellationToken).ConfigureAwait(false));
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -98,11 +109,12 @@ public sealed class WindowsSmbAccessProbe : IExactSmbAccessProbe
         catch (CommonSmbAccessException exception) when (
             !string.Equals(exception.Code, "smb_route_cleanup_incomplete", StringComparison.Ordinal))
         {
-            return false;
+            // Codes are local constants; 1219 and neighbour mode stay distinguishable to the caller.
+            return new(false, exception.Code);
         }
         catch (Exception exception) when (IsClosedFailure(exception))
         {
-            return false;
+            return new(false);
         }
     }
 

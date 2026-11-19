@@ -49,4 +49,27 @@ public sealed class SettingsUpgradeCompatibilityTests
             Directory.Delete(root, recursive: true);
         }
     }
+
+    [Fact]
+    public void UiTheme_DefaultsToDarkForOlderFiles_AndRoundTrips()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "connector-settings-theme-" + Guid.NewGuid());
+        Directory.CreateDirectory(root);
+        var path = Path.Combine(root, "settings.json");
+        try
+        {
+            File.WriteAllText(path, """{ "AutoStart": true }""");
+            var service = new SettingsService(path);
+            var settings = service.Load();
+            Assert.Equal("dark", settings.UiTheme);
+
+            settings.UiTheme = "light";
+            service.Save(settings);
+            Assert.Equal("light", new SettingsService(path).Load().UiTheme);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
 }

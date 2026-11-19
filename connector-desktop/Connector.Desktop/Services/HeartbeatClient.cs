@@ -325,8 +325,6 @@ public sealed class BootstrapResponse
     [JsonPropertyName("heartbeat_seconds")]
     public int HeartbeatSeconds { get; set; } = 60;
 
-    [JsonPropertyName("update_manifest_url")]
-    public string UpdateManifestUrl { get; set; } = "";
 
     [JsonPropertyName("is_system_admin")]
     public bool IsSystemAdmin { get; set; }

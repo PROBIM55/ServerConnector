@@ -3,7 +3,9 @@
 const { createRequire } = require('node:module');
 const { mkdirSync, writeFileSync } = require('node:fs');
 const { resolve, join } = require('node:path');
-const deps = createRequire('C:/Users/Lagom/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright/package.json');
+// PLAYWRIGHT_PACKAGE: folder of an installed playwright package; CHROME_PATH: optional Chrome executable.
+if (!process.env.PLAYWRIGHT_PACKAGE) throw new Error('Set PLAYWRIGHT_PACKAGE to the folder of an installed playwright package.');
+const deps = createRequire(require('node:path').join(process.env.PLAYWRIGHT_PACKAGE, 'package.json'));
 const { chromium } = deps('playwright');
 const output = resolve(process.argv[2]);
 mkdirSync(output, { recursive: true });
@@ -15,7 +17,7 @@ const base = '/api/platform/admin/connector/access/v1';
 const catalog = { modules: [{ product: 0, moduleId: 'tekla', label: 'Tekla', permissions: [0, 1] }, { product: 1, moduleId: 'agr', label: 'АГР', permissions: [0, 1] }], resources: [{ resourceId: 'folder-fixture', resourceKind: 'smb', projectId: null, label: 'Общая папка проекта', permissions: [0] }] };
 const profile = () => ({ userId: user, companyId: company, revision, modules: savedModules, resources: [] });
 (async () => {
-  const browser = await chromium.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: true });
+  const browser = await chromium.launch({ executablePath: process.env.CHROME_PATH || 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: true });
   try {
     const context = await browser.newContext({ viewport: { width: 1180, height: 900 } });
     await context.addInitScript(() => localStorage.setItem('platform.welcome.hideOnStartup', '1'));
