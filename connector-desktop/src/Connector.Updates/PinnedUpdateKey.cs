@@ -5,7 +5,7 @@ namespace Connector.Updates;
 /// <summary>
 /// The one release-signing public key of the product (ECDSA P-256), compiled into this assembly from
 /// <c>Connector.Desktop/Assets/update-public-key.pem</c>. There is no configuration, registry value or
-/// file that can replace it; the private half exists only in the GitHub <c>production</c> environment.
+/// file that can replace it; the private half exists only in the GitHub <c>release-signing</c> environment.
 /// </summary>
 public static class PinnedUpdateKey
 {

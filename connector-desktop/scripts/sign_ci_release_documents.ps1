@@ -1,5 +1,5 @@
 #Requires -Version 7.4
-# Signs release descriptions (schema 2) for the cloud update check only. Runs in the "production" environment of
+# Signs release descriptions (schema 2) for the cloud update check only. Runs in the "release-signing" environment of
 # sign-connector-ci-release.yml, never in a job that builds anything. Accepts nothing but descriptions of the exact
 # disposable channel "ci-<run id>" of a build run of this very commit that is in progress, with paused=false.
 # Such a description is useless to any real computer: the channel is inside the signature and only an

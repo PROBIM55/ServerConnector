@@ -19,6 +19,9 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 if ($env:GITHUB_ACTIONS -ne 'true' -or $env:RUNNER_ENVIRONMENT -ne 'github-hosted') { throw 'Disposable hosted Windows required.' }
 if ($env:GITHUB_RUN_ID -cnotmatch '^[1-9][0-9]*$' -or $env:GITHUB_SHA -cnotmatch '^[a-f0-9]{40}$') { throw 'Run identity missing.' }
+# The release key is released only to branch master (environment release-signing), and the signer must run on
+# the very commit of this build: from any other branch the signature request is refused by GitHub.
+if ($env:GITHUB_REF -cne 'refs/heads/master') { throw 'The update check runs from branch master only: the release-signing environment refuses other branches.' }
 New-Item -ItemType Directory -Path $EvidenceDirectory -Force | Out-Null
 $desktopRoot = Split-Path -Parent $PSScriptRoot
 $channel = 'ci-' + $env:GITHUB_RUN_ID
@@ -71,7 +74,7 @@ function Request-Signatures([byte[]]$First, [byte[]]$Second) {
             if ($run.headSha -cne $env:GITHUB_SHA) { throw 'Signer source differs.' }
             if ($run.status -ceq 'completed') { break }
         }
-        Write-Host 'Waiting for the production signature (approval of the environment may be required).'
+        Write-Host 'Waiting for the release signature (the owner approves the release-signing environment).'
         Start-Sleep -Seconds 15
     }
     if (-not $run -or $run.status -cne 'completed' -or $run.conclusion -cne 'success') { throw 'Signing did not succeed.' }

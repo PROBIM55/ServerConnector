@@ -2,8 +2,9 @@ name: Sign Connector CI Release Descriptions
 run-name: Connector CI signature ${{ inputs.request_id }}
 # Signs the two disposable release descriptions of the cloud update check (channel ci-<run id>) of
 # build-unified-connector-candidate.yml. No checkout of anything but this commit's scripts, no build, no packages:
-# the release key is only ever present here. Only channel "ci-<ci_run_id>" of an in-progress build run of the same
-# commit with paused=false is accepted (scripts/sign_ci_release_documents.ps1).
+# the release key lives only in the protected environment "release-signing" (owner approval, branch master).
+# Only channel "ci-<ci_run_id>" of an in-progress build run of the same commit with paused=false is accepted
+# (scripts/sign_ci_release_documents.ps1).
 on:
   workflow_dispatch:
     inputs:
@@ -20,7 +21,7 @@ permissions:
 jobs:
   sign:
     runs-on: windows-latest
-    environment: production
+    environment: release-signing
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
@@ -37,7 +38,7 @@ jobs:
           SIGN_DOCUMENT1_SHA256: ${{ inputs.document1_sha256 }}
           SIGN_DOCUMENT2_BASE64: ${{ inputs.document2_base64 }}
           SIGN_DOCUMENT2_SHA256: ${{ inputs.document2_sha256 }}
-          SIGN_KEY_PEM: ${{ secrets.UNIFIED_UPDATE_SIGNING_KEY_PEM }}
+          SIGN_KEY_PEM: ${{ secrets.UPDATE_SIGNING_KEY_PEM }}
         run: |
           & 'connector-desktop/scripts/sign_ci_release_documents.ps1' -OutputDirectory "$env:RUNNER_TEMP/signature"
       - uses: actions/upload-artifact@v4
