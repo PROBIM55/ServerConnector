@@ -14,6 +14,7 @@ on:
       - 'connector/server/tests/test_unified_updates.py'
       - 'connector/server/tests/test_update_manifest.py'
       - '.github/workflows/check-unified-connector.yml'
+      - '.github/workflows/publish-connector-release.yml'
   push:
     branches:
       - master
@@ -27,6 +28,7 @@ on:
       - 'connector/server/tests/test_unified_updates.py'
       - 'connector/server/tests/test_update_manifest.py'
       - '.github/workflows/check-unified-connector.yml'
+      - '.github/workflows/publish-connector-release.yml'
 
 permissions:
   contents: read
@@ -68,9 +70,9 @@ jobs:
           python -m pytest connector/server/tests/test_unified_updates.py connector/server/tests/test_update_manifest.py
           if ($LASTEXITCODE -ne 0) { throw 'Unified/legacy update feed tests failed' }
 
-      - name: Test signed feed publisher with isolated P-256 fixtures
+      - name: Test release description publisher with isolated P-256 fixtures
         shell: pwsh
-        run: ./connector-desktop/scripts/tests/publish_unified_feed.tests.ps1
+        run: ./connector-desktop/scripts/tests/publish_connector_release.tests.ps1
 
       - name: Test local Connector memory admission without allocating pressure
         shell: pwsh

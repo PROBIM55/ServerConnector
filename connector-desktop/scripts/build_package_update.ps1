@@ -17,8 +17,6 @@ param(
     [string]$TestAppId,
     [switch]$SmokeProbe,
     [string]$PreviousReleasesDir,
-    [string]$UpdateSigningKeyPemPath,
-    [ValidatePattern('^[a-f0-9]{40}$')][string]$HostedSigningRef,
     [string]$PackageOutputDir,
     [string]$VcRuntimeSourceDir
 )
@@ -51,10 +49,8 @@ if (-not $feedUri -and -not $LocalOnly) {
     throw 'Specify a published HTTPS FeedUrl, or LocalOnly for an unpublished local acceptance package.'
 }
 if ($LocalOnly -and $feedUri) { throw 'LocalOnly cannot be combined with FeedUrl.' }
-if ($HostedSigningRef -and $UpdateSigningKeyPemPath) { throw 'Choose exactly one update signing provider.' }
-if ($feedUri -and -not $UpdateSigningKeyPemPath -and -not $HostedSigningRef) {
-    throw 'A published update feed requires UpdateSigningKeyPemPath for the signed package manifest.'
-}
+# The schema-1 Velopack feed manifest (connector-release.<channel>.json) is no longer signed: no client installs
+# from it any more. Updates of 1.1.15+ come only from publish-connector-release.yml (signed description, schema 2).
 if (Test-Path -LiteralPath $outputDir) {
     if (-not (Test-Path -LiteralPath $outputDir -PathType Container) -or
         @(Get-ChildItem -LiteralPath $outputDir -Force).Count -ne 0) {
@@ -139,14 +135,6 @@ Write-Host 'BUILD_STEP: Velopack package'
     --packDir $publishDir --mainExe $mainExe --runtime 'win-x64' `
     --icon (Join-Path $root 'Connector.Desktop\Assets\platform_connector.ico') --channel $Channel --outputDir $outputDir
 if ($LASTEXITCODE -ne 0) { throw 'vpk pack failed.' }
-
-if ($UpdateSigningKeyPemPath -or $HostedSigningRef) {
-    $signingParameters = @{PackageDirectory=$outputDir;Channel=$Channel}
-    if ($HostedSigningRef) { $signingParameters.HostedSigningRef=$HostedSigningRef }
-    else { $signingParameters.PrivateKeyPemPath=$UpdateSigningKeyPemPath }
-    & (Join-Path $PSScriptRoot 'sign_update_feed.ps1') @signingParameters
-    if ($LASTEXITCODE -ne 0) { throw 'Signing the update feed failed.' }
-}
 
 Get-ChildItem -LiteralPath $outputDir -File | Where-Object { $_.Name -match '^(releases\.|assets\.|Platform\.Connector\.Desktop-)' } |
     Select-Object FullName, Length, LastWriteTime

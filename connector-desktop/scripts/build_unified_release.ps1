@@ -6,7 +6,6 @@ param(
     [Parameter(Mandatory = $true)][string]$Channel,
     [Parameter(Mandatory = $true)][string]$FeedUrl,
     [Parameter(Mandatory = $true)][string]$IfcWorkerPath,
-    [string]$UpdateSigningKeyPemPath,
     [string]$HelperManifestSigningKeyPemPath,
     [ValidatePattern('^[a-f0-9]{40}$')][string]$HostedSigningRef,
     [string]$VcRuntimeSourceDir,
@@ -84,15 +83,6 @@ function Assert-PrivateP256Key([string]$Path, [string]$Description) {
         throw "$Description must contain exactly one unencrypted P-256 PKCS#8 private-key PEM. Key contents are not displayed."
     }
     return $fullPath
-}
-
-function Get-PrivateKeyPublicFingerprint([string]$Path) {
-    $key = [Security.Cryptography.ECDsa]::Create()
-    try {
-        $key.ImportFromPem([IO.File]::ReadAllText($Path, [Text.Encoding]::UTF8))
-        return [Convert]::ToBase64String($key.ExportSubjectPublicKeyInfo())
-    }
-    finally { $key.Dispose() }
 }
 
 function Assert-MatchingPublicKey([string]$PrivatePath, [string]$PublicPath, [string]$Description) {
@@ -276,26 +266,19 @@ function Assert-MsiProductVersion([string]$Value) {
 
 # Validate keys first so an invalid/missing key fails before any output directory, package,
 # publish, tool install, or other build side effect can be created.
-$updateKey = $null; $manifestKey = $null
+# The update key no longer signs anything here (the schema-1 feed is gone); only its public pin is checked to stay
+# distinct from the helper key. Release descriptions are signed only by publish-connector-release.yml.
+$manifestKey = $null
+$updatePublicKey = Assert-PublicP256Key (Join-Path $script:RepositoryRoot 'Connector.Desktop\Assets\update-public-key.pem')
 if ($HostedSigningRef) {
-    if ($UpdateSigningKeyPemPath -or $HelperManifestSigningKeyPemPath) { throw 'Choose exactly one signing provider' }
-    $updatePublicKey = Assert-PublicP256Key (Join-Path $script:RepositoryRoot 'Connector.Desktop\Assets\update-public-key.pem')
+    if ($HelperManifestSigningKeyPemPath) { throw 'Choose exactly one signing provider' }
     $helperPublicKey = Assert-PublicP256Key $HelperReleasePublicKeyFile
-    if ((Get-Sha256 $updatePublicKey) -ceq (Get-Sha256 $helperPublicKey)) { throw 'Signing public keys must be distinct' }
     [void](Assert-ExistingRegularFile (Join-Path $PSScriptRoot 'get_hosted_release_signature.ps1') 'Hosted signing client')
 } else {
-    $updateKey = Assert-PrivateP256Key $UpdateSigningKeyPemPath 'Update-feed signing key'
     $manifestKey = Assert-PrivateP256Key $HelperManifestSigningKeyPemPath 'Helper-manifest signing key'
-    if ([string]::Equals($updateKey, $manifestKey, [StringComparison]::OrdinalIgnoreCase)) {
-        throw 'Update-feed and helper-manifest signing keys must be separate key files.'
-    }
-    if ((Get-PrivateKeyPublicFingerprint $updateKey) -ceq (Get-PrivateKeyPublicFingerprint $manifestKey)) {
-        throw 'Update-feed and helper-manifest signing keys must contain different P-256 keys.'
-    }
-    $updatePublicKey = Assert-MatchingPublicKey $updateKey `
-        (Join-Path $script:RepositoryRoot 'Connector.Desktop\Assets\update-public-key.pem') 'Embedded update public key'
     $helperPublicKey = Assert-MatchingPublicKey $manifestKey $HelperReleasePublicKeyFile 'HelperReleasePublicKeyFile'
 }
+if ((Get-Sha256 $updatePublicKey) -ceq (Get-Sha256 $helperPublicKey)) { throw 'Signing public keys must be distinct' }
 
 Assert-MsiProductVersion $PackVersion
 Assert-MsiProductVersion $InstallerVersion
@@ -366,10 +349,8 @@ $packageParameters = @{
     Channel = $Channel
     FeedUrl = $feedUri.AbsoluteUri
     IfcWorkerPath = $workerPath
-    UpdateSigningKeyPemPath = $updateKey
     PackageOutputDir = $packageDirectory
 }
-if ($HostedSigningRef) { $packageParameters.HostedSigningRef = $HostedSigningRef }
 if ($VcRuntimeSourceDir) { $packageParameters.VcRuntimeSourceDir = $VcRuntimeSourceDir }
 Write-Host 'BUILD_STEP: desktop, engines and signed update package'
 & $script:BuildPackageUpdate @packageParameters

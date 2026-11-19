@@ -2,7 +2,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)][string]$ManifestPath,
-    [Parameter(Mandatory)][ValidateSet('updates','helper')][string]$Purpose,
+    [Parameter(Mandatory)][ValidateSet('helper')][string]$Purpose,
     [Parameter(Mandatory)][ValidatePattern('^[a-f0-9]{40}$')][string]$SigningRef,
     [Parameter(Mandatory)][string]$PublicKeyPath,
     [Parameter(Mandatory)][string]$SignaturePath
@@ -16,7 +16,7 @@ if ($bytes.Length -eq 0 -or $bytes.Length -gt 16384 -or (Test-Path -LiteralPath 
 . (Join-Path $PSScriptRoot 'validate_release_signing_document.ps1')
 Assert-ReleaseSigningDocument $bytes $Purpose
 $requestId = [Guid]::NewGuid().ToString('N')
-$request = [ordered]@{ref='master';inputs=@{request_id=$requestId;purpose=$Purpose;source_sha=$SigningRef;
+$request = [ordered]@{ref='master';inputs=@{request_id=$requestId;source_sha=$SigningRef;
     document_base64=[Convert]::ToBase64String($bytes);
     document_sha256=[Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($bytes)).ToLowerInvariant()}}
 $temporary = Join-Path ([IO.Path]::GetTempPath()) ('connector-signature-' + $requestId)
