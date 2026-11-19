@@ -28,6 +28,10 @@ internal sealed class SmbProviderState
 internal sealed class FileSmbProviderStateStore
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web) { WriteIndented = true };
+    // Bounded wait for a concurrent reconciler of the same device instead of
+    // failing at once; the caller retries "busy" on the short schedule.
+    private static readonly TimeSpan LockTimeout = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan MaximumLockPollInterval = TimeSpan.FromMilliseconds(200);
     private readonly string _directory;
     private readonly IDataProtector _protector;
 
@@ -47,13 +51,23 @@ internal sealed class FileSmbProviderStateStore
         var stem = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(deviceId))).ToLowerInvariant();
         var statePath = Path.Combine(_directory, stem + ".json");
         FileStream gate;
-        try
+        var started = System.Diagnostics.Stopwatch.GetTimestamp();
+        var delay = TimeSpan.FromMilliseconds(10);
+        while (true)
         {
-            gate = new FileStream(statePath + ".lock", FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None, 1, FileOptions.WriteThrough);
-        }
-        catch (IOException exception)
-        {
-            throw new SmbProviderBusyException("SMB state is being reconciled by another dispatcher.", exception);
+            try
+            {
+                gate = new FileStream(statePath + ".lock", FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None, 1, FileOptions.WriteThrough);
+                break;
+            }
+            catch (IOException exception)
+            {
+                if (System.Diagnostics.Stopwatch.GetElapsedTime(started) + delay > LockTimeout)
+                    throw new SmbProviderBusyException("SMB state is being reconciled by another dispatcher.", exception);
+            }
+
+            await Task.Delay(delay, cancellationToken);
+            delay = TimeSpan.FromTicks(Math.Min(delay.Ticks * 2, MaximumLockPollInterval.Ticks));
         }
         try
         {
@@ -103,7 +117,8 @@ internal sealed class FileSmbProviderStateStore
     }
 }
 
-public sealed class SmbProviderBusyException(string message, Exception? innerException = null) : Exception(message, innerException);
+public sealed class SmbProviderBusyException(string message, Exception? innerException = null)
+    : DeviceAccessProviderBusyException(message, innerException);
 public sealed class SmbRevisionRejectedException(string message) : Exception(message);
 public sealed class SmbHelperProtocolException : Exception
 {

@@ -4,7 +4,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <PackageId>Connector.Access.Smb</PackageId>
-    <Version>0.2.12</Version>
+    <Version>0.2.13</Version>
     <Authors>Structura</Authors>
   </PropertyGroup>
   <ItemGroup>

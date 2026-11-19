@@ -543,7 +543,7 @@ internal sealed class DbDeviceAccessRepository
         command.Parameters.Add(parameter);
     }
 
-    private static DateTimeOffset ReadDateTimeOffset(DbDataReader reader, int ordinal)
+    internal static DateTimeOffset ReadDateTimeOffset(DbDataReader reader, int ordinal)
     {
         var value = reader.GetValue(ordinal);
         return value switch

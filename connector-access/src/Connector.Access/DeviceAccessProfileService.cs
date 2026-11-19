@@ -25,6 +25,22 @@ public sealed class DeviceAccessProfileService
         _timeProvider = timeProvider;
     }
 
+    // A device waiting on vpn/state or vpn/bootstrap (not on /profile) shows it
+    // is alive: re-arm its already recorded current-revision applies so a
+    // parked or slowly retried grant is attempted again. Creates no command and
+    // changes no grant; the caller has authenticated the device certificate.
+    public async ValueTask ResumePendingAccessAsync(
+        AuthenticatedDevice authenticatedDevice,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(authenticatedDevice);
+        await _outbox.RearmAppliesAsync(
+            authenticatedDevice.DeviceId,
+            _options.RequiredAccessProviders.ToArray(),
+            _timeProvider.GetUtcNow(),
+            cancellationToken);
+    }
+
     public async ValueTask<DeviceAccessResult<DeviceAccessProfile>> GetProfileAsync(
         AuthenticatedDevice authenticatedDevice,
         CancellationToken cancellationToken = default)

@@ -23,8 +23,11 @@ public static class ServiceCollectionExtensions
         services.TryAddSingleton(TimeProvider.System);
         services.TryAddScoped(provider => new DbDeviceAccessRepository(
             provider.GetRequiredService<IDeviceAccessDbConnectionFactory>()));
+        services.TryAddSingleton<ConnectorAccessDispatchSignal>();
         services.TryAddScoped(provider => new DbProviderOutboxRepository(
-            provider.GetRequiredService<IDeviceAccessDbConnectionFactory>()));
+            provider.GetRequiredService<IDeviceAccessDbConnectionFactory>(),
+            provider.GetRequiredService<ConnectorAccessDispatchSignal>(),
+            provider.GetRequiredService<Microsoft.Extensions.Options.IOptions<DeviceAccessOptions>>().Value));
         services.TryAddScoped(provider => new DeviceEnrollmentService(
             provider.GetRequiredService<DbDeviceAccessRepository>(),
             provider.GetRequiredService<IPlatformAccessDirectory>(),
