@@ -19,7 +19,9 @@ try
     if (!File.Exists(desktop) || !File.Exists(Path.Combine(appRoot, "Updater", "PlatformConnectorUpdater.exe"))) throw new InvalidOperationException("Fresh machine application or its update service missing.");
     Progress("update-folders-as-ordinary-user");
     var updateFolders = UpdateFolderProof(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "Structura Connector"));
-    if (Directory.EnumerateFiles(appRoot, "blender.exe", SearchOption.AllDirectories).Any()) throw new InvalidOperationException("Blender must be optional.");
+    // The update service keeps its state under Updater\state, closed to ordinary users: skip what cannot be listed.
+    var everythingReadable = new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = true, AttributesToSkip = 0 };
+    if (Directory.EnumerateFiles(appRoot, "blender.exe", everythingReadable).Any()) throw new InvalidOperationException("Blender must be optional.");
     Progress("protected-network-readiness");
     var pinnedMsi = Path.Combine(appRoot, "Network", "installer", "netbird_installer_0.79.0_windows_amd64.msi");
     if (!File.Exists(pinnedMsi) || Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(pinnedMsi))) !=
